@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scene Describer - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>Scene Describer</h1>
+        <p class="subtitle">Tool #1 - Describe what the camera sees in natural language</p>
+        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
+            Part of the Visual Reasoning Playground
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                </div>
+                
+                <div class="results-panel">
+                    <h3>Scene Description</h3>
+                    <div id="description" class="result-item">
+                        <p class="content" style="color: var(--text-muted);">
+                            Click "Describe Scene" to analyze the current frame
+                        </p>
+                    </div>
+                    
+                    <div id="history" class="hidden">
+                        <h3>History</h3>
+                        <div id="historyList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+                
+                <div class="control-group">
+                    <label for="apiKey">Moondream API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                    <small>Get your key at <a href="https://console.moondream.ai" target="_blank">console.moondream.ai</a></small>
+                </div>
+
+                <div class="control-group">
+                    <label for="maxTokens">Response Length</label>
+                    <input type="range" id="maxTokens" min="50" max="500" value="200">
+                    <span class="slider-value" id="maxTokensValue">200</span> tokens
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="autoDescribe"> 
+                        Auto-describe every <input type="number" id="autoInterval" value="5" min="1" max="60" style="width: 50px"> seconds
+                    </label>
+                </div>
+
+                <div class="btn-group">
+                    <button id="describeBtn" class="btn btn-primary">Describe Scene</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="apiCalls">0</div>
+                        <div class="label">API Calls</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="avgTime">-</div>
+                        <div class="label">Avg Time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

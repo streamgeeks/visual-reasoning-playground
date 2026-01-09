@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone Monitor - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .zone {
+            position: absolute;
+            border: 3px solid;
+            background: rgba(255,255,255,0.1);
+            cursor: move;
+        }
+        .zone.active { border-style: dashed; animation: pulse 1s infinite; }
+        .zone-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            border-radius: 3px;
+        }
+        .zone-list { margin-top: 15px; }
+        .zone-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .zone-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        .zone-status {
+            margin-left: auto;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+        .zone-status.triggered {
+            background: var(--error);
+            animation: pulse 0.5s infinite;
+        }
+        .zone-status.clear {
+            background: var(--success);
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .alert-log {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .alert-item {
+            padding: 8px;
+            font-size: 0.8rem;
+            border-left: 3px solid var(--error);
+            background: rgba(230,57,70,0.1);
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Zone Monitor</h1>
+        <p class="subtitle">Tool #6 - Draw zones and trigger actions on activity</p>
+        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
+            Part of the Visual Reasoning Playground
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+
+                <div class="results-panel">
+                    <h3>Alert Log</h3>
+                    <div id="alertLog" class="alert-log">
+                        <p style="color: var(--text-muted)">Alerts will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+                
+                <div class="control-group">
+                    <label for="apiKey">Moondream API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+
+                <div class="control-group">
+                    <label for="zoneName">Zone Name</label>
+                    <input type="text" id="zoneName" placeholder="e.g., Entry Area">
+                </div>
+
+                <div class="control-group">
+                    <label for="zoneTarget">Detect</label>
+                    <input type="text" id="zoneTarget" value="person" placeholder="What to detect">
+                </div>
+
+                <div class="control-group">
+                    <label for="zoneColor">Zone Color</label>
+                    <input type="color" id="zoneColor" value="#E63946">
+                </div>
+
+                <button id="addZoneBtn" class="btn btn-secondary" style="width: 100%; margin-bottom: 15px;">
+                    + Add Zone (Click & Drag on Video)
+                </button>
+
+                <div class="zone-list" id="zoneList">
+                    <p style="color: var(--text-muted); font-size: 0.85rem;">No zones defined</p>
+                </div>
+
+                <div class="control-group">
+                    <label for="checkRate">Check Rate: <span id="rateValue">1.0</span>/sec</label>
+                    <input type="range" id="checkRate" min="0.2" max="2" step="0.1" value="1">
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Monitoring</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready - Add zones to monitor</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

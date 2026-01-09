@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detection Boxes - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .detection-list { margin-top: 15px; }
+        .detection-item { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 8px;
+            background: var(--background);
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .confidence-bar {
+            height: 4px;
+            background: var(--surface-light);
+            border-radius: 2px;
+            margin-top: 4px;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Detection Box Drawer</h1>
+        <p class="subtitle">Tool #2 - Draw bounding boxes around detected objects</p>
+        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
+            Part of the Visual Reasoning Playground
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+                
+                <div class="control-group">
+                    <label for="apiKey">Moondream API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+
+                <div class="control-group">
+                    <label for="targetObject">Object to Detect</label>
+                    <input type="text" id="targetObject" placeholder="e.g., person, cup, phone">
+                    <small>Describe what you want to find</small>
+                </div>
+
+                <div class="control-group">
+                    <label for="boxColor">Box Color</label>
+                    <input type="color" id="boxColor" value="#93CCEA">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="continuousMode"> 
+                        Continuous detection
+                    </label>
+                </div>
+
+                <div class="control-group" id="rateGroup" style="display: none;">
+                    <label for="detectionRate">Rate: <span id="rateValue">1.0</span>/sec</label>
+                    <input type="range" id="detectionRate" min="0.2" max="3" step="0.1" value="1">
+                </div>
+
+                <div class="btn-group">
+                    <button id="detectBtn" class="btn btn-primary">Detect Objects</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready</div>
+
+                <div id="detections" class="detection-list"></div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="objectCount">0</div>
+                        <div class="label">Objects Found</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="detectTime">-</div>
+                        <div class="label">Detection Time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

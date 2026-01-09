@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PTZOptics Moondream Tracker</title>
+
+    <meta name="viewport" content="width=640, user-scalable=no" />
+    <meta charset="UTF-8" />
+
+    <!-- jQuery for DOM manipulation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"
+        integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg=="
+        crossorigin="anonymous"></script>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="./main.css">
+    
+    <!-- Application Scripts -->
+    <script src="./moondream.js"></script>
+    <script src="./ptz_control.js"></script>
+    <script src="./app.js"></script>
+</head>
+
+<body class="loading">
+    <video id="video" autoplay muted playsinline></video>
+    
+    <!-- Control Panel -->
+    <div id="controlPanel">
+        <h2>PTZOptics Moondream Tracker</h2>
+        
+        <div class="control-group">
+            <label for="apiKey">Moondream API Key:</label>
+            <input type="password" id="apiKey" class="settings-input" placeholder="Enter your API key" />
+        </div>
+        
+        <div class="control-group">
+            <label for="targetObject">Target Object:</label>
+            <input type="text" id="targetObject" class="settings-input" placeholder="e.g., person, ball, hand" />
+            <small>Describe what you want to track (e.g., "person", "red ball", "coffee mug")</small>
+        </div>
+        
+        <div class="control-group">
+            <label for="cameraIP">PTZ Camera IP:</label>
+            <input type="text" id="cameraIP" class="settings-input" placeholder="192.168.1.19" />
+        </div>
+        
+        <div class="control-group">
+            <label for="operationStyle">Camera Operation Style:</label>
+            <select id="operationStyle" class="settings-input">
+                <option value="custom">Custom (Manual Settings)</option>
+                <option value="smooth">Smooth Tracking (Broadcast)</option>
+                <option value="precise">Precise Centering (Presentation)</option>
+                <option value="balanced" selected>Balanced (General Use)</option>
+                <option value="fast">Fast Response (Sports/Action)</option>
+                <option value="minimal">Minimal Movement (Save API)</option>
+            </select>
+            <small>Presets adjust speed, deadzone, and detection rate</small>
+        </div>
+        
+        <div class="control-group">
+            <label for="detectionRate">Detection Rate: <span id="detectionRateValue">1.0</span> per second</label>
+            <input type="range" id="detectionRate" class="slider" min="0.1" max="5" step="0.1" value="1" />
+            <div class="slider-labels">
+                <small>0.1/sec (Slower)</small>
+                <small>5/sec (Faster)</small>
+            </div>
+            <small class="rate-info">Lower = Less API usage, Higher = More responsive tracking</small>
+        </div>
+        
+        <!-- Advanced PTZ Settings -->
+        <div class="advanced-section">
+            <button type="button" id="toggleAdvanced" class="toggle-btn">⚙️ Advanced PTZ Settings</button>
+            <div id="advancedSettings" class="advanced-content" style="display: none;">
+                
+                <h3 class="section-heading">Movement Speed</h3>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="panSpeed">Pan Speed: <span id="panSpeedValue">5</span></label>
+                        <input type="range" id="panSpeed" class="slider settings-input" min="1" max="10" step="1" value="5" />
+                    </div>
+                    <div class="control-group half">
+                        <label for="tiltSpeed">Tilt Speed: <span id="tiltSpeedValue">5</span></label>
+                        <input type="range" id="tiltSpeed" class="slider settings-input" min="1" max="10" step="1" value="5" />
+                    </div>
+                </div>
+                
+                <h3 class="section-heading">Center Target Position</h3>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="centerOffsetX">Horizontal: <span id="centerOffsetXValue">50</span>%</label>
+                        <input type="range" id="centerOffsetX" class="slider settings-input" min="30" max="70" step="1" value="50" />
+                        <small>Where to center horizontally</small>
+                    </div>
+                    <div class="control-group half">
+                        <label for="centerOffsetY">Vertical: <span id="centerOffsetYValue">50</span>%</label>
+                        <input type="range" id="centerOffsetY" class="slider settings-input" min="30" max="70" step="1" value="50" />
+                        <small>Where to center vertically</small>
+                    </div>
+                </div>
+                
+                <h3 class="section-heading">Centering Precision</h3>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="deadzoneX">Horizontal Deadzone: <span id="deadzoneXValue">5</span>%</label>
+                        <input type="range" id="deadzoneX" class="slider settings-input" min="1" max="20" step="0.5" value="5" />
+                        <small>Smaller = tighter centering</small>
+                    </div>
+                    <div class="control-group half">
+                        <label for="deadzoneY">Vertical Deadzone: <span id="deadzoneYValue">5</span>%</label>
+                        <input type="range" id="deadzoneY" class="slider settings-input" min="1" max="20" step="0.5" value="5" />
+                        <small>Smaller = tighter centering</small>
+                    </div>
+                </div>
+                <small class="help-text">
+                    <strong>Tip:</strong> Set center target to where you want the object (50% = true center). 
+                    Use smaller deadzone (1-3%) for precise centering, larger (8-15%) for smoother tracking.
+                </small>
+                
+            </div>
+        </div>
+        
+        <div class="control-buttons">
+            <button id="startBtn" class="btn btn-start">Start Tracking</button>
+            <button id="stopBtn" class="btn btn-stop" disabled>Stop Tracking</button>
+        </div>
+        
+        <div id="status" class="status-message">Initializing...</div>
+    </div>
+    
+    <!-- FPS Counter -->
+    <div id="fps"></div>
+</body>
+
+</html>

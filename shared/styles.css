@@ -1,0 +1,343 @@
+:root {
+    --primary: #3066BE;
+    --primary-light: #93CCEA;
+    --secondary: #119DA4;
+    --background: #0D1B2A;
+    --surface: #1B2838;
+    --surface-light: #2A3F54;
+    --text: #E0E1DD;
+    --text-muted: #778DA9;
+    --error: #E63946;
+    --success: #2A9D8F;
+    --warning: #E9C46A;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--background);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.app-header {
+    text-align: center;
+    padding: 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--surface-light);
+    margin-bottom: 20px;
+}
+
+.app-header h1 {
+    color: var(--primary-light);
+    font-size: 1.8rem;
+    margin-bottom: 5px;
+}
+
+.app-header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.app-header .project-link {
+    color: var(--secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.app-header .project-link:hover {
+    text-decoration: underline;
+}
+
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 20px;
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+}
+
+.video-container {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+}
+
+.video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.video-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.control-panel {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.control-panel h2 {
+    color: var(--primary-light);
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--surface-light);
+}
+
+.control-group {
+    margin-bottom: 15px;
+}
+
+.control-group label {
+    display: block;
+    color: var(--text);
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+}
+
+.control-group small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-top: 3px;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--background);
+    border: 1px solid var(--surface-light);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+input[type="range"] {
+    width: 100%;
+    height: 6px;
+    background: var(--surface-light);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.slider-value {
+    display: inline-block;
+    min-width: 40px;
+    text-align: right;
+    color: var(--primary-light);
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #2555a3;
+}
+
+.btn-secondary {
+    background: var(--surface-light);
+    color: var(--text);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #3a5269;
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--error);
+    color: white;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-group .btn {
+    flex: 1;
+}
+
+.status-bar {
+    background: var(--surface);
+    padding: 10px 15px;
+    border-radius: 4px;
+    margin-top: 15px;
+    font-size: 0.85rem;
+}
+
+.status-bar.error {
+    background: rgba(230, 57, 70, 0.2);
+    border: 1px solid var(--error);
+    color: var(--error);
+}
+
+.status-bar.success {
+    background: rgba(42, 157, 143, 0.2);
+    border: 1px solid var(--success);
+    color: var(--success);
+}
+
+.results-panel {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.results-panel h3 {
+    color: var(--primary-light);
+    font-size: 1rem;
+    margin-bottom: 10px;
+}
+
+.result-item {
+    background: var(--background);
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.result-item .timestamp {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.result-item .content {
+    margin-top: 5px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.stat-card {
+    background: var(--background);
+    border-radius: 4px;
+    padding: 12px;
+    text-align: center;
+}
+
+.stat-card .value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary-light);
+}
+
+.stat-card .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text-muted);
+}
+
+.loading::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--surface-light);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.hidden {
+    display: none !important;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-primary {
+    background: var(--primary);
+    color: white;
+}
+
+.badge-success {
+    background: var(--success);
+    color: white;
+}
+
+.badge-warning {
+    background: var(--warning);
+    color: var(--background);
+}

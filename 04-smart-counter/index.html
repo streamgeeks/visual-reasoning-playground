@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Counter - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .count-display {
+            text-align: center;
+            padding: 30px;
+            background: var(--surface);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .count-display .big-number {
+            font-size: 4rem;
+            font-weight: bold;
+            color: var(--primary-light);
+        }
+        .count-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .entry-line {
+            position: absolute;
+            background: rgba(46, 204, 113, 0.5);
+            pointer-events: none;
+        }
+        .entry-line.vertical {
+            width: 4px;
+            height: 100%;
+        }
+        .entry-line.horizontal {
+            height: 4px;
+            width: 100%;
+        }
+        .event-log {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .event-item {
+            padding: 8px;
+            border-bottom: 1px solid var(--surface-light);
+            font-size: 0.85rem;
+        }
+        .event-item.entry { border-left: 3px solid var(--success); }
+        .event-item.exit { border-left: 3px solid var(--error); }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Smart Counter</h1>
+        <p class="subtitle">Tool #4 - Count objects entering or exiting a space</p>
+        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
+            Part of the Visual Reasoning Playground
+        </a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="count-display">
+                    <div class="big-number" id="currentCount">0</div>
+                    <div>Current Count</div>
+                    <div class="count-controls">
+                        <button class="btn btn-secondary" id="resetBtn">Reset</button>
+                        <button class="btn btn-secondary" id="adjustDown">-1</button>
+                        <button class="btn btn-secondary" id="adjustUp">+1</button>
+                    </div>
+                </div>
+
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <div class="entry-line vertical" id="entryLine"></div>
+                </div>
+
+                <div class="results-panel">
+                    <h3>Event Log</h3>
+                    <div id="eventLog" class="event-log">
+                        <p style="color: var(--text-muted)">Events will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+                
+                <div class="control-group">
+                    <label for="apiKey">Moondream API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+
+                <div class="control-group">
+                    <label for="targetObject">What to Count</label>
+                    <input type="text" id="targetObject" value="person" placeholder="e.g., person, car, dog">
+                </div>
+
+                <div class="control-group">
+                    <label for="linePosition">Entry Line Position: <span id="lineValue">50</span>%</label>
+                    <input type="range" id="linePosition" min="10" max="90" value="50">
+                </div>
+
+                <div class="control-group">
+                    <label for="direction">Count Direction</label>
+                    <select id="direction">
+                        <option value="left-to-right">Left to Right = Entry</option>
+                        <option value="right-to-left">Right to Left = Entry</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="detectionRate">Detection Rate: <span id="rateValue">1.0</span>/sec</label>
+                    <input type="range" id="detectionRate" min="0.5" max="3" step="0.1" value="1">
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Counting</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="totalEntries">0</div>
+                        <div class="label">Total Entries</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="totalExits">0</div>
+                        <div class="label">Total Exits</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
