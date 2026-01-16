@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const videoContainer = document.getElementById('videoContainer');
-    const apiKeyInput = document.getElementById('apiKey');
     const zoneNameInput = document.getElementById('zoneName');
     const zoneTargetInput = document.getElementById('zoneTarget');
     const zoneColorInput = document.getElementById('zoneColor');
@@ -25,14 +24,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     let alerts = [];
     let zoneIdCounter = 0;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) apiKeyInput.value = savedKey;
-        client = new MoondreamClient(savedKey);
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+            }
+        }
+    });
+
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+        window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: false
@@ -43,8 +55,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 canvas.height = video.videoHeight;
             };
             updateStatus('Camera ready - Add zones to monitor');
+            window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
+            window.reasoningConsole.logError('Camera access failed: ' + error.message);
         }
     }
 
@@ -99,6 +113,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 zones.push(zone);
                 updateZoneList();
                 updateStatus(`Zone "${zone.name}" added`);
+                window.reasoningConsole.logAction('Zone created', `"${zone.name}" detecting ${zone.target}`);
             }
 
             videoContainer.style.cursor = 'default';
@@ -174,15 +189,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                     ${zone.triggered ? 'ALERT' : 'Clear'}
                 </span>
                 <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" 
-                        onclick="removeZone(${zone.id})">×</button>
+                        onclick="removeZone(${zone.id})">x</button>
             </div>
         `).join('');
     }
 
     window.removeZone = function(id) {
+        const zone = zones.find(z => z.id === id);
         zones = zones.filter(z => z.id !== id);
         updateZoneList();
         drawZones();
+        if (zone) {
+            window.reasoningConsole.logInfo(`Zone "${zone.name}" removed`);
+        }
     };
 
     function addAlert(zone, objects) {
@@ -202,6 +221,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <span style="float: right">${a.timestamp}</span>
             </div>
         `).join('');
+
+        window.reasoningConsole.logAction('Zone triggered', `${zone.name}: ${objects.length} ${zone.target}(s)`);
     }
 
     function isInZone(obj, zone) {
@@ -212,26 +233,34 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function checkZones() {
-        if (!apiKeyInput.value || zones.length === 0) return;
-
-        client.setApiKey(apiKeyInput.value);
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
+        if (!window.apiKeyManager.hasMoondreamKey() || zones.length === 0) return;
 
         for (const zone of zones) {
             try {
+                const startTime = Date.now();
                 const result = await client.detectInVideo(video, zone.target);
+                const latency = Date.now() - startTime;
+                
+                window.reasoningConsole.logApiCall('/detect', latency);
+                
                 const objectsInZone = result.objects.filter(obj => isInZone(obj, zone));
                 
                 const wasTriggered = zone.triggered;
                 zone.triggered = objectsInZone.length > 0;
 
+                if (zone.triggered) {
+                    window.reasoningConsole.logDetection(zone.target, objectsInZone.length, 0.85);
+                }
+
                 if (zone.triggered && !wasTriggered) {
                     addAlert(zone, objectsInZone);
                     zone.lastTriggered = Date.now();
+                    window.reasoningConsole.logDecision('Alert triggered', `${zone.name} detected ${objectsInZone.length} ${zone.target}(s)`);
                 }
 
             } catch (error) {
                 console.error(`Zone ${zone.name} check failed:`, error);
+                window.reasoningConsole.logError(`Zone "${zone.name}" check failed: ${error.message}`);
             }
         }
 
@@ -241,8 +270,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function startMonitoring() {
-        if (!apiKeyInput.value) {
-            updateStatus('Please enter API key', true);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
             return;
         }
         if (zones.length === 0) {
@@ -253,6 +283,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         isRunning = true;
         startBtn.classList.add('hidden');
         stopBtn.classList.remove('hidden');
+
+        window.reasoningConsole.logInfo(`Started monitoring ${zones.length} zone(s)`);
 
         const interval = 1000 / parseFloat(checkRateSlider.value);
         
@@ -275,6 +307,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateZoneList();
         drawZones();
         updateStatus('Monitoring stopped');
+        window.reasoningConsole.logInfo('Monitoring stopped');
     }
 
     addZoneBtn.addEventListener('click', enableDrawMode);
@@ -284,6 +317,5 @@ document.addEventListener('DOMContentLoaded', async function() {
     startBtn.addEventListener('click', startMonitoring);
     stopBtn.addEventListener('click', stopMonitoring);
 
-    loadSettings();
     await startCamera();
 });

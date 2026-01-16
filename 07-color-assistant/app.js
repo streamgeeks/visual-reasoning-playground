@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
-    const apiKeyInput = document.getElementById('apiKey');
     const uploadArea = document.getElementById('uploadArea');
     const referenceInput = document.getElementById('referenceInput');
     const referencePreview = document.getElementById('referencePreview');
@@ -18,22 +17,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     let referenceImage = null;
     let currentImage = null;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) apiKeyInput.value = savedKey;
-        client = new MoondreamClient(savedKey);
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+                checkReadyState();
+            }
+        }
+    });
+
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+        window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: false
             });
             video.srcObject = stream;
             updateStatus('Camera ready - Upload a reference image');
+            window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
+            window.reasoningConsole.logError('Camera access failed: ' + error.message);
         }
     }
 
@@ -51,11 +66,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             uploadArea.classList.add('hidden');
             checkReadyState();
             updateStatus('Reference uploaded - Capture current frame');
+            window.reasoningConsole.logAction('Reference uploaded', file.name);
         };
         reader.readAsDataURL(file);
     }
 
     function captureCurrentFrame() {
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
+            return;
+        }
+
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -68,24 +90,30 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         checkReadyState();
         updateStatus('Frame captured - Click Analyze to compare');
+        window.reasoningConsole.logAction('Frame captured', 'Current camera frame saved');
     }
 
     function checkReadyState() {
-        analyzeBtn.disabled = !(referenceImage && currentImage && apiKeyInput.value);
+        analyzeBtn.disabled = !(referenceImage && currentImage && window.apiKeyManager.hasMoondreamKey());
     }
 
     async function analyzeAndCompare() {
         if (!referenceImage || !currentImage) return;
 
-        client.setApiKey(apiKeyInput.value);
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
+            return;
+        }
 
         analyzeBtn.disabled = true;
         updateStatus('Analyzing images...');
+        window.reasoningConsole.logInfo('Starting color analysis...');
 
         const startTime = Date.now();
 
         try {
+            window.reasoningConsole.logInfo('Analyzing reference image style...');
             const refAnalysis = await client.ask(referenceImage, `
                 Analyze this image's visual style. Describe:
                 1. Overall color temperature (warm/neutral/cool)
@@ -95,7 +123,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 5. Any dominant colors
                 6. Overall mood/aesthetic
             `);
+            window.reasoningConsole.logApiCall('/ask (reference)', Date.now() - startTime);
 
+            const currentStart = Date.now();
+            window.reasoningConsole.logInfo('Analyzing current image style...');
             const currentAnalysis = await client.ask(currentImage, `
                 Analyze this image's visual style. Describe:
                 1. Overall color temperature (warm/neutral/cool)
@@ -105,7 +136,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 5. Any dominant colors
                 6. Overall mood/aesthetic
             `);
+            window.reasoningConsole.logApiCall('/ask (current)', Date.now() - currentStart);
 
+            const compareStart = Date.now();
+            window.reasoningConsole.logInfo('Generating adjustment recommendations...');
             const comparison = await client.ask(referenceImage, `
                 Compare these two style descriptions and provide specific camera adjustments to make the second match the first:
                 
@@ -119,15 +153,18 @@ document.addEventListener('DOMContentLoaded', async function() {
                 - Brightness: increase/decrease by amount
                 - Contrast: increase/decrease by amount
             `);
+            window.reasoningConsole.logApiCall('/ask (comparison)', Date.now() - compareStart);
 
             const elapsed = Date.now() - startTime;
             analysisTimeSpan.textContent = (elapsed / 1000).toFixed(1) + 's';
 
             displayRecommendations(comparison.answer, refAnalysis.answer, currentAnalysis.answer);
             updateStatus('Analysis complete');
+            window.reasoningConsole.logDecision('Analysis complete', `Total time: ${elapsed}ms`);
 
         } catch (error) {
             updateStatus('Error: ' + error.message, true);
+            window.reasoningConsole.logError('Analysis failed: ' + error.message);
         } finally {
             analyzeBtn.disabled = false;
         }
@@ -158,6 +195,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         const matchScore = calculateMatchScore(refStyle, currentStyle);
         matchScoreSpan.textContent = matchScore + '%';
+        window.reasoningConsole.logInfo(`Match score calculated: ${matchScore}%`);
     }
 
     function parseRecommendations(text) {
@@ -168,7 +206,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             recommendations.push({
                 setting: 'Color Temperature',
                 action: extractAction(text, ['temperature', 'warm', 'cool', 'white balance']),
-                icon: '🌡️',
+                icon: 'T',
                 iconClass: 'rec-color'
             });
         }
@@ -177,7 +215,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             recommendations.push({
                 setting: 'Brightness',
                 action: extractAction(text, ['brightness', 'exposure', 'brighter', 'darker']),
-                icon: '☀️',
+                icon: 'B',
                 iconClass: 'rec-brightness'
             });
         }
@@ -186,7 +224,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             recommendations.push({
                 setting: 'Contrast',
                 action: extractAction(text, ['contrast']),
-                icon: '◐',
+                icon: 'C',
                 iconClass: 'rec-contrast'
             });
         }
@@ -195,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             recommendations.push({
                 setting: 'Saturation',
                 action: extractAction(text, ['saturation', 'vibrance', 'vivid']),
-                icon: '🎨',
+                icon: 'S',
                 iconClass: 'rec-saturation'
             });
         }
@@ -204,7 +242,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             recommendations.push({
                 setting: 'General',
                 action: text.substring(0, 100) + '...',
-                icon: '📷',
+                icon: 'G',
                 iconClass: 'rec-color'
             });
         }
@@ -255,11 +293,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     captureBtn.addEventListener('click', captureCurrentFrame);
     analyzeBtn.addEventListener('click', analyzeAndCompare);
-    apiKeyInput.addEventListener('change', () => {
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
-        checkReadyState();
-    });
 
-    loadSettings();
     await startCamera();
 });

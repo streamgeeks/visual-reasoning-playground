@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
-    const apiKeyInput = document.getElementById('apiKey');
     const analysisRateInput = document.getElementById('analysisRate');
     const confidenceThresholdInput = document.getElementById('confidenceThreshold');
     const rateValue = document.getElementById('rateValue');
@@ -53,10 +52,25 @@ document.addEventListener('DOMContentLoaded', async function() {
         empty: { enabled: true }
     };
 
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+            }
+        }
+    });
+
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+        window.reasoningConsole.logInfo('Loaded saved Moondream API key');
+    }
+
     function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) apiKeyInput.value = savedKey;
-        
         const savedRate = localStorage.getItem('fusionAnalysisRate');
         if (savedRate) {
             analysisRateInput.value = savedRate;
@@ -68,18 +82,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             confidenceThresholdInput.value = savedThreshold;
             thresholdValue.textContent = savedThreshold + '%';
         }
-        
-        client = new MoondreamClient(savedKey);
     }
 
     function saveSettings() {
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
         localStorage.setItem('fusionAnalysisRate', analysisRateInput.value);
         localStorage.setItem('fusionThreshold', confidenceThresholdInput.value);
     }
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera and microphone access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: true
@@ -87,9 +99,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             video.srcObject = stream;
             setupAudioVisualizer(stream);
             updateStatus('Camera and microphone ready');
+            window.reasoningConsole.logInfo('Media devices initialized');
             return true;
         } catch (error) {
             updateStatus('Media error: ' + error.message, true);
+            window.reasoningConsole.logError('Media access failed: ' + error.message);
             return false;
         }
     }
@@ -135,6 +149,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             whisperMode.textContent = 'Not Available';
             whisperMode.className = 'mode';
             whisperStatus.textContent = 'Speech recognition not supported';
+            window.reasoningConsole.logError('Speech recognition not supported in this browser');
             return false;
         }
         
@@ -169,6 +184,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         recognition.onerror = (event) => {
             if (event.error !== 'no-speech') {
                 whisperStatus.textContent = 'Error: ' + event.error;
+                window.reasoningConsole.logError('Speech recognition error: ' + event.error);
             }
         };
         
@@ -179,6 +195,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         };
         
+        window.reasoningConsole.logInfo('Speech recognition initialized');
         return true;
     }
 
@@ -201,6 +218,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (transcript.includes(keyword)) {
                     state.audio.intent = item;
                     logAction(`Audio intent detected: "${item.intent}"`, 'mic');
+                    window.reasoningConsole.logDetection('voice command', 1, state.audio.confidence / 100);
                     performFusion();
                     return;
                 }
@@ -217,10 +235,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function analyzeVideo() {
-        if (!isRunning || !apiKeyInput.value) return;
+        if (!isRunning || !window.apiKeyManager.hasMoondreamKey()) return;
         
-        client.setApiKey(apiKeyInput.value);
         videoIndicator.classList.add('active');
+        const startTime = Date.now();
         
         try {
             const frame = client.captureFrame(video);
@@ -229,6 +247,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 client.describe(frame, { maxTokens: 100 }),
                 client.ask(frame, 'How many people are visible? Answer with just a number, or 0 if none.')
             ]);
+            
+            const latency = Date.now() - startTime;
+            window.reasoningConsole.logApiCall('/describe + /ask', latency);
             
             state.video.scene = sceneResult.description;
             sceneDescription.textContent = sceneResult.description;
@@ -240,6 +261,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (state.video.people) {
                 state.video.lastPeopleTime = Date.now();
                 state.video.confidence = 85;
+                window.reasoningConsole.logDetection('person', peopleCount, 0.85);
             } else {
                 state.video.confidence = 70;
                 checkEmptyRoom();
@@ -251,6 +273,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (error) {
             updateStatus('Video analysis error: ' + error.message, true);
             state.video.confidence = 0;
+            window.reasoningConsole.logError('Video analysis failed: ' + error.message);
         } finally {
             videoIndicator.classList.remove('active');
         }
@@ -293,6 +316,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             } else if (intent === 'movie_mode') {
                 decision = 'Movie mode: Dimming lights, closing blinds';
             }
+            
+            window.reasoningConsole.logDecision('Multimodal fusion', `Video + Audio confidence: ${Math.round(fusedScore)}%`);
         } else if (state.audio.intent) {
             fusedScore = state.audio.confidence * 0.7;
             decision = `Audio only: "${state.audio.transcript}"`;
@@ -346,6 +371,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         logAction(`ACTION TRIGGERED: ${description}`, icon, true);
         updateStatus(`Triggered: ${description}`);
+        window.reasoningConsole.logAction('Action triggered', description);
     }
 
     function logAction(message, icon = 'info', isTriggered = false) {
@@ -380,8 +406,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function startFusion() {
-        if (!apiKeyInput.value) {
-            updateStatus('Please enter your Moondream API key', true);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure your Moondream API key', true);
+            window.apiKeyManager.showModal();
             return;
         }
         
@@ -405,6 +432,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         logAction('Fusion system started', 'info');
         updateStatus('Fusion system running...');
+        window.reasoningConsole.logInfo(`Fusion system started at ${rate}/sec`);
     }
 
     function stopFusion() {
@@ -427,6 +455,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         logAction('Fusion system stopped', 'info');
         updateStatus('System stopped');
+        window.reasoningConsole.logInfo('Fusion system stopped');
     }
 
     document.querySelectorAll('.enabled-toggle').forEach(toggle => {

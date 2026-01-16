@@ -1,6 +1,6 @@
 # PTZOptics Moondream Tracker
 
-**Tool #3** in the [Visual Reasoning Playground](https://github.com/PTZOptics/visual-reasoning-playground)
+**Tool #3** in the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
 
 An AI-powered PTZ (Pan-Tilt-Zoom) camera tracking application that uses Moondream's vision AI to detect and track objects in real-time. Optimized for PTZOptics cameras and other PTZ cameras with HTTP API support.
 
@@ -246,10 +246,16 @@ If your camera uses different endpoints, modify the `sendCommand()` function in 
 - **Video**: Processed locally in browser, only sent to Moondream API for detection
 - **No Data Collection**: This application does not collect or store any user data
 
+## Get the Book
+
+**[Visual Reasoning AI for Broadcast and ProAV](https://visualreasoning.ai/book)** by Paul Richards - the complete guide to building AI-powered camera systems. Get your copy at [VisualReasoning.ai/book](https://visualreasoning.ai/book)
+
 ## Credits
 
+- **Visual Reasoning AI**: Book and course at [VisualReasoning.ai](https://visualreasoning.ai)
 - **Moondream**: Vision AI by [Moondream AI](https://moondream.ai/)
 - **PTZOptics**: Camera control compatible with [PTZOptics](https://ptzoptics.com/) PTZ cameras
+- **StreamGeeks**: Live streaming education at [StreamGeeks.com](https://streamgeeks.com)
 - **Inspired by**: [Download-OBS-Controller](https://github.com/Tyler-Odenthal/Download-OBS-Controller) by Tyler Odenthal
 
 ## Related Playground Tools

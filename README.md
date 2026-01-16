@@ -3,6 +3,7 @@
 [![Moondream](https://img.shields.io/badge/Powered%20by-Moondream-blue)](https://moondream.ai)
 [![PTZOptics](https://img.shields.io/badge/Compatible-PTZOptics-orange)](https://ptzoptics.com)
 [![StreamGeeks](https://img.shields.io/badge/By-StreamGeeks-red)](https://streamgeeks.com)
+[![Get the Book](https://img.shields.io/badge/Get%20the%20Book-VisualReasoning.ai-green)](https://visualreasoning.ai/book)
 
 **AI-powered visual reasoning tools for broadcast, live streaming, and ProAV professionals.**
 
@@ -171,17 +172,20 @@ Moondream charges per API call. Control costs with the rate slider in each tool:
 
 ## Learn More
 
-### Official Resources
-- [Moondream Documentation](https://docs.moondream.ai) - API reference & guides
-- [PTZOptics API 2.0](https://ptzoptics.com/api) - Camera control documentation
-- [StreamGeeks Academy](https://streamgeeks.com) - Live streaming education
-
-### The Book
-*Visual Reasoning AI for Broadcast and ProAV* by Paul Richards covers:
+### Get the Book
+**[Visual Reasoning AI for Broadcast and ProAV](https://visualreasoning.ai/book)** by Paul Richards covers:
 - Complete theory behind Vision Language Models
 - Step-by-step tool building tutorials
 - Production deployment strategies
 - Industry-specific applications
+
+**Get your copy at [VisualReasoning.ai/book](https://visualreasoning.ai/book)**
+
+### Official Resources
+- [VisualReasoning.ai](https://visualreasoning.ai) - Book, online course, and free tools
+- [Moondream Documentation](https://docs.moondream.ai) - API reference & guides
+- [PTZOptics API 2.0](https://ptzoptics.com/api) - Camera control documentation
+- [StreamGeeks Academy](https://streamgeeks.com) - Live streaming education
 
 ### Community
 - [StreamGeeks Discord](https://discord.gg/streamgeeks) - Get help, share projects

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Studio Assistant - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .studio-layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+        }
+        
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .audio-indicator {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: var(--surface);
+            border-radius: 8px;
+        }
+        
+        .mic-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--surface-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: all 0.3s;
+        }
+        
+        .mic-icon.listening {
+            background: var(--primary);
+            animation: pulse-mic 2s infinite;
+        }
+        
+        .mic-icon.wake-detected {
+            background: var(--warning);
+        }
+        
+        .mic-icon.processing {
+            background: var(--secondary);
+        }
+        
+        @keyframes pulse-mic {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        .audio-status {
+            flex: 1;
+        }
+        
+        .audio-status .state {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .audio-status .transcript {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 4px;
+            font-style: italic;
+        }
+        
+        .waveform {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        
+        .waveform .bar {
+            width: 4px;
+            background: var(--primary);
+            border-radius: 2px;
+            transition: height 0.1s;
+        }
+        
+        .command-log {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .command-log h3 {
+            font-size: 0.9rem;
+            color: var(--primary-light);
+            margin-bottom: 10px;
+        }
+        
+        .command-entry {
+            padding: 8px 12px;
+            background: var(--background);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .command-entry .time {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+        
+        .command-entry .command {
+            color: var(--warning);
+            font-weight: 600;
+        }
+        
+        .command-entry .action {
+            color: var(--success);
+        }
+        
+        .command-entry.error .action {
+            color: var(--error);
+        }
+        
+        .tracking-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .tracking-box {
+            position: absolute;
+            border: 3px solid var(--success);
+            border-radius: 4px;
+            background: rgba(42, 157, 143, 0.15);
+        }
+        
+        .tracking-box::before {
+            content: 'TRACKING';
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: var(--success);
+            color: white;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            border-radius: 2px;
+        }
+        
+        .connection-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .connection-box {
+            background: var(--background);
+            border-radius: 4px;
+            padding: 10px;
+        }
+        
+        .connection-box label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+        
+        .connection-box input {
+            font-size: 0.85rem;
+            padding: 8px;
+        }
+        
+        .connection-box .status {
+            font-size: 0.75rem;
+            margin-top: 5px;
+        }
+        
+        .status.connected { color: var(--success); }
+        .status.disconnected { color: var(--error); }
+        .status.connecting { color: var(--warning); }
+        
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .mode-toggle .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+        
+        .mode-toggle .btn.active {
+            background: var(--success);
+        }
+        
+        .commands-reference {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .commands-reference h3 {
+            font-size: 0.85rem;
+            color: var(--primary-light);
+            margin-bottom: 10px;
+        }
+        
+        .commands-reference ul {
+            list-style: none;
+            font-size: 0.8rem;
+        }
+        
+        .commands-reference li {
+            padding: 4px 0;
+            color: var(--text-muted);
+        }
+        
+        .commands-reference li code {
+            color: var(--warning);
+            background: var(--surface);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: white;
+        }
+        
+        .crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .crosshair::after {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Multimodal Studio Assistant</h1>
+        <p class="subtitle">Capstone Project - Voice + Vision controlled production</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="studio-layout">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="trackingOverlay" class="tracking-overlay"></canvas>
+                    <div class="crosshair"></div>
+                </div>
+
+                <div class="audio-indicator">
+                    <div class="mic-icon" id="micIcon">🎤</div>
+                    <div class="audio-status">
+                        <div class="state" id="audioState">Initializing...</div>
+                        <div class="transcript" id="liveTranscript"></div>
+                    </div>
+                    <div class="waveform" id="waveform">
+                        <div class="bar" style="height: 10px;"></div>
+                        <div class="bar" style="height: 15px;"></div>
+                        <div class="bar" style="height: 20px;"></div>
+                        <div class="bar" style="height: 15px;"></div>
+                        <div class="bar" style="height: 25px;"></div>
+                        <div class="bar" style="height: 18px;"></div>
+                        <div class="bar" style="height: 12px;"></div>
+                        <div class="bar" style="height: 20px;"></div>
+                    </div>
+                </div>
+
+                <div class="command-log" id="commandLog">
+                    <h3>Command History</h3>
+                    <div id="commandEntries">
+                        <div class="command-entry">
+                            <span class="time">--:--:--</span>
+                            <span class="action">Say "Hey Studio" followed by a command</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Connections</h2>
+                
+                <div class="connection-grid">
+                    <div class="connection-box">
+                        <label>PTZ Camera IP</label>
+                        <input type="text" id="ptzIP" placeholder="192.168.1.100">
+                        <div class="status disconnected" id="ptzStatus">Not connected</div>
+                    </div>
+                    <div class="connection-box">
+                        <label>OBS WebSocket</label>
+                        <input type="text" id="obsHost" placeholder="localhost:4455">
+                        <div class="status disconnected" id="obsStatus">Not connected</div>
+                    </div>
+                </div>
+
+                <div class="connection-box" style="margin-bottom: 15px;">
+                    <label>OBS WebSocket Password (if set)</label>
+                    <input type="password" id="obsPassword" placeholder="Optional">
+                </div>
+
+                <div class="btn-group" style="margin-bottom: 20px;">
+                    <button id="connectBtn" class="btn btn-primary">Connect All</button>
+                </div>
+
+                <h2>Studio Mode</h2>
+                
+                <div class="mode-toggle">
+                    <button class="btn btn-secondary mode-btn active" data-mode="voice">Voice Control</button>
+                    <button class="btn btn-secondary mode-btn" data-mode="tracking">Auto-Track</button>
+                    <button class="btn btn-secondary mode-btn" data-mode="both">Both</button>
+                </div>
+
+                <div class="control-group">
+                    <label>Tracking Target</label>
+                    <input type="text" id="trackingTarget" value="person" placeholder="person, face, speaker">
+                    <small>What should the camera follow?</small>
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Assistant</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+
+                <div id="status" class="status-bar">Configure connections and start the assistant</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="commandCount">0</div>
+                        <div class="label">Commands</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="trackingCount">0</div>
+                        <div class="label">Tracks</div>
+                    </div>
+                </div>
+
+                <div class="commands-reference">
+                    <h3>Voice Commands</h3>
+                    <ul>
+                        <li><code>Hey Studio, follow me</code> - Start tracking</li>
+                        <li><code>Hey Studio, stop</code> - Stop tracking</li>
+                        <li><code>Hey Studio, zoom in</code> - Zoom camera in</li>
+                        <li><code>Hey Studio, zoom out</code> - Zoom camera out</li>
+                        <li><code>Hey Studio, go wide</code> - Wide shot preset</li>
+                        <li><code>Hey Studio, go tight</code> - Tight shot preset</li>
+                        <li><code>Hey Studio, camera 1/2/3</code> - Switch scene</li>
+                        <li><code>Hey Studio, start recording</code> - Start OBS recording</li>
+                        <li><code>Hey Studio, stop recording</code> - Stop OBS recording</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="ptz-controller.js"></script>
+    <script src="obs-controller.js"></script>
+    <script src="audio-processor.js"></script>
+    <script src="intent-parser.js"></script>
+    <script src="command-handler.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

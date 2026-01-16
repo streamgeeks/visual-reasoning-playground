@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const entryLine = document.getElementById('entryLine');
-    const apiKeyInput = document.getElementById('apiKey');
     const targetInput = document.getElementById('targetObject');
     const linePositionSlider = document.getElementById('linePosition');
     const lineValue = document.getElementById('lineValue');
@@ -32,14 +31,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     let eventLog = [];
     let objectIdCounter = 0;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) apiKeyInput.value = savedKey;
-        client = new MoondreamClient(savedKey);
+    // Initialize API Key Manager
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+            }
+        }
+    });
+
+    // Initialize Reasoning Console
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    // Initialize client if key exists
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+        window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: false
@@ -51,8 +66,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 updateEntryLine();
             };
             updateStatus('Camera ready');
+            window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
+            window.reasoningConsole.logError('Camera access failed: ' + error.message);
         }
     }
 
@@ -82,10 +99,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         eventLogDiv.innerHTML = eventLog.map(e => `
             <div class="event-item ${e.type}">
-                <strong>${e.type === 'entry' ? '→ Entry' : '← Exit'}</strong>
+                <strong>${e.type === 'entry' ? '-> Entry' : '<- Exit'}</strong>
                 <span style="float: right">${e.timestamp}</span>
             </div>
         `).join('');
+
+        // Log to reasoning console
+        if (type === 'entry') {
+            window.reasoningConsole.logAction('Entry detected', `Object ${objectId} crossed line`);
+        } else {
+            window.reasoningConsole.logAction('Exit detected', `Object ${objectId} crossed line`);
+        }
     }
 
     function matchObjectToTracked(detection) {
@@ -108,14 +132,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function detectAndCount() {
-        if (!apiKeyInput.value || !targetInput.value) return;
+        if (!window.apiKeyManager.hasMoondreamKey() || !targetInput.value) {
+            window.reasoningConsole.logError('Missing API key or target object');
+            return;
+        }
 
-        client.setApiKey(apiKeyInput.value);
+        const startTime = Date.now();
 
         try {
             const result = await client.detectInVideo(video, targetInput.value);
+            const latency = Date.now() - startTime;
             const linePos = parseInt(linePositionSlider.value) / 100;
             const isLeftToRight = directionSelect.value === 'left-to-right';
+
+            window.reasoningConsole.logApiCall('/detect', latency);
+            window.reasoningConsole.logDetection(targetInput.value, result.objects.length, 0.85);
 
             drawDetections(result.objects, linePos);
 
@@ -132,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         crossedLine: false,
                         side: detection.x < linePos ? 'left' : 'right'
                     });
+                    window.reasoningConsole.logInfo(`New object tracked: ID ${objectId}`);
                 }
 
                 currentIds.add(objectId);
@@ -150,10 +182,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                         currentCount++;
                         totalEntries++;
                         logEvent('entry', objectId);
+                        window.reasoningConsole.logDecision('Count +1', `Object ${objectId} entered (${previousSide} -> ${currentSide})`);
                     } else {
                         currentCount = Math.max(0, currentCount - 1);
                         totalExits++;
                         logEvent('exit', objectId);
+                        window.reasoningConsole.logDecision('Count -1', `Object ${objectId} exited (${previousSide} -> ${currentSide})`);
                     }
                     
                     updateDisplay();
@@ -174,6 +208,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         } catch (error) {
             updateStatus('Error: ' + error.message, true);
+            window.reasoningConsole.logError('Detection failed: ' + error.message);
         }
     }
 
@@ -207,15 +242,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function startCounting() {
-        if (!apiKeyInput.value) {
-            updateStatus('Please enter API key', true);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
             return;
         }
 
         isRunning = true;
         startBtn.classList.add('hidden');
         stopBtn.classList.remove('hidden');
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
+
+        window.reasoningConsole.logInfo(`Starting counting at ${rateSlider.value}/sec`);
 
         const interval = 1000 / parseFloat(rateSlider.value);
         
@@ -235,6 +272,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         startBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
         updateStatus('Stopped');
+        window.reasoningConsole.logInfo('Counting stopped');
     }
 
     function resetCount() {
@@ -245,6 +283,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         eventLog = [];
         eventLogDiv.innerHTML = '<p style="color: var(--text-muted)">Events will appear here</p>';
         updateDisplay();
+        window.reasoningConsole.logInfo('Counters reset to zero');
     }
 
     linePositionSlider.addEventListener('input', updateEntryLine);
@@ -257,6 +296,5 @@ document.addEventListener('DOMContentLoaded', async function() {
     adjustUpBtn.addEventListener('click', () => { currentCount++; updateDisplay(); });
     adjustDownBtn.addEventListener('click', () => { currentCount = Math.max(0, currentCount - 1); updateDisplay(); });
 
-    loadSettings();
     await startCamera();
 });

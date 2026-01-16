@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const apiKeyInput = document.getElementById('apiKey');
     const targetInput = document.getElementById('targetObject');
     const boxColorInput = document.getElementById('boxColor');
     const continuousCheckbox = document.getElementById('continuousMode');
@@ -20,21 +19,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     let detectionLoop = null;
     let isRunning = false;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        const savedTarget = localStorage.getItem('detectionTarget');
-        if (savedKey) apiKeyInput.value = savedKey;
-        if (savedTarget) targetInput.value = savedTarget;
-        client = new MoondreamClient(savedKey);
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+                updateStatus('Ready to detect objects');
+            }
+        }
+    });
+
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
     }
 
-    function saveSettings() {
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
-        localStorage.setItem('detectionTarget', targetInput.value);
-    }
+    const savedTarget = localStorage.getItem('detectionTarget');
+    if (savedTarget) targetInput.value = savedTarget;
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: false
@@ -44,8 +52,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             };
+            window.reasoningConsole.logInfo('Camera connected');
             updateStatus('Camera ready');
         } catch (error) {
+            window.reasoningConsole.logError('Camera access denied: ' + error.message);
             updateStatus('Camera error: ' + error.message, true);
         }
     }
@@ -56,23 +66,51 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function detect() {
-        if (!apiKeyInput.value || !targetInput.value) {
-            updateStatus('Please enter API key and target object', true);
+        if (!client) {
+            window.reasoningConsole.logError('No API key configured');
+            updateStatus('Please configure your API key', true);
+            window.apiKeyManager.showModal();
             return;
         }
 
-        client.setApiKey(apiKeyInput.value);
-        saveSettings();
+        if (!targetInput.value) {
+            window.reasoningConsole.logError('No target object specified');
+            updateStatus('Please enter an object to detect', true);
+            return;
+        }
+
+        localStorage.setItem('detectionTarget', targetInput.value);
 
         const startTime = Date.now();
         updateStatus('Detecting...');
+        window.reasoningConsole.logInfo(`Searching for "${targetInput.value}"...`);
 
         try {
             const result = await client.detectInVideo(video, targetInput.value);
             const elapsed = Date.now() - startTime;
 
+            window.reasoningConsole.logApiCall('/detect', elapsed);
+
             detectTimeSpan.textContent = elapsed + 'ms';
             objectCountSpan.textContent = result.objects.length;
+
+            const avgConfidence = result.objects.length > 0 
+                ? result.objects.reduce((sum, o) => sum + (o.confidence || 1), 0) / result.objects.length 
+                : 0;
+
+            window.reasoningConsole.logDetection(
+                targetInput.value, 
+                result.objects.length, 
+                avgConfidence,
+                result.objects.length > 0 ? `positions logged` : ''
+            );
+
+            result.objects.forEach((obj, i) => {
+                window.reasoningConsole.logInfo(
+                    `Object #${i+1}: center (${(obj.x * 100).toFixed(1)}%, ${(obj.y * 100).toFixed(1)}%), ` +
+                    `size ${(obj.width * 100).toFixed(1)}% x ${(obj.height * 100).toFixed(1)}%`
+                );
+            });
 
             drawDetections(result.objects);
             displayDetectionList(result.objects);
@@ -84,6 +122,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
         } catch (error) {
+            window.reasoningConsole.logError(error.message);
             updateStatus('Error: ' + error.message, true);
         }
     }
@@ -144,7 +183,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         detectBtn.classList.add('hidden');
         stopBtn.classList.remove('hidden');
         
-        const interval = 1000 / parseFloat(rateSlider.value);
+        const rate = parseFloat(rateSlider.value);
+        const interval = 1000 / rate;
+        
+        window.reasoningConsole.logInfo(`Starting continuous detection at ${rate}/sec`);
         
         const loop = async () => {
             if (!isRunning) return;
@@ -161,6 +203,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         clearTimeout(detectionLoop);
         detectBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
+        window.reasoningConsole.logInfo('Continuous detection stopped');
         updateStatus('Stopped');
     }
 
@@ -182,9 +225,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     stopBtn.addEventListener('click', stopContinuous);
 
-    apiKeyInput.addEventListener('change', saveSettings);
-    targetInput.addEventListener('change', saveSettings);
-
-    loadSettings();
+    window.reasoningConsole.logInfo('Detection Box Drawer initialized');
     await startCamera();
 });

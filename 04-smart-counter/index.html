@@ -54,9 +54,7 @@
     <header class="app-header">
         <h1>Smart Counter</h1>
         <p class="subtitle">Tool #4 - Count objects entering or exiting a space</p>
-        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
-            Part of the Visual Reasoning Playground
-        </a>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
     </header>
 
     <div class="container">
@@ -89,11 +87,6 @@
             <div class="control-panel">
                 <h2>Settings</h2>
                 
-                <div class="control-group">
-                    <label for="apiKey">Moondream API Key</label>
-                    <input type="password" id="apiKey" placeholder="Enter your API key">
-                </div>
-
                 <div class="control-group">
                     <label for="targetObject">What to Count</label>
                     <input type="text" id="targetObject" value="person" placeholder="e.g., person, car, dog">
@@ -139,6 +132,8 @@
     </div>
 
     <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

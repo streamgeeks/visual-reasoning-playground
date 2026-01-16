@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
-    const apiKeyInput = document.getElementById('apiKey');
     const snapshotBtn = document.getElementById('snapshotBtn');
     const newSnapshotBtn = document.getElementById('newSnapshotBtn');
     const clearBtn = document.getElementById('clearBtn');
@@ -18,22 +17,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     let questionCount = 0;
     let totalResponseTime = 0;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) apiKeyInput.value = savedKey;
-        client = new MoondreamClient(savedKey);
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+            }
+        }
+    });
+
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+        window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
     async function startCamera() {
         try {
+            window.reasoningConsole.logInfo('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: false
             });
             video.srcObject = stream;
             updateStatus('Camera ready - Take a snapshot to start');
+            window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
+            window.reasoningConsole.logError('Camera access failed: ' + error.message);
         }
     }
 
@@ -43,8 +57,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function takeSnapshot() {
-        client.setApiKey(apiKeyInput.value);
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
+            return;
+        }
 
         currentSnapshot = client.captureFrame(video);
         snapshotPreview.src = currentSnapshot;
@@ -53,6 +70,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         addMessage('assistant', 'Snapshot captured! Now you can ask me questions about what I see.');
         updateStatus('Snapshot ready - Ask questions about the scene');
+        window.reasoningConsole.logAction('Snapshot captured', 'Frame captured from video');
     }
 
     function addMessage(role, content, imageUrl = null) {
@@ -74,27 +92,31 @@ document.addEventListener('DOMContentLoaded', async function() {
     async function askQuestion(question) {
         if (!currentSnapshot) {
             updateStatus('Please take a snapshot first', true);
+            window.reasoningConsole.logError('No snapshot available');
             return;
         }
 
-        if (!apiKeyInput.value) {
-            updateStatus('Please enter API key', true);
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            updateStatus('Please configure API key', true);
+            window.apiKeyManager.showModal();
             return;
         }
 
         if (!question.trim()) return;
 
-        client.setApiKey(apiKeyInput.value);
         addMessage('user', question);
         questionInput.value = '';
         askBtn.disabled = true;
         updateStatus('Thinking...');
+        window.reasoningConsole.logInfo(`Processing question: "${question}"`);
 
         const startTime = Date.now();
 
         try {
             const result = await client.ask(currentSnapshot, question);
             const elapsed = Date.now() - startTime;
+
+            window.reasoningConsole.logApiCall('/ask', elapsed);
 
             questionCount++;
             totalResponseTime += elapsed;
@@ -103,10 +125,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             addMessage('assistant', result.answer);
             updateStatus(`Answered in ${elapsed}ms`);
+            window.reasoningConsole.logDecision('Answer generated', `Response time: ${elapsed}ms`);
 
         } catch (error) {
             addMessage('assistant', `Error: ${error.message}`);
             updateStatus('Error: ' + error.message, true);
+            window.reasoningConsole.logError('Question failed: ' + error.message);
         } finally {
             askBtn.disabled = false;
         }
@@ -122,6 +146,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         snapshotSection.classList.add('hidden');
         snapshotBtn.classList.remove('hidden');
         updateStatus('Ready - Take a snapshot to start');
+        window.reasoningConsole.logInfo('Chat cleared');
     }
 
     snapshotBtn.addEventListener('click', takeSnapshot);
@@ -137,11 +162,5 @@ document.addEventListener('DOMContentLoaded', async function() {
         btn.addEventListener('click', () => askQuestion(btn.dataset.q));
     });
 
-    apiKeyInput.addEventListener('change', () => {
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
-        client.setApiKey(apiKeyInput.value);
-    });
-
-    loadSettings();
     await startCamera();
 });

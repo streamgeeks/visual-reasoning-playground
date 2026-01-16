@@ -1,110 +1,250 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
-    const apiKeyInput = document.getElementById('apiKey');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const maxTokensSlider = document.getElementById('maxTokens');
     const maxTokensValue = document.getElementById('maxTokensValue');
     const autoDescribeCheckbox = document.getElementById('autoDescribe');
     const autoIntervalInput = document.getElementById('autoInterval');
     const describeBtn = document.getElementById('describeBtn');
+    const askBtn = document.getElementById('askBtn');
+    const questionInput = document.getElementById('questionInput');
     const descriptionDiv = document.getElementById('description');
-    const historyDiv = document.getElementById('history');
-    const historyList = document.getElementById('historyList');
+    const descriptionTimestamp = document.getElementById('descriptionTimestamp');
+    const qaContent = document.getElementById('qaContent');
+    const jsonOutput = document.getElementById('jsonOutput');
     const statusBar = document.getElementById('status');
-    const apiCallsSpan = document.getElementById('apiCalls');
-    const avgTimeSpan = document.getElementById('avgTime');
 
     let client = null;
     let autoDescribeInterval = null;
-    let apiCallCount = 0;
-    let totalTime = 0;
-    let history = [];
+    let currentStream = null;
 
-    function loadSettings() {
-        const savedKey = localStorage.getItem('moondreamApiKey');
-        if (savedKey) {
-            apiKeyInput.value = savedKey;
-            client = new MoondreamClient(savedKey);
+    window.reasoningConsole = new ReasoningConsole({
+        startCollapsed: false
+    });
+
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+                updateStatus('Ready to describe scenes', 'success');
+            }
         }
+    });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
     }
 
-    function saveSettings() {
-        localStorage.setItem('moondreamApiKey', apiKeyInput.value);
-    }
-
-    async function startCamera() {
+    async function enumerateCameras() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720, facingMode: 'environment' },
-                audio: false
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '<option value="">Select Camera...</option>';
+            
+            videoDevices.forEach((device, index) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${index + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
-            updateStatus('Camera ready');
+
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+            return videoDevices;
         } catch (error) {
-            updateStatus('Camera error: ' + error.message, true);
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+            return [];
         }
     }
 
-    function updateStatus(message, isError = false) {
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            window.reasoningConsole.logInfo('Requesting camera access...');
+            updateStatus('Connecting to camera...');
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720, facingMode: 'environment' },
+                audio: false
+            };
+
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+
+            await enumerateCameras();
+
+            if (deviceId) {
+                cameraSelect.value = deviceId;
+            } else {
+                const track = currentStream.getVideoTracks()[0];
+                const settings = track.getSettings();
+                if (settings.deviceId) {
+                    cameraSelect.value = settings.deviceId;
+                }
+            }
+            
+            window.reasoningConsole.logInfo('Camera connected successfully');
+            updateStatus('Camera ready', 'success');
+        } catch (error) {
+            window.reasoningConsole.logError('Camera access denied: ' + error.message);
+            updateStatus('Camera error: ' + error.message, 'error');
+        }
+    }
+
+    function updateStatus(message, type = '') {
         statusBar.textContent = message;
-        statusBar.className = 'status-bar' + (isError ? ' error' : '');
+        statusBar.className = 'status-bar' + (type ? ' ' + type : '');
+    }
+
+    function updateJsonOutput(data) {
+        jsonOutput.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function formatTimestamp() {
+        return new Date().toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit' 
+        });
     }
 
     async function describeScene() {
-        if (!client || !apiKeyInput.value) {
-            updateStatus('Please enter your API key', true);
+        if (!client) {
+            window.reasoningConsole.logError('No API key configured');
+            updateStatus('Please configure your Moondream API key', 'error');
+            window.apiKeyManager.showModal();
             return;
         }
 
-        client.setApiKey(apiKeyInput.value);
-        saveSettings();
-
         describeBtn.disabled = true;
         updateStatus('Analyzing scene...');
+        window.reasoningConsole.logInfo('Capturing frame from video...');
 
         const startTime = Date.now();
 
         try {
             const maxTokens = parseInt(maxTokensSlider.value);
+            
+            window.reasoningConsole.logApiCall('/describe', 0);
+            
             const result = await client.describeVideo(video, { maxTokens });
             const elapsed = Date.now() - startTime;
 
-            apiCallCount++;
-            totalTime += elapsed;
-            apiCallsSpan.textContent = apiCallCount;
-            avgTimeSpan.textContent = Math.round(totalTime / apiCallCount) + 'ms';
+            window.reasoningConsole.logSceneDescription(result.description, elapsed);
+            window.reasoningConsole.logDecision('Description complete', `${result.description.split(' ').length} words in ${elapsed}ms`);
 
-            displayDescription(result.description, elapsed);
-            addToHistory(result.description);
-            updateStatus(`Described in ${elapsed}ms`);
+            descriptionDiv.textContent = result.description;
+            descriptionDiv.classList.remove('placeholder');
+            descriptionTimestamp.textContent = `${formatTimestamp()} (${elapsed}ms)`;
+
+            updateJsonOutput({
+                type: 'scene_description',
+                timestamp: new Date().toISOString(),
+                latency_ms: elapsed,
+                tokens_requested: maxTokens,
+                response: {
+                    description: result.description,
+                    word_count: result.description.split(' ').length
+                },
+                raw: result.raw
+            });
+
+            updateStatus(`Described in ${elapsed}ms`, 'success');
 
         } catch (error) {
-            updateStatus('Error: ' + error.message, true);
+            window.reasoningConsole.logError(error.message);
+            updateStatus('Error: ' + error.message, 'error');
+            
+            updateJsonOutput({
+                type: 'error',
+                timestamp: new Date().toISOString(),
+                error: error.message
+            });
         } finally {
             describeBtn.disabled = false;
         }
     }
 
-    function displayDescription(text, time) {
-        descriptionDiv.innerHTML = `
-            <p class="timestamp">Just now (${time}ms)</p>
-            <p class="content">${text}</p>
-        `;
-    }
+    async function askQuestion() {
+        const question = questionInput.value.trim();
+        
+        if (!question) {
+            window.reasoningConsole.logError('Please enter a question');
+            return;
+        }
 
-    function addToHistory(text) {
-        const timestamp = new Date().toLocaleTimeString();
-        history.unshift({ text, timestamp });
-        
-        if (history.length > 10) history.pop();
-        
-        if (history.length > 1) {
-            historyDiv.classList.remove('hidden');
-            historyList.innerHTML = history.slice(1).map(item => `
-                <div class="result-item">
-                    <p class="timestamp">${item.timestamp}</p>
-                    <p class="content">${item.text}</p>
+        if (!client) {
+            window.reasoningConsole.logError('No API key configured');
+            updateStatus('Please configure your Moondream API key', 'error');
+            window.apiKeyManager.showModal();
+            return;
+        }
+
+        askBtn.disabled = true;
+        questionInput.disabled = true;
+        updateStatus('Processing question...');
+        window.reasoningConsole.logInfo(`Question: "${question}"`);
+
+        const startTime = Date.now();
+
+        try {
+            window.reasoningConsole.logApiCall('/ask', 0);
+            
+            const result = await client.askVideo(video, question);
+            const elapsed = Date.now() - startTime;
+
+            window.reasoningConsole.logDecision('Answer received', `${elapsed}ms`);
+
+            qaContent.innerHTML = `
+                <div style="margin-bottom: 8px; color: var(--text-muted);">
+                    <strong>Q:</strong> ${question}
                 </div>
-            `).join('');
+                <div>
+                    <strong>A:</strong> ${result.answer}
+                </div>
+                <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">
+                    ${formatTimestamp()} (${elapsed}ms)
+                </div>
+            `;
+            qaContent.classList.remove('placeholder');
+
+            updateJsonOutput({
+                type: 'question_answer',
+                timestamp: new Date().toISOString(),
+                latency_ms: elapsed,
+                request: {
+                    question: question
+                },
+                response: {
+                    answer: result.answer
+                },
+                raw: result.raw
+            });
+
+            updateStatus(`Answered in ${elapsed}ms`, 'success');
+
+        } catch (error) {
+            window.reasoningConsole.logError(error.message);
+            updateStatus('Error: ' + error.message, 'error');
+            
+            updateJsonOutput({
+                type: 'error',
+                timestamp: new Date().toISOString(),
+                question: question,
+                error: error.message
+            });
+        } finally {
+            askBtn.disabled = false;
+            questionInput.disabled = false;
         }
     }
 
@@ -112,32 +252,51 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (autoDescribeCheckbox.checked) {
             const interval = parseInt(autoIntervalInput.value) * 1000;
             autoDescribeInterval = setInterval(describeScene, interval);
+            window.reasoningConsole.logInfo(`Auto-describe enabled: every ${autoIntervalInput.value}s`);
             updateStatus(`Auto-describing every ${autoIntervalInput.value}s`);
         } else {
             clearInterval(autoDescribeInterval);
             autoDescribeInterval = null;
+            window.reasoningConsole.logInfo('Auto-describe disabled');
             updateStatus('Auto-describe stopped');
         }
     }
+
+    cameraSelect.addEventListener('change', () => {
+        const deviceId = cameraSelect.value;
+        if (deviceId) {
+            window.reasoningConsole.logInfo('Switching camera...');
+            startCamera(deviceId);
+        }
+    });
+
+    refreshCamerasBtn.addEventListener('click', async () => {
+        window.reasoningConsole.logInfo('Refreshing camera list...');
+        await enumerateCameras();
+    });
 
     maxTokensSlider.addEventListener('input', () => {
         maxTokensValue.textContent = maxTokensSlider.value;
     });
 
-    apiKeyInput.addEventListener('change', () => {
-        client = new MoondreamClient(apiKeyInput.value);
-        saveSettings();
+    describeBtn.addEventListener('click', describeScene);
+    askBtn.addEventListener('click', askQuestion);
+    
+    questionInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            askQuestion();
+        }
     });
 
-    describeBtn.addEventListener('click', describeScene);
     autoDescribeCheckbox.addEventListener('change', toggleAutoDescribe);
     autoIntervalInput.addEventListener('change', () => {
         if (autoDescribeCheckbox.checked) {
-            toggleAutoDescribe();
+            clearInterval(autoDescribeInterval);
             toggleAutoDescribe();
         }
     });
 
-    loadSettings();
+    window.reasoningConsole.logInfo('Scene Describer initialized');
+    window.reasoningConsole.logInfo('Module 1: Foundations of Visual Reasoning AI');
     await startCamera();
 });

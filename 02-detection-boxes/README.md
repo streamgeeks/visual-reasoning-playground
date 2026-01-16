@@ -73,4 +73,16 @@ Each detection includes:
 
 ---
 
-*Built with [Moondream](https://moondream.ai) | Part of the Visual Reasoning Playground*
+## Get the Book
+
+**[Visual Reasoning AI for Broadcast and ProAV](https://visualreasoning.ai/book)** by Paul Richards - Learn to build AI-powered camera systems from the ground up.
+
+**Resources:**
+- [VisualReasoning.ai](https://visualreasoning.ai) - Book, online course, and free tools
+- [Moondream](https://moondream.ai) - Vision AI powering these tools
+- [PTZOptics](https://ptzoptics.com) - PTZ cameras with API control
+- [StreamGeeks](https://streamgeeks.com) - Live streaming education
+
+---
+
+*Part of the [Visual Reasoning Playground](../README.md) by [Paul Richards](https://github.com/paulwrichards)*

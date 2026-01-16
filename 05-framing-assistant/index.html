@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTZ Framing Assistant - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .ptz-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            margin: 15px 0;
+        }
+        .ptz-controls .btn {
+            padding: 10px;
+            font-size: 0.9rem;
+        }
+        .ptz-controls .btn.center {
+            background: var(--error);
+        }
+        .zoom-presets {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+        }
+        .zoom-presets .btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.85rem;
+        }
+        .zoom-presets .btn.active {
+            background: var(--success);
+        }
+        .target-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .target-input input {
+            flex: 1;
+        }
+        .detection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .detection-box {
+            position: absolute;
+            border: 3px solid var(--success);
+            background: rgba(42, 157, 143, 0.2);
+            border-radius: 4px;
+        }
+        .detection-box::after {
+            content: attr(data-label);
+            position: absolute;
+            top: -22px;
+            left: 0;
+            background: var(--success);
+            color: white;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            border-radius: 2px;
+        }
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+        }
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.7);
+        }
+        .crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .crosshair::after {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .framing-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        .framing-status .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        .framing-status .indicator.active {
+            background: var(--success);
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .connection-panel {
+            background: var(--background);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        .connection-panel label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            display: block;
+        }
+        .connection-row {
+            display: flex;
+            gap: 10px;
+        }
+        .connection-row input {
+            flex: 1;
+        }
+        .connection-row .btn {
+            padding: 10px 15px;
+        }
+        .connected {
+            color: var(--success);
+        }
+        .disconnected {
+            color: var(--error);
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>PTZ Framing Assistant</h1>
+        <p class="subtitle">Tool #5a - Auto-frame subjects using AI detection + PTZ camera control</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlay" class="detection-overlay"></canvas>
+                    <div class="crosshair"></div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Camera Setup</h2>
+                
+                <!-- Camera Source Selection -->
+                <div class="control-group">
+                    <label>Video Source</label>
+                    <select id="cameraSelect">
+                        <option value="">Loading cameras...</option>
+                    </select>
+                </div>
+
+                <!-- PTZ Camera Connection -->
+                <div class="connection-panel">
+                    <label>PTZOptics Camera IP</label>
+                    <div class="connection-row">
+                        <input type="text" id="cameraIP" placeholder="192.168.1.100">
+                        <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
+                    </div>
+                    <small id="connectionStatus" class="disconnected">Not connected</small>
+                </div>
+
+                <h2>Auto-Frame Settings</h2>
+
+                <!-- Target Object -->
+                <div class="control-group">
+                    <label>Target Object</label>
+                    <div class="target-input">
+                        <input type="text" id="targetObject" placeholder="person, face, speaker">
+                    </div>
+                    <small>What should the camera track and frame?</small>
+                </div>
+
+                <!-- Zoom Presets -->
+                <div class="control-group">
+                    <label>Zoom Preset</label>
+                    <div class="zoom-presets">
+                        <button class="btn btn-secondary zoom-btn active" data-zoom="wide">Wide</button>
+                        <button class="btn btn-secondary zoom-btn" data-zoom="medium">Medium</button>
+                        <button class="btn btn-secondary zoom-btn" data-zoom="tight">Tight</button>
+                    </div>
+                </div>
+
+                <!-- Main Action Button -->
+                <div class="btn-group">
+                    <button id="autoFrameBtn" class="btn btn-primary">Auto-Frame</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+
+                <!-- Manual PTZ Controls -->
+                <div class="control-group" style="margin-top: 20px;">
+                    <label>Manual PTZ Control</label>
+                    <div class="ptz-controls">
+                        <button class="btn btn-secondary" data-ptz=""></button>
+                        <button class="btn btn-secondary" data-ptz="up">↑</button>
+                        <button class="btn btn-secondary" data-ptz=""></button>
+                        <button class="btn btn-secondary" data-ptz="left">←</button>
+                        <button class="btn btn-secondary center" data-ptz="stop">■</button>
+                        <button class="btn btn-secondary" data-ptz="right">→</button>
+                        <button class="btn btn-secondary" data-ptz=""></button>
+                        <button class="btn btn-secondary" data-ptz="down">↓</button>
+                        <button class="btn btn-secondary" data-ptz=""></button>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" data-ptz="zoomout" style="flex: 1;">Zoom -</button>
+                        <button class="btn btn-secondary" data-ptz="zoomin" style="flex: 1;">Zoom +</button>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <div class="framing-status">
+                    <div class="indicator" id="framingIndicator"></div>
+                    <span id="framingStatusText">Ready</span>
+                </div>
+
+                <div id="status" class="status-bar">Configure camera IP and target object</div>
+
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="detectCount">0</div>
+                        <div class="label">Detections</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="moveCount">0</div>
+                        <div class="label">PTZ Moves</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="ptz-controller.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

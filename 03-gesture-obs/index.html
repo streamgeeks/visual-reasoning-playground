@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Control - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+            padding: 20px;
+            padding-left: 420px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-container {
+            position: relative;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .camera-controls select {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+
+        .btn-icon {
+            padding: 10px 14px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: rgba(48, 102, 190, 0.8);
+        }
+
+        .gesture-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .gesture-indicator {
+            padding: 10px 15px;
+            background: rgba(13, 27, 42, 0.9);
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .gesture-indicator .icon {
+            font-size: 1.3rem;
+        }
+
+        .gesture-indicator .status {
+            font-weight: 600;
+        }
+
+        .gesture-indicator.detected {
+            background: rgba(42, 157, 143, 0.9);
+        }
+
+        .gesture-indicator.not-detected {
+            background: rgba(13, 27, 42, 0.9);
+            opacity: 0.7;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .card h3 {
+            margin: 0 0 12px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .obs-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: var(--background);
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .obs-status .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+
+        .obs-status.connected .dot {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .obs-status .text {
+            flex: 1;
+            font-weight: 600;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .input-group input {
+            padding: 10px 12px;
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-row .input-group {
+            flex: 1;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2555a3;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .scene-display {
+            padding: 15px;
+            background: var(--background);
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .scene-display .label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        .scene-display .scene-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--secondary);
+        }
+
+        .last-action {
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        .last-action .action-text {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--surface-light);
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        .setting-row label {
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+
+        .setting-row input[type="number"] {
+            width: 80px;
+            padding: 8px;
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+            text-align: center;
+        }
+
+        .setting-row input[type="range"] {
+            width: 120px;
+        }
+
+        .setting-value {
+            min-width: 50px;
+            text-align: right;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .detection-toggle {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .detection-toggle .btn {
+            flex: 1;
+        }
+
+        .gesture-mappings {
+            margin-top: 10px;
+        }
+
+        .gesture-mapping {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .gesture-mapping .gesture-icon {
+            font-size: 1.5rem;
+        }
+
+        .gesture-mapping .arrow {
+            color: var(--text-muted);
+        }
+
+        .gesture-mapping select {
+            flex: 1;
+            padding: 8px;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+        }
+
+        @media (max-width: 1200px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                padding-left: 20px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .rc-container {
+                width: calc(100% - 30px) !important;
+                left: 15px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Gesture Control</h1>
+        <p class="subtitle">Module 3 - Control OBS with hand gestures</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="main-layout">
+        <div class="video-section">
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="camera-controls">
+                    <select id="cameraSelect">
+                        <option value="">Select Camera...</option>
+                    </select>
+                    <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">🔄</button>
+                </div>
+                <div class="gesture-overlay">
+                    <div id="thumbsUpIndicator" class="gesture-indicator not-detected">
+                        <span class="icon">👍</span>
+                        <span class="status">Thumbs Up</span>
+                    </div>
+                    <div id="thumbsDownIndicator" class="gesture-indicator not-detected">
+                        <span class="icon">👎</span>
+                        <span class="status">Thumbs Down</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <div class="card">
+                <h3>📡 OBS Connection</h3>
+                <div id="obsStatus" class="obs-status">
+                    <div class="dot"></div>
+                    <span class="text">Disconnected</span>
+                </div>
+                <div id="obsHelp" class="obs-help" style="display: none; padding: 10px; background: rgba(230, 57, 70, 0.1); border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-muted);">
+                    <strong style="color: var(--error);">Setup Required:</strong><br>
+                    1. Open OBS Studio<br>
+                    2. Tools → WebSocket Server Settings<br>
+                    3. Enable WebSocket Server ✓<br>
+                    4. Note the port (default 4455)
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>OBS Computer IP & Port</label>
+                        <input type="text" id="obsUrl" value="localhost:4455" placeholder="localhost:4455 or 192.168.1.100:4455">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Password (if set in OBS)</label>
+                    <input type="password" id="obsPassword" placeholder="Leave empty if no password">
+                </div>
+                <button id="obsConnectBtn" class="btn btn-primary">Connect to OBS</button>
+                <div id="fileProtocolWarning" style="display: none; margin-top: 10px; padding: 10px; background: rgba(233, 196, 106, 0.2); border-radius: 6px; font-size: 0.85rem; color: var(--warning);">
+                    ⚠️ Running from file:// - WebSockets may be blocked. Use a local server (e.g., <code>npx serve</code>)
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🎬 Current Scene</h3>
+                <div class="scene-display">
+                    <div class="label">LIVE</div>
+                    <div id="currentScene" class="scene-name">Not Connected</div>
+                </div>
+                <div id="lastAction" class="last-action">
+                    Last action: <span class="action-text">None</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🎯 Gesture Mappings</h3>
+                <div class="gesture-mappings">
+                    <div class="gesture-mapping">
+                        <span class="gesture-icon">👍</span>
+                        <span class="arrow">→</span>
+                        <select id="thumbsUpAction">
+                            <option value="">Connect to OBS first</option>
+                        </select>
+                    </div>
+                    <div class="gesture-mapping">
+                        <span class="gesture-icon">👎</span>
+                        <span class="arrow">→</span>
+                        <select id="thumbsDownAction">
+                            <option value="">Connect to OBS first</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>⚙️ Guardrails</h3>
+                <div class="setting-row">
+                    <label>Confidence Threshold</label>
+                    <input type="range" id="confidenceThreshold" min="50" max="100" value="80">
+                    <span id="confidenceValue" class="setting-value">80%</span>
+                </div>
+                <div class="setting-row">
+                    <label>Cooldown (seconds)</label>
+                    <input type="number" id="cooldownTime" min="1" max="10" value="3">
+                </div>
+                <div class="setting-row">
+                    <label>Debounce (detections)</label>
+                    <input type="number" id="debounceCount" min="1" max="5" value="2">
+                </div>
+                <div class="setting-row">
+                    <label>Detection Interval (ms)</label>
+                    <input type="number" id="detectionInterval" min="500" max="3000" value="1000" step="100">
+                </div>
+                <div class="detection-toggle">
+                    <button id="startDetectionBtn" class="btn btn-success">Start Detection</button>
+                    <button id="stopDetectionBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="obs-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

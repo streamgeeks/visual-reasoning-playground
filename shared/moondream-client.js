@@ -5,7 +5,7 @@
  * This module provides a unified interface to the Moondream API
  * used across all playground tools.
  * 
- * @see https://github.com/PTZOptics/visual-reasoning-playground
+ * @see https://github.com/StreamGeeks/visual-reasoning-playground
  * @see Book: "Visual Reasoning AI for Broadcast and ProAV" by Paul Richards
  */
 
@@ -87,19 +87,21 @@ class MoondreamClient {
     }
 
     /**
-     * Describe an image in natural language
+     * Generate a caption/description for an image
      * @param {string} imageDataUrl - Base64 image data URL
      * @param {Object} options - Optional parameters
-     * @param {number} options.maxTokens - Maximum response length (default: 200)
+     * @param {string} options.length - Caption length: 'short', 'normal', or 'long' (default: 'normal')
      * @returns {Promise<{description: string}>}
      */
     async describe(imageDataUrl, options = {}) {
-        const result = await this._request('/describe', {
+        const length = options.length || (options.maxTokens > 300 ? 'long' : options.maxTokens < 100 ? 'short' : 'normal');
+        const result = await this._request('/caption', {
             image_url: imageDataUrl,
-            max_tokens: options.maxTokens || 200
+            length: length,
+            stream: false
         });
         return {
-            description: result.description,
+            description: result.caption,
             raw: result
         };
     }
@@ -117,7 +119,8 @@ class MoondreamClient {
 
         const result = await this._request('/detect', {
             image_url: imageDataUrl,
-            object: objectDescription.trim()
+            object: objectDescription.trim(),
+            stream: false
         });
 
         // Normalize the response format
@@ -148,9 +151,10 @@ class MoondreamClient {
             throw new Error('Question cannot be empty');
         }
 
-        const result = await this._request('/ask', {
+        const result = await this._request('/query', {
             image_url: imageDataUrl,
-            question: question.trim()
+            question: question.trim(),
+            stream: false
         });
 
         return {
@@ -172,7 +176,8 @@ class MoondreamClient {
 
         const result = await this._request('/point', {
             image_url: imageDataUrl,
-            description: description.trim()
+            object: description.trim(),
+            stream: false
         });
 
         return {

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scoreboard Lower Third</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: 'Arial Black', 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+
+        .lower-third {
+            position: fixed;
+            bottom: 40px;
+            left: 40px;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .score-box {
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 8px;
+            padding: 15px 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            border: 2px solid #3066BE;
+        }
+
+        .team {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
+        }
+
+        .team-label {
+            font-size: 12px;
+            color: #778DA9;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+
+        .score {
+            font-size: 42px;
+            font-weight: 800;
+            color: #119DA4;
+            line-height: 1;
+        }
+
+        .divider {
+            font-size: 32px;
+            color: #778DA9;
+            margin: 0 20px;
+            padding-top: 15px;
+        }
+
+        .time-box {
+            background: #3066BE;
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin-left: -2px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .time {
+            font-size: 28px;
+            font-weight: 700;
+            color: white;
+            font-family: 'Consolas', monospace;
+        }
+
+        .no-data {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #778DA9;
+            font-size: 14px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            font-weight: normal;
+        }
+
+        .no-data.hidden {
+            display: none;
+        }
+
+        .lower-third.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="noData" class="no-data">
+        Waiting for scoreboard data...<br>
+        <small>Run the Scoreboard Extractor to send data</small>
+    </div>
+
+    <div id="lowerThird" class="lower-third hidden">
+        <div class="score-box">
+            <div class="team">
+                <div class="team-label">Home</div>
+                <div id="homeScore" class="score">0</div>
+            </div>
+            <div class="divider">:</div>
+            <div class="team">
+                <div class="team-label">Away</div>
+                <div id="awayScore" class="score">0</div>
+            </div>
+        </div>
+        <div class="time-box">
+            <div id="gameTime" class="time">00:00</div>
+        </div>
+    </div>
+
+    <script>
+        const homeScoreEl = document.getElementById('homeScore');
+        const awayScoreEl = document.getElementById('awayScore');
+        const gameTimeEl = document.getElementById('gameTime');
+        const lowerThird = document.getElementById('lowerThird');
+        const noData = document.getElementById('noData');
+
+        function updateDisplay(data) {
+            if (data && (data.home_score !== null || data.away_score !== null)) {
+                homeScoreEl.textContent = data.home_score ?? '--';
+                awayScoreEl.textContent = data.away_score ?? '--';
+                gameTimeEl.textContent = data.time ?? '--:--';
+                
+                lowerThird.classList.remove('hidden');
+                noData.classList.add('hidden');
+            }
+        }
+
+        function checkForUpdates() {
+            const data = localStorage.getItem('scoreboard_data');
+            if (data) {
+                try {
+                    updateDisplay(JSON.parse(data));
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            }
+        }
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'scoreboard_data') {
+                checkForUpdates();
+            }
+        });
+
+        checkForUpdates();
+
+        setInterval(checkForUpdates, 500);
+    </script>
+</body>
+</html>

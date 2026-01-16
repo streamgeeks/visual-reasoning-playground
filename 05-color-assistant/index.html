@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Assistant - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .snapshot-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .snapshot-box {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .snapshot-box img {
+            width: 100%;
+            border-radius: 4px;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            background: #000;
+        }
+        .snapshot-box .label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        .color-analysis {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .color-analysis h3 {
+            font-size: 0.9rem;
+            color: var(--primary-light);
+            margin-bottom: 10px;
+        }
+        .analysis-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--surface-light);
+        }
+        .analysis-row:last-child {
+            border-bottom: none;
+        }
+        .analysis-row .label {
+            color: var(--text-muted);
+        }
+        .analysis-row .value {
+            font-weight: 600;
+        }
+        .analysis-row .value.warm { color: #E9C46A; }
+        .analysis-row .value.cool { color: #93CCEA; }
+        .analysis-row .value.neutral { color: var(--text); }
+        .analysis-row .value.good { color: var(--success); }
+        .analysis-row .value.under, .analysis-row .value.over { color: var(--warning); }
+        
+        .adjustment-panel {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .adjustment-panel h3 {
+            font-size: 0.9rem;
+            color: var(--primary-light);
+            margin-bottom: 15px;
+        }
+        .slider-group {
+            margin-bottom: 15px;
+        }
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+        .slider-group input[type="range"] {
+            width: 100%;
+        }
+        .preset-btns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .preset-btns .btn {
+            padding: 8px;
+            font-size: 0.8rem;
+        }
+        .json-output {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .recommendation {
+            background: rgba(42, 157, 143, 0.15);
+            border: 1px solid var(--success);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+        .recommendation h4 {
+            color: var(--success);
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        .recommendation p {
+            font-size: 0.85rem;
+            color: var(--text);
+        }
+        .connection-panel {
+            background: var(--background);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        .connection-panel label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            display: block;
+        }
+        .connection-row {
+            display: flex;
+            gap: 10px;
+        }
+        .connection-row input {
+            flex: 1;
+        }
+        .connected { color: var(--success); }
+        .disconnected { color: var(--error); }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Color Assistant</h1>
+        <p class="subtitle">Tool #5b - Analyze scene colors and adjust PTZ camera settings</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                </div>
+
+                <div class="snapshot-container">
+                    <div class="snapshot-box">
+                        <img id="beforeSnapshot" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Before">
+                        <div class="label">Before</div>
+                    </div>
+                    <div class="snapshot-box">
+                        <img id="afterSnapshot" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="After">
+                        <div class="label">After</div>
+                    </div>
+                </div>
+
+                <div class="json-output" id="jsonOutput">
+{
+  "analysis": "Take a snapshot to analyze colors..."
+}
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Camera Setup</h2>
+                
+                <div class="control-group">
+                    <label>Video Source</label>
+                    <select id="cameraSelect">
+                        <option value="">Loading cameras...</option>
+                    </select>
+                </div>
+
+                <div class="connection-panel">
+                    <label>PTZOptics Camera IP</label>
+                    <div class="connection-row">
+                        <input type="text" id="cameraIP" placeholder="192.168.1.100">
+                        <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
+                    </div>
+                    <small id="connectionStatus" class="disconnected">Not connected</small>
+                </div>
+
+                <h2>Color Analysis</h2>
+
+                <div class="btn-group">
+                    <button id="analyzeBtn" class="btn btn-primary">Analyze Colors</button>
+                </div>
+
+                <div class="color-analysis" id="colorAnalysis">
+                    <h3>Scene Analysis</h3>
+                    <div class="analysis-row">
+                        <span class="label">Overall Tone</span>
+                        <span class="value" id="toneValue">—</span>
+                    </div>
+                    <div class="analysis-row">
+                        <span class="label">Exposure</span>
+                        <span class="value" id="exposureValue">—</span>
+                    </div>
+                    <div class="analysis-row">
+                        <span class="label">White Balance</span>
+                        <span class="value" id="wbValue">—</span>
+                    </div>
+                    <div class="analysis-row">
+                        <span class="label">Dominant Color</span>
+                        <span class="value" id="dominantValue">—</span>
+                    </div>
+                </div>
+
+                <div class="recommendation hidden" id="recommendation">
+                    <h4>AI Recommendation</h4>
+                    <p id="recommendationText"></p>
+                </div>
+
+                <div class="adjustment-panel">
+                    <h3>Manual Adjustments</h3>
+                    
+                    <div class="slider-group">
+                        <label>
+                            <span>Brightness</span>
+                            <span id="brightnessVal">8</span>
+                        </label>
+                        <input type="range" id="brightness" min="0" max="14" value="8">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Contrast</span>
+                            <span id="contrastVal">8</span>
+                        </label>
+                        <input type="range" id="contrast" min="0" max="14" value="8">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Saturation</span>
+                            <span id="saturationVal">8</span>
+                        </label>
+                        <input type="range" id="saturation" min="0" max="14" value="8">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Sharpness</span>
+                            <span id="sharpnessVal">6</span>
+                        </label>
+                        <input type="range" id="sharpness" min="0" max="15" value="6">
+                    </div>
+
+                    <div class="preset-btns">
+                        <button class="btn btn-secondary wb-btn" data-wb="auto">Auto WB</button>
+                        <button class="btn btn-secondary wb-btn" data-wb="indoor">Indoor</button>
+                        <button class="btn btn-secondary wb-btn" data-wb="outdoor">Outdoor</button>
+                        <button class="btn btn-secondary wb-btn" data-wb="onepush">One Push</button>
+                        <button class="btn btn-secondary wb-btn" data-wb="manual">Manual</button>
+                        <button class="btn btn-secondary" id="resetBtn">Reset All</button>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button id="applyRecommendationBtn" class="btn btn-success" disabled>Apply AI Settings</button>
+                </div>
+
+                <div id="status" class="status-bar">Configure camera and analyze colors</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="analysisCount">0</div>
+                        <div class="label">Analyses</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="adjustmentCount">0</div>
+                        <div class="label">Adjustments</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="ptz-color-controller.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

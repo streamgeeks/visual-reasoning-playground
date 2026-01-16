@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Reasoning Playground - StreamGeeks</title>
+    <link rel="stylesheet" href="shared/styles.css">
+    <style>
+        .hero {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, var(--surface) 0%, var(--background) 100%);
+            border-bottom: 1px solid var(--surface-light);
+        }
+        
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: var(--primary-light);
+        }
+        
+        .hero .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+        
+        .hero .description {
+            max-width: 700px;
+            margin: 0 auto 30px;
+            line-height: 1.6;
+        }
+        
+        .hero-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .hero-buttons .btn {
+            padding: 12px 24px;
+            font-size: 1rem;
+        }
+        
+        .tools-section {
+            padding: 60px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .tools-section h2 {
+            text-align: center;
+            margin-bottom: 40px;
+            color: var(--primary-light);
+        }
+        
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+        }
+        
+        .tool-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid var(--surface-light);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .tool-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(147, 204, 234, 0.2);
+            border-color: var(--primary);
+        }
+        
+        .tool-card .tool-number {
+            display: inline-block;
+            background: var(--primary);
+            color: var(--background);
+            font-weight: bold;
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+        
+        .tool-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        
+        .tool-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+        
+        .tool-card .tool-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .tool-card .tag {
+            background: var(--background);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .featured-card {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, var(--surface) 0%, rgba(48, 102, 190, 0.2) 100%);
+            border-color: var(--primary);
+        }
+        
+        .featured-card .tool-number {
+            background: var(--primary-light);
+        }
+        
+        .featured-content {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .featured-content .featured-text {
+            flex: 1;
+        }
+        
+        .featured-content .featured-visual {
+            flex: 0 0 300px;
+            height: 180px;
+            background: var(--background);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 1.8rem;
+            }
+            
+            .featured-content {
+                flex-direction: column;
+            }
+            
+            .featured-content .featured-visual {
+                flex: none;
+                width: 100%;
+                height: 120px;
+            }
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid var(--surface-light);
+            color: var(--text-muted);
+        }
+        
+        .footer a {
+            color: var(--primary-light);
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .api-key-reminder {
+            background: rgba(147, 204, 234, 0.1);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            padding: 16px 24px;
+            max-width: 600px;
+            margin: 0 auto 30px;
+            text-align: left;
+        }
+        
+        .api-key-reminder h4 {
+            margin: 0 0 8px 0;
+            color: var(--primary-light);
+        }
+        
+        .api-key-reminder p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Visual Reasoning Playground</h1>
+        <p class="subtitle">Hands-on AI tools for Broadcast & ProAV professionals</p>
+        <p class="description">
+            Explore computer vision and AI through interactive tools designed for the broadcast industry. 
+            Each tool demonstrates practical applications from scene description to PTZ camera tracking, 
+            all powered by the Moondream vision-language model.
+        </p>
+        
+        <div class="api-key-reminder">
+            <h4>Getting Started</h4>
+            <p>All tools share a common API key configuration. Set your Moondream API key once and it will be available across all tools. Get your free API key at <a href="https://moondream.ai" target="_blank">moondream.ai</a></p>
+        </div>
+        
+        <div class="hero-buttons">
+            <a href="https://github.com/StreamGeeks/visual-reasoning-playground" class="btn btn-primary" target="_blank">View on GitHub</a>
+            <a href="https://streamgeeks.us" class="btn btn-secondary" target="_blank">StreamGeeks.us</a>
+        </div>
+    </div>
+
+    <div class="tools-section">
+        <h2>Interactive Tools</h2>
+        
+        <div class="tools-grid">
+            <a href="PTZOptics-Moondream-Tracker/" class="tool-card featured-card">
+                <div class="featured-content">
+                    <div class="featured-text">
+                        <span class="tool-number">FEATURED</span>
+                        <h3>PTZOptics Moondream Tracker</h3>
+                        <p>The flagship application - autonomous PTZ camera tracking using AI vision. Describe what you want to track ("person", "speaker", "red ball") and the camera follows automatically.</p>
+                        <div class="tool-tags">
+                            <span class="tag">PTZ Control</span>
+                            <span class="tag">Object Tracking</span>
+                            <span class="tag">Real-time</span>
+                            <span class="tag">Production Ready</span>
+                        </div>
+                    </div>
+                    <div class="featured-visual">
+                        Live PTZ Tracking Demo
+                    </div>
+                </div>
+            </a>
+            
+            <a href="01-scene-describer/" class="tool-card">
+                <span class="tool-number">Tool #1</span>
+                <h3>Scene Describer</h3>
+                <p>Point your camera at anything and get an AI-generated description. Perfect for understanding what Moondream "sees" in real-time.</p>
+                <div class="tool-tags">
+                    <span class="tag">Vision AI</span>
+                    <span class="tag">Scene Understanding</span>
+                </div>
+            </a>
+            
+            <a href="02-detection-boxes/" class="tool-card">
+                <span class="tool-number">Tool #2</span>
+                <h3>Detection Boxes</h3>
+                <p>Visualize object detection with bounding boxes. See exactly where the AI identifies objects in your video feed.</p>
+                <div class="tool-tags">
+                    <span class="tag">Object Detection</span>
+                    <span class="tag">Bounding Boxes</span>
+                </div>
+            </a>
+            
+            <a href="04-smart-counter/" class="tool-card">
+                <span class="tool-number">Tool #4</span>
+                <h3>Smart Counter</h3>
+                <p>Count objects entering or exiting a defined zone. Great for trade show booth traffic, room occupancy, or inventory tracking.</p>
+                <div class="tool-tags">
+                    <span class="tag">Counting</span>
+                    <span class="tag">Line Crossing</span>
+                    <span class="tag">Analytics</span>
+                </div>
+            </a>
+            
+            <a href="05-scene-analyzer/" class="tool-card">
+                <span class="tool-number">Tool #5</span>
+                <h3>Scene Analyzer</h3>
+                <p>Take a snapshot and have a conversation with the AI about what it sees. Ask questions, get detailed answers about the scene.</p>
+                <div class="tool-tags">
+                    <span class="tag">VQA</span>
+                    <span class="tag">Interactive</span>
+                    <span class="tag">Chat</span>
+                </div>
+            </a>
+            
+            <a href="06-zone-monitor/" class="tool-card">
+                <span class="tool-number">Tool #6</span>
+                <h3>Zone Monitor</h3>
+                <p>Draw custom zones on your video feed and get alerts when specified objects enter them. Virtual tripwires for production.</p>
+                <div class="tool-tags">
+                    <span class="tag">Zone Detection</span>
+                    <span class="tag">Alerts</span>
+                    <span class="tag">Security</span>
+                </div>
+            </a>
+            
+            <a href="07-color-assistant/" class="tool-card">
+                <span class="tool-number">Tool #7</span>
+                <h3>AI Color Assistant</h3>
+                <p>Upload a reference image and get AI-powered suggestions to match your camera's color settings. Style matching made easy.</p>
+                <div class="tool-tags">
+                    <span class="tag">Color Matching</span>
+                    <span class="tag">Camera Settings</span>
+                </div>
+            </a>
+            
+            <a href="08-multimodal-fusion/" class="tool-card">
+                <span class="tool-number">Tool #8</span>
+                <h3>Multimodal Fusion</h3>
+                <p>Combine audio (speech) and video understanding for intelligent automation. Voice commands plus visual context for smarter triggers.</p>
+                <div class="tool-tags">
+                    <span class="tag">Audio + Video</span>
+                    <span class="tag">Automation</span>
+                    <span class="tag">Voice Control</span>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p style="margin-bottom: 15px;">
+            <strong>📘 Get the Book:</strong> <a href="https://visualreasoning.ai/book">Visual Reasoning AI for Broadcast and ProAV</a>
+        </p>
+        <p>
+            Part of the <strong>Visual Reasoning AI for Broadcast & ProAV</strong> project<br>
+            <a href="https://visualreasoning.ai">VisualReasoning.ai</a> | 
+            <a href="https://ptzoptics.com">PTZOptics</a> | 
+            <a href="https://streamgeeks.com">StreamGeeks</a> | 
+            <a href="https://moondream.ai">Moondream AI</a> |
+            <a href="https://github.com/StreamGeeks/visual-reasoning-playground">GitHub</a>
+        </p>
+        <p style="margin-top: 10px; font-size: 0.85rem;">
+            Created by Paul Richards - Co-CEO at <a href="https://ptzoptics.com">PTZOptics</a> | Chief Streaming Officer at <a href="https://streamgeeks.com">StreamGeeks</a>
+        </p>
+    </div>
+
+    <script src="shared/api-key-manager.js"></script>
+</body>
+</html>

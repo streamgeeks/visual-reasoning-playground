@@ -5,57 +5,372 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scene Describer - Visual Reasoning Playground</title>
     <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            padding: 20px;
+            padding-left: 420px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-container {
+            position: relative;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .camera-controls select {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+
+        .camera-controls select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn-icon {
+            padding: 10px 14px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: rgba(48, 102, 190, 0.8);
+        }
+
+        .question-section {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .question-section h3 {
+            margin: 0 0 10px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .question-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .question-input-group input {
+            flex: 1;
+            padding: 12px 15px;
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.95rem;
+        }
+
+        .question-input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .question-input-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .result-card {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .result-card h3 {
+            margin: 0 0 10px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-card .content {
+            color: var(--text);
+            line-height: 1.6;
+            font-size: 0.9rem;
+        }
+
+        .result-card .content.placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .json-output {
+            background: var(--background);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            color: var(--secondary);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .settings-card {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .settings-card h3 {
+            margin: 0 0 15px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .setting-row {
+            margin-bottom: 15px;
+        }
+
+        .setting-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .setting-row label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-group input[type="range"] {
+            flex: 1;
+        }
+
+        .slider-value {
+            color: var(--secondary);
+            font-weight: 600;
+            min-width: 40px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .checkbox-label input {
+            width: 16px;
+            height: 16px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            background: #2555a3;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--surface-light);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: #3a5269;
+        }
+
+        .status-bar {
+            margin-top: 15px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .status-bar.error {
+            color: var(--error);
+            background: rgba(230, 57, 70, 0.1);
+        }
+
+        .status-bar.success {
+            color: var(--success);
+            background: rgba(42, 157, 143, 0.1);
+        }
+
+        .timestamp {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                padding-left: 20px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .rc-container {
+                width: calc(100% - 30px) !important;
+                left: 15px !important;
+                right: 15px !important;
+            }
+        }
+    </style>
 </head>
 <body>
     <header class="app-header">
         <h1>Scene Describer</h1>
-        <p class="subtitle">Tool #1 - Describe what the camera sees in natural language</p>
-        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
-            Part of the Visual Reasoning Playground
-        </a>
+        <p class="subtitle">Module 1 - Describe and query what the camera sees</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
     </header>
 
-    <div class="container">
-        <div class="main-content">
-            <div class="video-section">
-                <div class="video-container">
-                    <video id="video" autoplay muted playsinline></video>
+    <div class="main-layout">
+        <div class="video-section">
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="camera-controls">
+                    <select id="cameraSelect">
+                        <option value="">Select Camera...</option>
+                    </select>
+                    <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">🔄</button>
                 </div>
-                
-                <div class="results-panel">
-                    <h3>Scene Description</h3>
-                    <div id="description" class="result-item">
-                        <p class="content" style="color: var(--text-muted);">
-                            Click "Describe Scene" to analyze the current frame
-                        </p>
-                    </div>
-                    
-                    <div id="history" class="hidden">
-                        <h3>History</h3>
-                        <div id="historyList"></div>
+            </div>
+            
+            <div class="question-section">
+                <h3>Ask a Question About the Scene</h3>
+                <div class="question-input-group">
+                    <input type="text" id="questionInput" placeholder="e.g., How many people are in the frame? What color is the object on the left?">
+                    <button id="askBtn" class="btn btn-secondary">Ask</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div class="result-card">
+                <h3>📝 Scene Description</h3>
+                <div id="description" class="content placeholder">
+                    Click "Describe Scene" to analyze the current frame
+                </div>
+                <p id="descriptionTimestamp" class="timestamp"></p>
+            </div>
+
+            <div class="result-card">
+                <h3>💬 Question & Answer</h3>
+                <div id="qaSection">
+                    <div id="qaContent" class="content placeholder">
+                        Ask a question about what the camera sees
                     </div>
                 </div>
             </div>
 
-            <div class="control-panel">
-                <h2>Settings</h2>
+            <div class="result-card">
+                <h3>📊 Structured JSON Output</h3>
+                <div id="jsonOutput" class="json-output">
+{
+  "status": "ready",
+  "message": "Waiting for API response..."
+}
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h3>⚙️ Settings</h3>
                 
-                <div class="control-group">
-                    <label for="apiKey">Moondream API Key</label>
-                    <input type="password" id="apiKey" placeholder="Enter your API key">
-                    <small>Get your key at <a href="https://console.moondream.ai" target="_blank">console.moondream.ai</a></small>
+                <div class="setting-row">
+                    <label>Response Length (tokens)</label>
+                    <div class="slider-group">
+                        <input type="range" id="maxTokens" min="50" max="500" value="200">
+                        <span class="slider-value" id="maxTokensValue">200</span>
+                    </div>
                 </div>
 
-                <div class="control-group">
-                    <label for="maxTokens">Response Length</label>
-                    <input type="range" id="maxTokens" min="50" max="500" value="200">
-                    <span class="slider-value" id="maxTokensValue">200</span> tokens
-                </div>
-
-                <div class="control-group">
-                    <label>
-                        <input type="checkbox" id="autoDescribe"> 
-                        Auto-describe every <input type="number" id="autoInterval" value="5" min="1" max="60" style="width: 50px"> seconds
+                <div class="setting-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="autoDescribe">
+                        Auto-describe every 
+                        <input type="number" id="autoInterval" value="5" min="1" max="60" style="width: 50px; padding: 4px; background: var(--background); border: 1px solid var(--surface-light); border-radius: 4px; color: var(--text);"> 
+                        seconds
                     </label>
                 </div>
 
@@ -63,23 +378,14 @@
                     <button id="describeBtn" class="btn btn-primary">Describe Scene</button>
                 </div>
 
-                <div id="status" class="status-bar">Ready</div>
-
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="value" id="apiCalls">0</div>
-                        <div class="label">API Calls</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="value" id="avgTime">-</div>
-                        <div class="label">Avg Time</div>
-                    </div>
-                </div>
+                <div id="status" class="status-bar">Ready - Configure your Moondream API key to begin</div>
             </div>
         </div>
     </div>
 
     <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -332,9 +332,7 @@
     <header class="app-header">
         <h1>Multimodal Fusion System</h1>
         <p class="subtitle">Tool #8 - Combine audio + video understanding for intelligent automation</p>
-        <a href="https://github.com/PTZOptics/visual-reasoning-playground" class="project-link">
-            Part of the Visual Reasoning Playground
-        </a>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
     </header>
 
     <div class="container">
@@ -429,12 +427,6 @@
                 <h2>Settings</h2>
                 
                 <div class="control-group">
-                    <label for="apiKey">Moondream API Key</label>
-                    <input type="password" id="apiKey" placeholder="Enter your API key">
-                    <small>For visual scene understanding</small>
-                </div>
-
-                <div class="control-group">
                     <label for="analysisRate">Analysis Rate</label>
                     <input type="range" id="analysisRate" min="0.5" max="3" step="0.5" value="1">
                     <span id="rateValue">1.0/sec</span>
@@ -513,6 +505,8 @@
     </div>
 
     <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
