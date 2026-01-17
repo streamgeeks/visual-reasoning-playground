@@ -43,10 +43,27 @@
 
     function getBasePath() {
         const path = window.location.pathname;
-        if (path === '/' || path.endsWith('/index.html') && !path.includes('-')) {
+        const pathParts = path.split('/').filter(Boolean);
+        
+        if (pathParts.length === 0) {
             return './';
         }
-        return '../';
+        
+        const lastPart = pathParts[pathParts.length - 1];
+        const secondLastPart = pathParts[pathParts.length - 2] || '';
+        
+        if (lastPart === 'index.html') {
+            if (secondLastPart.match(/^\d{2}-/) || secondLastPart === 'PTZOptics-Moondream-Tracker') {
+                return '../';
+            }
+            return './';
+        }
+        
+        if (lastPart.match(/^\d{2}-/) || lastPart === 'PTZOptics-Moondream-Tracker') {
+            return '../';
+        }
+        
+        return './';
     }
 
     function injectStyles() {
