@@ -386,8 +386,52 @@
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
     <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/preferences-manager.js"></script>
     <script src="app.js"></script>
     <script src="../shared/ux-utils.js"></script>
     <script src="../shared/playground-header.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                if (!localStorage.getItem('vrp_moondream_api_key')) return;
+                
+                VRPUtils.startWalkthrough([
+                    {
+                        title: 'Welcome to Scene Describer!',
+                        text: 'This tool uses AI to describe what your camera sees in natural language. Let me show you how it works.',
+                        target: null
+                    },
+                    {
+                        title: 'Camera Feed',
+                        text: 'Your webcam feed appears here. Make sure to allow camera access when prompted.',
+                        target: '.video-container'
+                    },
+                    {
+                        title: 'Describe Scene',
+                        text: 'Click this button to get an AI-generated description of what the camera currently sees.',
+                        target: '#describeBtn'
+                    },
+                    {
+                        title: 'Auto Mode',
+                        text: 'Enable auto-describe to continuously analyze your scene at regular intervals. Great for monitoring.',
+                        target: '.auto-controls'
+                    },
+                    {
+                        title: 'Results Panel',
+                        text: 'AI descriptions appear here. You can copy them or clear the history.',
+                        target: '.results-section'
+                    },
+                    {
+                        title: 'You\'re Ready!',
+                        text: 'Point your camera at something interesting and click "Describe Scene" to see it in action!',
+                        target: null
+                    }
+                ], {
+                    storageKey: 'vrp_walkthrough_scene_describer',
+                    onComplete: function() {}
+                });
+            }, 1500);
+        });
+    </script>
 </body>
 </html>

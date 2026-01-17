@@ -601,5 +601,296 @@
         injectStyles();
     }
 
+    /**
+     * Interactive Walkthrough System
+     */
+    let walkthroughOverlay = null;
+    let currentWalkthrough = null;
+
+    VRPUtils.startWalkthrough = function(steps, options = {}) {
+        const {
+            onComplete = () => {},
+            onSkip = () => {},
+            storageKey = null
+        } = options;
+
+        if (storageKey && localStorage.getItem(storageKey)) {
+            return;
+        }
+
+        currentWalkthrough = {
+            steps,
+            currentStep: 0,
+            onComplete,
+            onSkip,
+            storageKey
+        };
+
+        if (!walkthroughOverlay) {
+            walkthroughOverlay = document.createElement('div');
+            walkthroughOverlay.className = 'vrp-walkthrough-overlay';
+            walkthroughOverlay.innerHTML = `
+                <div class="vrp-walkthrough-backdrop"></div>
+                <div class="vrp-walkthrough-highlight"></div>
+                <div class="vrp-walkthrough-tooltip">
+                    <div class="vrp-walkthrough-step-indicator"></div>
+                    <div class="vrp-walkthrough-content">
+                        <h4 class="vrp-walkthrough-title"></h4>
+                        <p class="vrp-walkthrough-text"></p>
+                    </div>
+                    <div class="vrp-walkthrough-actions">
+                        <button class="vrp-walkthrough-skip">Skip Tutorial</button>
+                        <div class="vrp-walkthrough-nav">
+                            <button class="vrp-walkthrough-prev">← Back</button>
+                            <button class="vrp-walkthrough-next">Next →</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(walkthroughOverlay);
+
+            walkthroughOverlay.querySelector('.vrp-walkthrough-skip').onclick = () => {
+                VRPUtils.endWalkthrough(false);
+            };
+            walkthroughOverlay.querySelector('.vrp-walkthrough-prev').onclick = () => {
+                VRPUtils.walkthroughPrev();
+            };
+            walkthroughOverlay.querySelector('.vrp-walkthrough-next').onclick = () => {
+                VRPUtils.walkthroughNext();
+            };
+        }
+
+        walkthroughOverlay.classList.add('visible');
+        VRPUtils.showWalkthroughStep(0);
+    };
+
+    VRPUtils.showWalkthroughStep = function(index) {
+        if (!currentWalkthrough || index >= currentWalkthrough.steps.length) {
+            VRPUtils.endWalkthrough(true);
+            return;
+        }
+
+        currentWalkthrough.currentStep = index;
+        const step = currentWalkthrough.steps[index];
+        const highlight = walkthroughOverlay.querySelector('.vrp-walkthrough-highlight');
+        const tooltip = walkthroughOverlay.querySelector('.vrp-walkthrough-tooltip');
+        const indicator = walkthroughOverlay.querySelector('.vrp-walkthrough-step-indicator');
+        const title = walkthroughOverlay.querySelector('.vrp-walkthrough-title');
+        const text = walkthroughOverlay.querySelector('.vrp-walkthrough-text');
+        const prevBtn = walkthroughOverlay.querySelector('.vrp-walkthrough-prev');
+        const nextBtn = walkthroughOverlay.querySelector('.vrp-walkthrough-next');
+
+        indicator.textContent = `Step ${index + 1} of ${currentWalkthrough.steps.length}`;
+        title.textContent = step.title;
+        text.textContent = step.text;
+
+        prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+        nextBtn.textContent = index === currentWalkthrough.steps.length - 1 ? 'Finish ✓' : 'Next →';
+
+        if (step.target) {
+            const target = document.querySelector(step.target);
+            if (target) {
+                const rect = target.getBoundingClientRect();
+                const padding = 8;
+                highlight.style.display = 'block';
+                highlight.style.top = `${rect.top - padding}px`;
+                highlight.style.left = `${rect.left - padding}px`;
+                highlight.style.width = `${rect.width + padding * 2}px`;
+                highlight.style.height = `${rect.height + padding * 2}px`;
+
+                const tooltipRect = tooltip.getBoundingClientRect();
+                let tooltipTop = rect.bottom + 16;
+                let tooltipLeft = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+                if (tooltipTop + tooltipRect.height > window.innerHeight - 20) {
+                    tooltipTop = rect.top - tooltipRect.height - 16;
+                }
+                if (tooltipLeft < 20) tooltipLeft = 20;
+                if (tooltipLeft + tooltipRect.width > window.innerWidth - 20) {
+                    tooltipLeft = window.innerWidth - tooltipRect.width - 20;
+                }
+
+                tooltip.style.top = `${tooltipTop}px`;
+                tooltip.style.left = `${tooltipLeft}px`;
+                tooltip.style.transform = 'none';
+
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                highlight.style.display = 'none';
+                tooltip.style.top = '50%';
+                tooltip.style.left = '50%';
+                tooltip.style.transform = 'translate(-50%, -50%)';
+            }
+        } else {
+            highlight.style.display = 'none';
+            tooltip.style.top = '50%';
+            tooltip.style.left = '50%';
+            tooltip.style.transform = 'translate(-50%, -50%)';
+        }
+    };
+
+    VRPUtils.walkthroughNext = function() {
+        if (!currentWalkthrough) return;
+        if (currentWalkthrough.currentStep >= currentWalkthrough.steps.length - 1) {
+            VRPUtils.endWalkthrough(true);
+        } else {
+            VRPUtils.showWalkthroughStep(currentWalkthrough.currentStep + 1);
+        }
+    };
+
+    VRPUtils.walkthroughPrev = function() {
+        if (!currentWalkthrough || currentWalkthrough.currentStep <= 0) return;
+        VRPUtils.showWalkthroughStep(currentWalkthrough.currentStep - 1);
+    };
+
+    VRPUtils.endWalkthrough = function(completed = false) {
+        if (!currentWalkthrough) return;
+
+        walkthroughOverlay.classList.remove('visible');
+
+        if (completed) {
+            if (currentWalkthrough.storageKey) {
+                localStorage.setItem(currentWalkthrough.storageKey, 'true');
+            }
+            currentWalkthrough.onComplete();
+            VRPUtils.success('Tutorial complete! You\'re ready to go.');
+        } else {
+            currentWalkthrough.onSkip();
+        }
+
+        currentWalkthrough = null;
+    };
+
+    const WALKTHROUGH_STYLES = `
+        .vrp-walkthrough-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10003;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+
+        .vrp-walkthrough-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .vrp-walkthrough-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+        }
+
+        .vrp-walkthrough-highlight {
+            position: absolute;
+            border: 3px solid #93ccea;
+            border-radius: 8px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 20px rgba(147, 204, 234, 0.5);
+            z-index: 1;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .vrp-walkthrough-tooltip {
+            position: absolute;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 1px solid rgba(147, 204, 234, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            max-width: 360px;
+            z-index: 2;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .vrp-walkthrough-step-indicator {
+            font-size: 0.75rem;
+            color: #93ccea;
+            margin-bottom: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .vrp-walkthrough-title {
+            color: #fff;
+            font-size: 1.1rem;
+            margin: 0 0 8px 0;
+        }
+
+        .vrp-walkthrough-text {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        .vrp-walkthrough-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(147, 204, 234, 0.2);
+        }
+
+        .vrp-walkthrough-skip {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 0;
+        }
+
+        .vrp-walkthrough-skip:hover {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .vrp-walkthrough-nav {
+            display: flex;
+            gap: 10px;
+        }
+
+        .vrp-walkthrough-prev,
+        .vrp-walkthrough-next {
+            background: rgba(147, 204, 234, 0.15);
+            border: 1px solid rgba(147, 204, 234, 0.3);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .vrp-walkthrough-prev:hover,
+        .vrp-walkthrough-next:hover {
+            background: rgba(147, 204, 234, 0.25);
+            border-color: rgba(147, 204, 234, 0.5);
+        }
+
+        .vrp-walkthrough-next {
+            background: linear-gradient(135deg, #3066be 0%, #93ccea 100%);
+            border: none;
+        }
+
+        .vrp-walkthrough-next:hover {
+            box-shadow: 0 4px 15px rgba(48, 102, 190, 0.4);
+        }
+    `;
+
+    const walkthroughStyle = document.createElement('style');
+    walkthroughStyle.textContent = WALKTHROUGH_STYLES;
+    document.head.appendChild(walkthroughStyle);
+
     window.VRPUtils = VRPUtils;
 })();

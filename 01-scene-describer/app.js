@@ -23,6 +23,31 @@ document.addEventListener('DOMContentLoaded', async function() {
         startCollapsed: false
     });
 
+    const TOOL_ID = 'scene-describer';
+    
+    function loadSavedPreferences() {
+        if (window.VRPPrefs) {
+            const savedMaxTokens = VRPPrefs.getToolPref(TOOL_ID, 'maxTokens', 200);
+            const savedAutoDescribe = VRPPrefs.getToolPref(TOOL_ID, 'autoDescribe', false);
+            const savedAutoInterval = VRPPrefs.getToolPref(TOOL_ID, 'autoInterval', 5);
+            
+            maxTokensSlider.value = savedMaxTokens;
+            maxTokensValue.textContent = savedMaxTokens;
+            autoDescribeCheckbox.checked = savedAutoDescribe;
+            autoIntervalInput.value = savedAutoInterval;
+            
+            if (savedAutoDescribe) {
+                setTimeout(toggleAutoDescribe, 2000);
+            }
+        }
+    }
+    
+    function savePreference(key, value) {
+        if (window.VRPPrefs) {
+            VRPPrefs.setToolPref(TOOL_ID, key, value);
+        }
+    }
+
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
@@ -277,6 +302,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     maxTokensSlider.addEventListener('input', () => {
         maxTokensValue.textContent = maxTokensSlider.value;
+        savePreference('maxTokens', parseInt(maxTokensSlider.value));
     });
 
     describeBtn.addEventListener('click', describeScene);
@@ -288,8 +314,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    autoDescribeCheckbox.addEventListener('change', toggleAutoDescribe);
+    autoDescribeCheckbox.addEventListener('change', () => {
+        savePreference('autoDescribe', autoDescribeCheckbox.checked);
+        toggleAutoDescribe();
+    });
     autoIntervalInput.addEventListener('change', () => {
+        savePreference('autoInterval', parseInt(autoIntervalInput.value));
         if (autoDescribeCheckbox.checked) {
             clearInterval(autoDescribeInterval);
             toggleAutoDescribe();
@@ -298,5 +328,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     window.reasoningConsole.logInfo('Scene Describer initialized');
     window.reasoningConsole.logInfo('Module 1: Foundations of Visual Reasoning AI');
+    
+    loadSavedPreferences();
     await startCamera();
 });
