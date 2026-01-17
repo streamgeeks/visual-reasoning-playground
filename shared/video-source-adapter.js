@@ -4,17 +4,23 @@
     const SAMPLE_VIDEOS = {
         'scene-describer': '../assets/sample-videos/scene-describer-demo.mp4',
         'object-tracker': '../assets/sample-videos/object-tracker-demo.mp4',
+        'detection-boxes': '../assets/sample-videos/object-tracker-demo.mp4',
         'gesture-detector': '../assets/sample-videos/gesture-detector-demo.mp4',
+        'gesture-obs': '../assets/sample-videos/gesture-detector-demo.mp4',
         'ptz-controller': '../assets/sample-videos/ptz-controller-demo.mp4',
         'color-analyzer': '../assets/sample-videos/color-analyzer-demo.mp4',
         'motion-detector': '../assets/sample-videos/motion-detector-demo.mp4',
         'face-detector': '../assets/sample-videos/face-detector-demo.mp4',
         'text-reader': '../assets/sample-videos/text-reader-demo.mp4',
+        'scoreboard-extractor': '../assets/sample-videos/text-reader-demo.mp4',
         'zone-monitor': '../assets/sample-videos/motion-detector-demo.mp4',
-        'smart-counter': '../assets/sample-videos/face-detector-demo.mp4',
+        'smart-counter': '../assets/sample-videos/object-tracker-demo.mp4',
         'scene-analyzer': '../assets/sample-videos/scene-describer-demo.mp4',
         'framing-assistant': '../assets/sample-videos/ptz-controller-demo.mp4',
-        'color-assistant': '../assets/sample-videos/color-analyzer-demo.mp4'
+        'color-assistant': '../assets/sample-videos/color-analyzer-demo.mp4',
+        'multimodal-studio': '../assets/sample-videos/scene-describer-demo.mp4',
+        'multimodal-fusion': '../assets/sample-videos/scene-describer-demo.mp4',
+        'PTZOptics-Moondream-Tracker': '../assets/sample-videos/ptz-controller-demo.mp4'
     };
 
     const ADAPTER_STYLES = `
@@ -285,8 +291,38 @@
                 this.cameraStream.getTracks().forEach(track => track.stop());
                 this.cameraStream = null;
             }
+        },
+
+        autoInit() {
+            const video = document.getElementById('video');
+            const cameraControls = document.querySelector('.camera-controls');
+            
+            if (!video) return false;
+            
+            this.init({
+                videoElement: video,
+                insertInto: cameraControls || video.parentElement
+            });
+
+            this.switchToCamera().catch(() => {
+                this.switchToSample();
+            });
+
+            return true;
         }
     };
 
     window.VideoSourceAdapter = VideoSourceAdapter;
+
+    function autoInitOnReady() {
+        if (document.getElementById('video') && document.querySelector('.camera-controls, .video-container')) {
+            VideoSourceAdapter.autoInit();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoInitOnReady);
+    } else {
+        setTimeout(autoInitOnReady, 100);
+    }
 })();
