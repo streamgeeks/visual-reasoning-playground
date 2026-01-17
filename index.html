@@ -3,342 +3,621 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visual Reasoning Playground - StreamGeeks</title>
+    <title>Visual Reasoning Playground - AI Tools for Broadcast & ProAV</title>
+    <meta name="description" content="Interactive AI-powered visual reasoning tools for broadcast and ProAV professionals. PTZ camera tracking, object detection, scene analysis powered by Moondream.">
     <link rel="stylesheet" href="shared/styles.css">
     <style>
+        :root {
+            --header-height: 52px;
+        }
+
+        body[data-embed="true"] {
+            --header-height: 44px;
+        }
+
         .hero {
             text-align: center;
-            padding: 60px 20px;
-            background: linear-gradient(135deg, var(--surface) 0%, var(--background) 100%);
-            border-bottom: 1px solid var(--surface-light);
+            padding: 50px 20px 40px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-bottom: 1px solid rgba(147, 204, 234, 0.2);
         }
-        
+
+        body[data-embed="true"] .hero {
+            padding: 30px 20px 25px;
+        }
+
         .hero h1 {
-            font-size: 2.5rem;
+            font-size: 2.2rem;
             margin-bottom: 10px;
-            color: var(--primary-light);
+            color: #93ccea;
+            font-weight: 700;
         }
-        
+
+        body[data-embed="true"] .hero h1 {
+            font-size: 1.6rem;
+        }
+
         .hero .subtitle {
-            font-size: 1.2rem;
-            color: var(--text-muted);
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 25px;
+        }
+
+        .hero .api-setup {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(147, 204, 234, 0.1);
+            border: 1px solid rgba(147, 204, 234, 0.3);
+            border-radius: 10px;
+            padding: 12px 20px;
             margin-bottom: 20px;
         }
-        
-        .hero .description {
-            max-width: 700px;
-            margin: 0 auto 30px;
-            line-height: 1.6;
+
+        .hero .api-setup-icon {
+            font-size: 1.4rem;
         }
-        
-        .hero-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
+
+        .hero .api-setup-text {
+            text-align: left;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
         }
-        
-        .hero-buttons .btn {
-            padding: 12px 24px;
-            font-size: 1rem;
+
+        .hero .api-setup-text a {
+            color: #93ccea;
+            text-decoration: none;
+            font-weight: 600;
         }
-        
+
+        .hero .api-setup-text a:hover {
+            text-decoration: underline;
+        }
+
+        body[data-embed="true"] .hero-external {
+            display: none;
+        }
+
         .tools-section {
-            padding: 60px 20px;
-            max-width: 1200px;
+            padding: 50px 20px;
+            max-width: 1300px;
             margin: 0 auto;
         }
-        
-        .tools-section h2 {
-            text-align: center;
-            margin-bottom: 40px;
-            color: var(--primary-light);
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(147, 204, 234, 0.2);
         }
-        
-        .tools-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 24px;
+
+        .section-header h2 {
+            font-size: 1.4rem;
+            color: #93ccea;
+            margin: 0;
         }
-        
-        .tool-card {
-            background: var(--surface);
-            border-radius: 12px;
-            padding: 24px;
-            transition: transform 0.2s, box-shadow 0.2s;
-            border: 1px solid var(--surface-light);
-            text-decoration: none;
-            color: inherit;
-            display: block;
-        }
-        
-        .tool-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 30px rgba(147, 204, 234, 0.2);
-            border-color: var(--primary);
-        }
-        
-        .tool-card .tool-number {
-            display: inline-block;
-            background: var(--primary);
-            color: var(--background);
-            font-weight: bold;
-            font-size: 0.8rem;
+
+        .section-header .badge {
+            background: rgba(147, 204, 234, 0.2);
+            color: #93ccea;
+            font-size: 0.75rem;
             padding: 4px 10px;
             border-radius: 20px;
-            margin-bottom: 12px;
+            font-weight: 600;
         }
-        
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .tool-card {
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.8) 0%, rgba(22, 33, 62, 0.8) 100%);
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.25s ease;
+            border: 1px solid rgba(147, 204, 234, 0.15);
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tool-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #93ccea, #3066be);
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(147, 204, 234, 0.4);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 20px rgba(147, 204, 234, 0.1);
+        }
+
+        .tool-card:hover::before {
+            opacity: 1;
+        }
+
+        .tool-card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .tool-icon {
+            font-size: 2rem;
+            line-height: 1;
+        }
+
+        .tool-meta {
+            flex: 1;
+        }
+
+        .tool-number {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: rgba(147, 204, 234, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
         .tool-card h3 {
-            font-size: 1.3rem;
-            margin-bottom: 8px;
-            color: var(--text);
+            font-size: 1.15rem;
+            margin: 0;
+            color: #fff;
+            font-weight: 600;
         }
-        
+
         .tool-card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.5;
-            margin-bottom: 16px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            line-height: 1.55;
+            margin: 0 0 16px 0;
+            flex: 1;
         }
-        
+
         .tool-card .tool-tags {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
+            margin-bottom: 16px;
         }
-        
+
         .tool-card .tag {
-            background: var(--background);
-            padding: 4px 10px;
+            background: rgba(147, 204, 234, 0.1);
+            border: 1px solid rgba(147, 204, 234, 0.2);
+            padding: 3px 8px;
             border-radius: 4px;
-            font-size: 0.75rem;
-            color: var(--text-muted);
+            font-size: 0.7rem;
+            color: rgba(147, 204, 234, 0.8);
         }
-        
+
+        .tool-card .try-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #3066be 0%, #93ccea 100%);
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .tool-card:hover .try-btn {
+            box-shadow: 0 4px 15px rgba(48, 102, 190, 0.4);
+        }
+
         .featured-card {
             grid-column: 1 / -1;
-            background: linear-gradient(135deg, var(--surface) 0%, rgba(48, 102, 190, 0.2) 100%);
-            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(48, 102, 190, 0.2) 0%, rgba(147, 204, 234, 0.1) 100%);
+            border-color: rgba(147, 204, 234, 0.3);
         }
-        
-        .featured-card .tool-number {
-            background: var(--primary-light);
+
+        .featured-card::before {
+            opacity: 1;
+            background: linear-gradient(90deg, #93ccea, #3066be, #93ccea);
         }
-        
+
         .featured-content {
             display: flex;
             gap: 30px;
             align-items: center;
         }
-        
+
         .featured-content .featured-text {
             flex: 1;
         }
-        
+
+        .featured-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #3066be, #93ccea);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         .featured-content .featured-visual {
-            flex: 0 0 300px;
-            height: 180px;
-            background: var(--background);
-            border-radius: 8px;
+            flex: 0 0 280px;
+            height: 160px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-muted);
-            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 3rem;
+            border: 1px solid rgba(147, 204, 234, 0.2);
         }
-        
-        @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 1.8rem;
-            }
-            
+
+        @media (max-width: 900px) {
             .featured-content {
                 flex-direction: column;
             }
-            
             .featured-content .featured-visual {
-                flex: none;
                 width: 100%;
+                flex: none;
                 height: 120px;
             }
         }
-        
+
+        @media (max-width: 600px) {
+            .hero h1 {
+                font-size: 1.6rem;
+            }
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .footer {
             text-align: center;
             padding: 40px 20px;
-            border-top: 1px solid var(--surface-light);
-            color: var(--text-muted);
+            border-top: 1px solid rgba(147, 204, 234, 0.15);
+            background: rgba(0, 0, 0, 0.2);
         }
-        
+
+        body[data-embed="true"] .footer {
+            display: none;
+        }
+
         .footer a {
-            color: var(--primary-light);
+            color: #93ccea;
             text-decoration: none;
         }
-        
+
         .footer a:hover {
             text-decoration: underline;
         }
-        
-        .api-key-reminder {
-            background: rgba(147, 204, 234, 0.1);
-            border: 1px solid var(--primary);
-            border-radius: 8px;
-            padding: 16px 24px;
-            max-width: 600px;
-            margin: 0 auto 30px;
-            text-align: left;
-        }
-        
-        .api-key-reminder h4 {
-            margin: 0 0 8px 0;
-            color: var(--primary-light);
-        }
-        
-        .api-key-reminder p {
-            margin: 0;
+
+        .footer p {
+            color: rgba(255, 255, 255, 0.6);
+            margin: 0 0 12px 0;
             font-size: 0.9rem;
-            color: var(--text-muted);
+        }
+
+        .footer .book-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(147, 204, 234, 0.1);
+            border: 1px solid rgba(147, 204, 234, 0.3);
+            padding: 12px 24px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: #fff;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .footer .book-cta:hover {
+            background: rgba(147, 204, 234, 0.2);
+            border-color: rgba(147, 204, 234, 0.5);
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
     <div class="hero">
-        <h1>Visual Reasoning Playground</h1>
-        <p class="subtitle">Hands-on AI tools for Broadcast & ProAV professionals</p>
-        <p class="description">
-            Explore computer vision and AI through interactive tools designed for the broadcast industry. 
-            Each tool demonstrates practical applications from scene description to PTZ camera tracking, 
-            all powered by the Moondream vision-language model.
-        </p>
+        <h1>🎥 Visual Reasoning Playground</h1>
+        <p class="subtitle">AI-powered tools for Broadcast & ProAV professionals</p>
         
-        <div class="api-key-reminder">
-            <h4>Getting Started</h4>
-            <p>All tools share a common API key configuration. Set your Moondream API key once and it will be available across all tools. Get your free API key at <a href="https://moondream.ai" target="_blank">moondream.ai</a></p>
+        <div class="api-setup">
+            <span class="api-setup-icon">🔑</span>
+            <div class="api-setup-text">
+                <strong>Get Started:</strong> Grab your free API key at <a href="https://console.moondream.ai" target="_blank">console.moondream.ai</a><br>
+                <span style="opacity: 0.7; font-size: 0.85rem;">All tools share one API key - set it once and explore!</span>
+            </div>
         </div>
-        
-        <div class="hero-buttons">
-            <a href="https://github.com/StreamGeeks/visual-reasoning-playground" class="btn btn-primary" target="_blank">View on GitHub</a>
-            <a href="https://streamgeeks.us" class="btn btn-secondary" target="_blank">StreamGeeks.us</a>
+
+        <div class="hero-external" style="margin-top: 15px;">
+            <a href="https://visualreasoning.ai/book" style="color: #93ccea; text-decoration: none; font-size: 0.9rem;">
+                📘 Learn more in the book: <strong>Visual Reasoning AI for Broadcast and ProAV</strong>
+            </a>
         </div>
     </div>
 
     <div class="tools-section">
-        <h2>Interactive Tools</h2>
-        
-        <div class="tools-grid">
+        <div class="section-header">
+            <h2>🎯 Featured Tool</h2>
+        </div>
+
+        <div class="tools-grid" style="margin-bottom: 50px;">
             <a href="PTZOptics-Moondream-Tracker/" class="tool-card featured-card">
                 <div class="featured-content">
                     <div class="featured-text">
-                        <span class="tool-number">FEATURED</span>
-                        <h3>PTZOptics Moondream Tracker</h3>
-                        <p>The flagship application - autonomous PTZ camera tracking using AI vision. Describe what you want to track ("person", "speaker", "red ball") and the camera follows automatically.</p>
+                        <div class="featured-badge">⭐ Flagship Tool</div>
+                        <h3>PTZOptics AI Auto-Tracker</h3>
+                        <p>Autonomous PTZ camera tracking using AI vision. Describe what you want to track in plain English ("person in red shirt", "the speaker", "coffee mug") and the camera follows automatically. Zero training required.</p>
                         <div class="tool-tags">
                             <span class="tag">PTZ Control</span>
                             <span class="tag">Object Tracking</span>
                             <span class="tag">Real-time</span>
                             <span class="tag">Production Ready</span>
                         </div>
+                        <span class="try-btn">Try Now →</span>
                     </div>
-                    <div class="featured-visual">
-                        Live PTZ Tracking Demo
-                    </div>
+                    <div class="featured-visual">🎯</div>
                 </div>
             </a>
-            
+        </div>
+
+        <div class="section-header">
+            <h2>🔧 Core Tools</h2>
+            <span class="badge">8 Tools</span>
+        </div>
+
+        <div class="tools-grid" style="margin-bottom: 50px;">
             <a href="01-scene-describer/" class="tool-card">
-                <span class="tool-number">Tool #1</span>
-                <h3>Scene Describer</h3>
-                <p>Point your camera at anything and get an AI-generated description. Perfect for understanding what Moondream "sees" in real-time.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">👁️</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #1</div>
+                        <h3>Scene Describer</h3>
+                    </div>
+                </div>
+                <p>Point your camera at anything and get an AI-generated description. Understand what Moondream "sees" in real-time.</p>
                 <div class="tool-tags">
                     <span class="tag">Vision AI</span>
                     <span class="tag">Scene Understanding</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="02-detection-boxes/" class="tool-card">
-                <span class="tool-number">Tool #2</span>
-                <h3>Detection Boxes</h3>
+                <div class="tool-card-header">
+                    <span class="tool-icon">📦</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #2</div>
+                        <h3>Detection Boxes</h3>
+                    </div>
+                </div>
                 <p>Visualize object detection with bounding boxes. See exactly where the AI identifies objects in your video feed.</p>
                 <div class="tool-tags">
                     <span class="tag">Object Detection</span>
                     <span class="tag">Bounding Boxes</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="04-smart-counter/" class="tool-card">
-                <span class="tool-number">Tool #4</span>
-                <h3>Smart Counter</h3>
-                <p>Count objects entering or exiting a defined zone. Great for trade show booth traffic, room occupancy, or inventory tracking.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">🔢</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #4</div>
+                        <h3>Smart Counter</h3>
+                    </div>
+                </div>
+                <p>Count objects entering or exiting a zone. Great for booth traffic, room occupancy, or inventory tracking.</p>
                 <div class="tool-tags">
                     <span class="tag">Counting</span>
                     <span class="tag">Line Crossing</span>
                     <span class="tag">Analytics</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="05-scene-analyzer/" class="tool-card">
-                <span class="tool-number">Tool #5</span>
-                <h3>Scene Analyzer</h3>
-                <p>Take a snapshot and have a conversation with the AI about what it sees. Ask questions, get detailed answers about the scene.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">🔍</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #5</div>
+                        <h3>Scene Analyzer</h3>
+                    </div>
+                </div>
+                <p>Have a conversation with AI about what your camera sees. Ask questions, get detailed contextual answers.</p>
                 <div class="tool-tags">
                     <span class="tag">VQA</span>
                     <span class="tag">Interactive</span>
                     <span class="tag">Chat</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="06-zone-monitor/" class="tool-card">
-                <span class="tool-number">Tool #6</span>
-                <h3>Zone Monitor</h3>
-                <p>Draw custom zones on your video feed and get alerts when specified objects enter them. Virtual tripwires for production.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">🚧</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #6</div>
+                        <h3>Zone Monitor</h3>
+                    </div>
+                </div>
+                <p>Draw custom zones on your video feed and get alerts when objects enter. Virtual tripwires for production.</p>
                 <div class="tool-tags">
                     <span class="tag">Zone Detection</span>
                     <span class="tag">Alerts</span>
                     <span class="tag">Security</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="07-color-assistant/" class="tool-card">
-                <span class="tool-number">Tool #7</span>
-                <h3>AI Color Assistant</h3>
-                <p>Upload a reference image and get AI-powered suggestions to match your camera's color settings. Style matching made easy.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">🎨</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #7</div>
+                        <h3>AI Color Assistant</h3>
+                    </div>
+                </div>
+                <p>Upload a reference image and get AI suggestions to match your camera's color settings. Style matching made easy.</p>
                 <div class="tool-tags">
                     <span class="tag">Color Matching</span>
                     <span class="tag">Camera Settings</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
             </a>
-            
+
             <a href="08-multimodal-fusion/" class="tool-card">
-                <span class="tool-number">Tool #8</span>
-                <h3>Multimodal Fusion</h3>
-                <p>Combine audio (speech) and video understanding for intelligent automation. Voice commands plus visual context for smarter triggers.</p>
+                <div class="tool-card-header">
+                    <span class="tool-icon">🔊</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #8</div>
+                        <h3>Multimodal Fusion</h3>
+                    </div>
+                </div>
+                <p>Combine audio and video understanding for intelligent automation. Voice commands + visual context = smart triggers.</p>
                 <div class="tool-tags">
                     <span class="tag">Audio + Video</span>
                     <span class="tag">Automation</span>
                     <span class="tag">Voice Control</span>
                 </div>
+                <span class="try-btn">Try Now →</span>
+            </a>
+        </div>
+
+        <div class="section-header">
+            <h2>🚀 Advanced Tools</h2>
+            <span class="badge">5 Tools</span>
+        </div>
+
+        <div class="tools-grid">
+            <a href="03-gesture-obs/" class="tool-card">
+                <div class="tool-card-header">
+                    <span class="tool-icon">✋</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Tool #3</div>
+                        <h3>Gesture OBS Control</h3>
+                    </div>
+                </div>
+                <p>Control OBS Studio scene switching using hand gestures. Thumbs up, thumbs down - switch scenes hands-free.</p>
+                <div class="tool-tags">
+                    <span class="tag">Gestures</span>
+                    <span class="tag">OBS</span>
+                    <span class="tag">Hands-free</span>
+                </div>
+                <span class="try-btn">Try Now →</span>
+            </a>
+
+            <a href="04-scoreboard-extractor/" class="tool-card">
+                <div class="tool-card-header">
+                    <span class="tool-icon">🏆</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Sports</div>
+                        <h3>Scoreboard Extractor</h3>
+                    </div>
+                </div>
+                <p>Extract scores from physical scoreboards using AI vision. Auto-populate graphics with real-time game data.</p>
+                <div class="tool-tags">
+                    <span class="tag">OCR</span>
+                    <span class="tag">Sports</span>
+                    <span class="tag">Graphics</span>
+                </div>
+                <span class="try-btn">Try Now →</span>
+            </a>
+
+            <a href="05-framing-assistant/" class="tool-card">
+                <div class="tool-card-header">
+                    <span class="tool-icon">🖼️</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">PTZ</div>
+                        <h3>Framing Assistant</h3>
+                    </div>
+                </div>
+                <p>Get AI-powered framing suggestions for your PTZ camera. Optimize composition with intelligent guidance.</p>
+                <div class="tool-tags">
+                    <span class="tag">Framing</span>
+                    <span class="tag">PTZ</span>
+                    <span class="tag">Composition</span>
+                </div>
+                <span class="try-btn">Try Now →</span>
+            </a>
+
+            <a href="05-color-assistant/" class="tool-card">
+                <div class="tool-card-header">
+                    <span class="tool-icon">🎛️</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">PTZ</div>
+                        <h3>PTZ Color Control</h3>
+                    </div>
+                </div>
+                <p>Direct PTZ camera color control via API. Adjust white balance, exposure, and color settings with AI assistance.</p>
+                <div class="tool-tags">
+                    <span class="tag">Color Control</span>
+                    <span class="tag">PTZ API</span>
+                    <span class="tag">Settings</span>
+                </div>
+                <span class="try-btn">Try Now →</span>
+            </a>
+
+            <a href="07-multimodal-studio/" class="tool-card">
+                <div class="tool-card-header">
+                    <span class="tool-icon">🎬</span>
+                    <div class="tool-meta">
+                        <div class="tool-number">Studio</div>
+                        <h3>Multimodal Studio</h3>
+                    </div>
+                </div>
+                <p>Full production automation combining PTZ, OBS, audio, and AI. Voice-controlled studio management.</p>
+                <div class="tool-tags">
+                    <span class="tag">Full Automation</span>
+                    <span class="tag">PTZ + OBS</span>
+                    <span class="tag">Voice</span>
+                </div>
+                <span class="try-btn">Try Now →</span>
             </a>
         </div>
     </div>
 
     <div class="footer">
-        <p style="margin-bottom: 15px;">
-            <strong>📘 Get the Book:</strong> <a href="https://visualreasoning.ai/book">Visual Reasoning AI for Broadcast and ProAV</a>
-        </p>
+        <a href="https://visualreasoning.ai/book" class="book-cta">
+            📘 Get the Book: <strong>Visual Reasoning AI for Broadcast and ProAV</strong>
+        </a>
         <p>
-            Part of the <strong>Visual Reasoning AI for Broadcast & ProAV</strong> project<br>
-            <a href="https://visualreasoning.ai">VisualReasoning.ai</a> | 
-            <a href="https://ptzoptics.com">PTZOptics</a> | 
-            <a href="https://streamgeeks.com">StreamGeeks</a> | 
-            <a href="https://moondream.ai">Moondream AI</a> |
+            <a href="https://visualreasoning.ai">VisualReasoning.ai</a> · 
+            <a href="https://ptzoptics.com">PTZOptics</a> · 
+            <a href="https://streamgeeks.com">StreamGeeks</a> · 
+            <a href="https://moondream.ai">Moondream AI</a> ·
             <a href="https://github.com/StreamGeeks/visual-reasoning-playground">GitHub</a>
         </p>
-        <p style="margin-top: 10px; font-size: 0.85rem;">
-            Created by Paul Richards - Co-CEO at <a href="https://ptzoptics.com">PTZOptics</a> | Chief Streaming Officer at <a href="https://streamgeeks.com">StreamGeeks</a>
+        <p style="font-size: 0.8rem; opacity: 0.7;">
+            Created by Paul Richards · Co-CEO at PTZOptics · Chief Streaming Officer at StreamGeeks
         </p>
     </div>
 
+    <script src="shared/playground-header.js"></script>
     <script src="shared/api-key-manager.js"></script>
 </body>
 </html>
