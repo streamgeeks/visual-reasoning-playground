@@ -618,6 +618,43 @@
     </div>
 
     <script src="shared/playground-header.js"></script>
+    <script src="shared/ux-utils.js"></script>
     <script src="shared/api-key-manager.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
+            if (!isEmbed) {
+                VRPUtils.showGettingStarted({
+                    onComplete: function(equipment) {
+                        if (equipment.length > 0) {
+                            VRPUtils.success('Setup complete! Equipment preferences saved.');
+                            highlightRecommendedTools(equipment);
+                        }
+                    }
+                });
+            }
+        });
+
+        function highlightRecommendedTools(equipment) {
+            const recommendations = {
+                'webcam': ['01-scene-describer', '02-detection-boxes', '05-scene-analyzer', '04-smart-counter'],
+                'ptz': ['PTZOptics-Moondream-Tracker', '05-framing-assistant', '05-color-assistant'],
+                'obs': ['03-gesture-obs', '07-multimodal-studio', '08-multimodal-fusion']
+            };
+
+            const recommendedTools = new Set();
+            equipment.forEach(eq => {
+                (recommendations[eq] || []).forEach(tool => recommendedTools.add(tool));
+            });
+
+            document.querySelectorAll('.tool-card').forEach(card => {
+                const href = card.getAttribute('href') || '';
+                const toolId = href.replace('/', '').replace('/', '');
+                if (recommendedTools.has(toolId)) {
+                    card.style.boxShadow = '0 0 0 2px #93ccea, 0 12px 40px rgba(0,0,0,0.3)';
+                }
+            });
+        }
+    </script>
 </body>
 </html>

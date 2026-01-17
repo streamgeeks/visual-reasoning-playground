@@ -307,6 +307,50 @@ class APIKeyManager {
                 color: var(--text);
             }
 
+            .akm-test-btn {
+                background: var(--primary);
+                border: none;
+                color: white;
+                padding: 0 14px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 0.85rem;
+                font-weight: 500;
+                transition: all 0.2s;
+            }
+
+            .akm-test-btn:hover {
+                background: #2555a3;
+            }
+
+            .akm-test-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            .akm-test-btn.testing {
+                position: relative;
+                color: transparent;
+            }
+
+            .akm-test-btn.testing::after {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 14px;
+                height: 14px;
+                margin: -7px 0 0 -7px;
+                border: 2px solid rgba(255,255,255,0.3);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: akm-spin 0.8s linear infinite;
+            }
+
+            @keyframes akm-spin {
+                to { transform: rotate(360deg); }
+            }
+
             .akm-key-link {
                 display: inline-block;
                 margin-top: 8px;
@@ -480,6 +524,9 @@ class APIKeyManager {
                             <button class="akm-toggle-visibility" onclick="window.apiKeyManager._toggleVisibility('akm-moondream-key')">
                                 👁
                             </button>
+                            <button class="akm-test-btn" id="akm-test-moondream" onclick="window.apiKeyManager._testMoondreamKey()">
+                                Test
+                            </button>
                         </div>
                         <a href="https://console.moondream.ai" target="_blank" class="akm-key-link">
                             Get your free key at console.moondream.ai →
@@ -575,11 +622,77 @@ class APIKeyManager {
      */
     _validateMoondreamKey(key) {
         if (!key || key.trim() === '') return { valid: false, message: '' };
-        // Moondream keys are typically long alphanumeric strings
         if (key.length < 20) {
             return { valid: false, message: 'Key appears too short' };
         }
         return { valid: true, message: 'Key format looks valid' };
+    }
+
+    /**
+     * Test Moondream API key with a real API call
+     */
+    async _testMoondreamKey() {
+        const input = document.getElementById('akm-moondream-key');
+        const validation = document.getElementById('akm-moondream-validation');
+        const testBtn = document.getElementById('akm-test-moondream');
+        const key = input.value.trim();
+
+        if (!key) {
+            validation.className = 'akm-validation-msg error';
+            validation.innerHTML = '✗ Please enter an API key first';
+            input.className = 'invalid';
+            return;
+        }
+
+        testBtn.disabled = true;
+        testBtn.classList.add('testing');
+        testBtn.textContent = 'Testing...';
+        validation.className = 'akm-validation-msg';
+        validation.innerHTML = '⏳ Validating with Moondream API...';
+        input.className = '';
+
+        try {
+            const testImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+            
+            const response = await fetch('https://api.moondream.ai/v1/caption', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Moondream-Auth': key
+                },
+                body: JSON.stringify({
+                    image_url: testImage,
+                    length: 'short',
+                    stream: false
+                })
+            });
+
+            if (response.ok) {
+                validation.className = 'akm-validation-msg success';
+                validation.innerHTML = '✓ API key verified successfully!';
+                input.className = 'valid';
+            } else if (response.status === 401) {
+                validation.className = 'akm-validation-msg error';
+                validation.innerHTML = '✗ Invalid API key. Please check and try again.';
+                input.className = 'invalid';
+            } else if (response.status === 429) {
+                validation.className = 'akm-validation-msg success';
+                validation.innerHTML = '✓ Key valid (rate limited - wait a moment)';
+                input.className = 'valid';
+            } else {
+                validation.className = 'akm-validation-msg error';
+                validation.innerHTML = `✗ API error (${response.status}). Try again.`;
+                input.className = 'invalid';
+            }
+        } catch (error) {
+            validation.className = 'akm-validation-msg error';
+            validation.innerHTML = '✗ Network error. Check your connection.';
+            input.className = 'invalid';
+        } finally {
+            testBtn.disabled = false;
+            testBtn.classList.remove('testing');
+            testBtn.textContent = 'Test';
+        }
     }
 
     /**
