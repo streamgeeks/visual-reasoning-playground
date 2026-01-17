@@ -330,5 +330,26 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.reasoningConsole.logInfo('Module 1: Foundations of Visual Reasoning AI');
     
     loadSavedPreferences();
-    await startCamera();
+
+    if (window.VideoSourceAdapter) {
+        VideoSourceAdapter.init({
+            videoElement: video,
+            toolId: 'scene-describer',
+            insertInto: '.camera-controls',
+            onSourceChange: (source) => {
+                cameraSelect.disabled = source === 'sample';
+                refreshCamerasBtn.disabled = source === 'sample';
+                if (source === 'camera') {
+                    enumerateCameras();
+                }
+                window.reasoningConsole.logInfo(`Switched to ${source === 'camera' ? 'live camera' : 'sample video'}`);
+                updateStatus(source === 'camera' ? 'Camera ready' : 'Using sample video', 'success');
+            }
+        });
+        await VideoSourceAdapter.switchToCamera().catch(() => {
+            VideoSourceAdapter.switchToSample();
+        });
+    } else {
+        await startCamera();
+    }
 });
