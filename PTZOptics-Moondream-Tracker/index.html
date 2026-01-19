@@ -126,6 +126,35 @@
                     Use smaller deadzone (1-5%) for precise centering, larger (15-30%) for smoother tracking.
                 </small>
                 
+                <h3 class="section-heading">Auto-Zoom (Headroom Control)</h3>
+                <div class="control-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="autoZoomEnabled" />
+                        <span>Enable Auto-Zoom</span>
+                    </label>
+                    <small>Automatically zoom in/out to maintain proper headroom</small>
+                </div>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="minHeadroom">Min Headroom: <span id="minHeadroomValue">10</span>%</label>
+                        <input type="range" id="minHeadroom" class="slider settings-input" min="5" max="25" step="1" value="10" />
+                        <small>Zoom OUT if less than this</small>
+                    </div>
+                    <div class="control-group half">
+                        <label for="maxHeadroom">Max Headroom: <span id="maxHeadroomValue">30</span>%</label>
+                        <input type="range" id="maxHeadroom" class="slider settings-input" min="20" max="50" step="1" value="30" />
+                        <small>Zoom IN if more than this</small>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="zoomSpeed">Zoom Speed: <span id="zoomSpeedValue">3</span></label>
+                    <input type="range" id="zoomSpeed" class="slider settings-input" min="1" max="7" step="1" value="3" />
+                </div>
+                <small class="help-text">
+                    <strong>How it works:</strong> Measures space above/below the detected object. 
+                    If headroom exceeds max, zooms in. If below min, zooms out. Sweet spot = no zoom change.
+                </small>
+                
             </div>
         </div>
         

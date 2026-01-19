@@ -70,7 +70,11 @@ $(function () {
         centerOffsetX: parseFloat(localStorage.getItem('centerOffsetX')) || 50,
         centerOffsetY: parseFloat(localStorage.getItem('centerOffsetY')) || 50,
         deadzoneX: parseFloat(localStorage.getItem('deadzoneX')) || 5,
-        deadzoneY: parseFloat(localStorage.getItem('deadzoneY')) || 5
+        deadzoneY: parseFloat(localStorage.getItem('deadzoneY')) || 5,
+        autoZoomEnabled: localStorage.getItem('autoZoomEnabled') === 'true',
+        minHeadroom: parseFloat(localStorage.getItem('minHeadroom')) || 10,
+        maxHeadroom: parseFloat(localStorage.getItem('maxHeadroom')) || 30,
+        zoomSpeed: parseInt(localStorage.getItem('zoomSpeed')) || 3
     };
     
     let availableCameras = [];
@@ -153,11 +157,20 @@ $(function () {
         $('#deadzoneY').val(settings.deadzoneY);
         $('#deadzoneYValue').text(settings.deadzoneY);
         
+        $('#autoZoomEnabled').prop('checked', settings.autoZoomEnabled);
+        $('#minHeadroom').val(settings.minHeadroom);
+        $('#minHeadroomValue').text(settings.minHeadroom);
+        $('#maxHeadroom').val(settings.maxHeadroom);
+        $('#maxHeadroomValue').text(settings.maxHeadroom);
+        $('#zoomSpeed').val(settings.zoomSpeed);
+        $('#zoomSpeedValue').text(settings.zoomSpeed);
+        
         ptzController = new PTZController(settings.cameraIP);
         
         ptzController.setSpeed({
             pan: settings.panSpeed,
-            tilt: settings.tiltSpeed
+            tilt: settings.tiltSpeed,
+            zoom: settings.zoomSpeed
         });
         ptzController.setCenterOffset({
             horizontal: settings.centerOffsetX,
@@ -286,6 +299,34 @@ $(function () {
             ptzController.setDeadzone({ vertical: val });
             switchToCustomMode();
             renderDeadzone();
+        });
+        
+        $('#autoZoomEnabled').on('change', function() {
+            settings.autoZoomEnabled = $(this).is(':checked');
+            localStorage.setItem('autoZoomEnabled', settings.autoZoomEnabled.toString());
+            window.reasoningConsole.logInfo(`Auto-zoom ${settings.autoZoomEnabled ? 'enabled' : 'disabled'}`);
+        });
+        
+        $('#minHeadroom').on('input', function() {
+            const val = parseFloat($(this).val());
+            settings.minHeadroom = val;
+            $('#minHeadroomValue').text(val);
+            localStorage.setItem('minHeadroom', val.toString());
+        });
+        
+        $('#maxHeadroom').on('input', function() {
+            const val = parseFloat($(this).val());
+            settings.maxHeadroom = val;
+            $('#maxHeadroomValue').text(val);
+            localStorage.setItem('maxHeadroom', val.toString());
+        });
+        
+        $('#zoomSpeed').on('input', function() {
+            const val = parseInt($(this).val());
+            settings.zoomSpeed = val;
+            $('#zoomSpeedValue').text(val);
+            localStorage.setItem('zoomSpeed', val.toString());
+            ptzController.setSpeed({ zoom: val });
         });
         
         $('#toggleAdvanced').on('click', function() {
@@ -542,6 +583,11 @@ $(function () {
             if (currentDetection) {
                 window.reasoningConsole.logDetection(settings.targetObject, 1, 0.9);
                 await ptzController.trackObject(currentDetection, video.videoWidth, video.videoHeight);
+                
+                if (settings.autoZoomEnabled) {
+                    await handleAutoZoom(currentDetection);
+                }
+                
                 updateStatus(`Tracking: ${settings.targetObject} detected`);
             } else {
                 if (ptzController.isMoving) {
@@ -655,6 +701,35 @@ $(function () {
         ctx.moveTo(x, y - 10);
         ctx.lineTo(x, y + 10);
         ctx.stroke();
+    }
+
+    let lastZoomAction = 0;
+    const zoomCooldown = 500;
+
+    async function handleAutoZoom(detection) {
+        if (!detection || !settings.autoZoomEnabled) return;
+        
+        const now = Date.now();
+        if (now - lastZoomAction < zoomCooldown) return;
+        
+        const topHeadroom = (detection.y - detection.height / 2) * 100;
+        const bottomHeadroom = (1 - (detection.y + detection.height / 2)) * 100;
+        const avgHeadroom = (topHeadroom + bottomHeadroom) / 2;
+        
+        const minH = settings.minHeadroom;
+        const maxH = settings.maxHeadroom;
+        
+        if (avgHeadroom < minH) {
+            await ptzController.zoomOut();
+            lastZoomAction = now;
+            window.reasoningConsole.logInfo(`Auto-zoom OUT: headroom ${avgHeadroom.toFixed(1)}% < ${minH}%`);
+            setTimeout(() => ptzController.stop(), 200);
+        } else if (avgHeadroom > maxH) {
+            await ptzController.zoomIn();
+            lastZoomAction = now;
+            window.reasoningConsole.logInfo(`Auto-zoom IN: headroom ${avgHeadroom.toFixed(1)}% > ${maxH}%`);
+            setTimeout(() => ptzController.stop(), 200);
+        }
     }
 
     function updateFPS(frameTime) {

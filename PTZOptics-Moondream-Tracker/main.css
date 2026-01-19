@@ -280,9 +280,32 @@ video, canvas {
 #centerOffsetXValue,
 #centerOffsetYValue,
 #deadzoneXValue,
-#deadzoneYValue {
+#deadzoneYValue,
+#minHeadroomValue,
+#maxHeadroomValue,
+#zoomSpeedValue {
     color: #93CCEA;
     font-weight: bold;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 8px 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #93CCEA;
+    cursor: pointer;
+}
+
+.checkbox-label span {
+    font-weight: 600;
+    color: #93CCEA;
 }
 
 .control-buttons {
