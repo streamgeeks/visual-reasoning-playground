@@ -8,11 +8,10 @@
     <style>
         .main-layout {
             display: grid;
-            grid-template-columns: 1fr 380px;
+            grid-template-columns: 1fr 1fr;
             gap: 20px;
             padding: 20px;
-            padding-left: 420px;
-            max-width: 1600px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -28,6 +27,7 @@
             border-radius: 8px;
             overflow: hidden;
             aspect-ratio: 16/9;
+            max-height: 360px;
         }
 
         .video-container video {
@@ -48,18 +48,18 @@
 
         .camera-controls select {
             flex: 1;
-            padding: 10px 12px;
+            padding: 8px 10px;
             background: rgba(13, 27, 42, 0.9);
             border: 1px solid var(--surface-light);
             border-radius: 6px;
             color: var(--text);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             cursor: pointer;
             backdrop-filter: blur(4px);
         }
 
         .btn-icon {
-            padding: 10px 14px;
+            padding: 8px 12px;
             background: rgba(13, 27, 42, 0.9);
             border: 1px solid var(--surface-light);
             border-radius: 6px;
@@ -77,26 +77,26 @@
         .gesture-overlay {
             position: absolute;
             top: 10px;
+            left: 10px;
             right: 10px;
             display: flex;
-            flex-direction: column;
             gap: 8px;
             z-index: 10;
         }
 
         .gesture-indicator {
-            padding: 10px 15px;
+            padding: 8px 12px;
             background: rgba(13, 27, 42, 0.9);
             border-radius: 6px;
             backdrop-filter: blur(4px);
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 0.9rem;
+            gap: 8px;
+            font-size: 0.85rem;
         }
 
         .gesture-indicator .icon {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
         }
 
         .gesture-indicator .status {
@@ -105,6 +105,7 @@
 
         .gesture-indicator.detected {
             background: rgba(42, 157, 143, 0.9);
+            box-shadow: 0 0 12px rgba(42, 157, 143, 0.5);
         }
 
         .gesture-indicator.not-detected {
@@ -112,42 +113,72 @@
             opacity: 0.7;
         }
 
-        .side-panel {
+        .control-panel {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
+        }
+
+        .top-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
         }
 
         .card {
             background: var(--surface);
             border-radius: 8px;
-            padding: 15px;
+            padding: 12px;
+        }
+
+        .card-compact {
+            padding: 10px;
         }
 
         .card h3 {
-            margin: 0 0 12px 0;
+            margin: 0 0 10px 0;
             color: var(--primary-light);
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+        }
+
+        .scene-display {
+            text-align: center;
+        }
+
+        .scene-display .label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .scene-display .scene-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--secondary);
+            margin-top: 4px;
+            word-break: break-word;
         }
 
         .obs-status {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px;
+            gap: 8px;
+            padding: 8px;
             background: var(--background);
             border-radius: 6px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .obs-status .dot {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: var(--error);
+            flex-shrink: 0;
         }
 
         .obs-status.connected .dot {
@@ -158,52 +189,51 @@
         .obs-status .text {
             flex: 1;
             font-weight: 600;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .input-group label {
             font-size: 0.85rem;
-            color: var(--text-muted);
         }
 
-        .input-group input {
-            padding: 10px 12px;
+        .obs-inputs {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: end;
+        }
+
+        .obs-inputs input {
+            padding: 8px 10px;
             background: var(--background);
             border: 1px solid var(--surface-light);
             border-radius: 6px;
             color: var(--text);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            width: 100%;
         }
 
-        .input-group input:focus {
+        .obs-inputs input:focus {
             outline: none;
             border-color: var(--primary);
         }
 
-        .input-row {
-            display: flex;
-            gap: 10px;
-        }
-
-        .input-row .input-group {
-            flex: 1;
+        .obs-inputs label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
         }
 
         .btn {
-            padding: 12px 20px;
+            padding: 10px 16px;
             border: none;
             border-radius: 6px;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
-            width: 100%;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 0.8rem;
         }
 
         .btn-primary {
@@ -225,37 +255,179 @@
             color: white;
         }
 
+        .btn-success:hover {
+            background: #239b85;
+        }
+
         .btn-danger {
             background: var(--error);
             color: white;
         }
 
-        .scene-display {
-            padding: 15px;
+        .btn-danger:hover {
+            background: #c92d3a;
+        }
+
+        .gesture-mappings {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .gesture-mapping {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
             background: var(--background);
             border-radius: 6px;
-            text-align: center;
         }
 
-        .scene-display .label {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 5px;
-        }
-
-        .scene-display .scene-name {
+        .gesture-mapping .gesture-icon {
             font-size: 1.3rem;
-            font-weight: 700;
+        }
+
+        .gesture-mapping .arrow {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .gesture-mapping select {
+            flex: 1;
+            padding: 6px 8px;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.85rem;
+        }
+
+        .guardrails-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .guardrail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .guardrail-item label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .guardrail-item input[type="number"] {
+            padding: 6px 8px;
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.85rem;
+            width: 100%;
+        }
+
+        .guardrail-item .range-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .guardrail-item input[type="range"] {
+            flex: 1;
+            height: 4px;
+        }
+
+        .guardrail-item .value {
+            font-size: 0.8rem;
             color: var(--secondary);
+            font-weight: 600;
+            min-width: 35px;
+            text-align: right;
+        }
+
+        .detection-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .detection-controls .btn {
+            flex: 1;
+        }
+
+        .activity-section {
+            grid-column: 1 / -1;
+        }
+
+        .activity-log {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 8px 0;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--background);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .activity-item .time {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .activity-item.success {
+            border-left: 3px solid var(--success);
+        }
+
+        .activity-item.info {
+            border-left: 3px solid var(--primary);
+        }
+
+        .activity-empty {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 8px;
+        }
+
+        #obsHelp {
+            display: none;
+            padding: 8px;
+            background: rgba(230, 57, 70, 0.1);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        #fileProtocolWarning {
+            display: none;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(233, 196, 106, 0.2);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--warning);
         }
 
         .last-action {
-            padding: 10px;
+            padding: 8px;
             background: var(--background);
             border-radius: 6px;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .last-action .action-text {
@@ -263,96 +435,17 @@
             font-weight: 500;
         }
 
-        .setting-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--surface-light);
-        }
-
-        .setting-row:last-child {
-            border-bottom: none;
-        }
-
-        .setting-row label {
-            font-size: 0.9rem;
-            color: var(--text);
-        }
-
-        .setting-row input[type="number"] {
-            width: 80px;
-            padding: 8px;
-            background: var(--background);
-            border: 1px solid var(--surface-light);
-            border-radius: 4px;
-            color: var(--text);
-            text-align: center;
-        }
-
-        .setting-row input[type="range"] {
-            width: 120px;
-        }
-
-        .setting-value {
-            min-width: 50px;
-            text-align: right;
-            color: var(--secondary);
-            font-weight: 600;
-        }
-
-        .detection-toggle {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-
-        .detection-toggle .btn {
-            flex: 1;
-        }
-
-        .gesture-mappings {
-            margin-top: 10px;
-        }
-
-        .gesture-mapping {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: var(--background);
-            border-radius: 6px;
-            margin-bottom: 8px;
-        }
-
-        .gesture-mapping .gesture-icon {
-            font-size: 1.5rem;
-        }
-
-        .gesture-mapping .arrow {
-            color: var(--text-muted);
-        }
-
-        .gesture-mapping select {
-            flex: 1;
-            padding: 8px;
-            background: var(--surface);
-            border: 1px solid var(--surface-light);
-            border-radius: 4px;
-            color: var(--text);
-        }
-
-        @media (max-width: 1200px) {
+        @media (max-width: 900px) {
             .main-layout {
                 grid-template-columns: 1fr;
-                padding-left: 20px;
             }
-        }
-
-        @media (max-width: 500px) {
-            .rc-container {
-                width: calc(100% - 30px) !important;
-                left: 15px !important;
+            
+            .top-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .video-container {
+                max-height: none;
             }
         }
     </style>
@@ -360,20 +453,14 @@
 <body>
     <header class="app-header">
         <h1>Gesture Control</h1>
-        <p class="subtitle">Module 3 - Control OBS with hand gestures</p>
-        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+        <p class="subtitle">Control OBS with hand gestures</p>
+        <a href="../" class="project-link">← Back to Playground</a>
     </header>
 
     <div class="main-layout">
         <div class="video-section">
             <div class="video-container">
                 <video id="video" autoplay muted playsinline></video>
-                <div class="camera-controls">
-                    <select id="cameraSelect">
-                        <option value="">Select Camera...</option>
-                    </select>
-                    <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">🔄</button>
-                </div>
                 <div class="gesture-overlay">
                     <div id="thumbsUpIndicator" class="gesture-indicator not-detected">
                         <span class="icon">👍</span>
@@ -384,51 +471,52 @@
                         <span class="status">Thumbs Down</span>
                     </div>
                 </div>
+                <div class="camera-controls">
+                    <select id="cameraSelect">
+                        <option value="">Select Camera...</option>
+                    </select>
+                    <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">🔄</button>
+                </div>
             </div>
         </div>
 
-        <div class="side-panel">
-            <div class="card">
-                <h3>📡 OBS Connection</h3>
-                <div id="obsStatus" class="obs-status">
-                    <div class="dot"></div>
-                    <span class="text">Disconnected</span>
-                </div>
-                <div id="obsHelp" class="obs-help" style="display: none; padding: 10px; background: rgba(230, 57, 70, 0.1); border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-muted);">
-                    <strong style="color: var(--error);">Setup Required:</strong><br>
-                    1. Open OBS Studio<br>
-                    2. Tools → WebSocket Server Settings<br>
-                    3. Enable WebSocket Server ✓<br>
-                    4. Note the port (default 4455)
-                </div>
-                <div class="input-row">
-                    <div class="input-group">
-                        <label>OBS Computer IP & Port</label>
-                        <input type="text" id="obsUrl" value="localhost:4455" placeholder="localhost:4455 or 192.168.1.100:4455">
+        <div class="control-panel">
+            <div class="top-row">
+                <div class="card card-compact">
+                    <h3>🎬 Current Scene</h3>
+                    <div class="scene-display">
+                        <div class="label">LIVE</div>
+                        <div id="currentScene" class="scene-name">Not Connected</div>
                     </div>
                 </div>
-                <div class="input-group">
-                    <label>Password (if set in OBS)</label>
-                    <input type="password" id="obsPassword" placeholder="Leave empty if no password">
-                </div>
-                <button id="obsConnectBtn" class="btn btn-primary">Connect to OBS</button>
-                <div id="fileProtocolWarning" style="display: none; margin-top: 10px; padding: 10px; background: rgba(233, 196, 106, 0.2); border-radius: 6px; font-size: 0.85rem; color: var(--warning);">
-                    ⚠️ Running from file:// - WebSockets may be blocked. Use a local server (e.g., <code>npx serve</code>)
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>🎬 Current Scene</h3>
-                <div class="scene-display">
-                    <div class="label">LIVE</div>
-                    <div id="currentScene" class="scene-name">Not Connected</div>
-                </div>
-                <div id="lastAction" class="last-action">
-                    Last action: <span class="action-text">None</span>
+                
+                <div class="card card-compact">
+                    <h3>📡 OBS Status</h3>
+                    <div id="obsStatus" class="obs-status">
+                        <div class="dot"></div>
+                        <span class="text">Disconnected</span>
+                    </div>
+                    <div class="obs-inputs">
+                        <div>
+                            <label>Host:Port</label>
+                            <input type="text" id="obsUrl" value="localhost:4455" placeholder="localhost:4455">
+                        </div>
+                        <button id="obsConnectBtn" class="btn btn-primary btn-sm">Connect</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="card">
+            <div id="obsHelp" class="obs-help">
+                <strong style="color: var(--error);">Setup Required:</strong><br>
+                1. Open OBS → Tools → WebSocket Server Settings<br>
+                2. Enable WebSocket Server ✓ (port 4455)
+            </div>
+            
+            <div id="fileProtocolWarning">
+                ⚠️ Running from file:// - Use a local server
+            </div>
+
+            <div class="card card-compact">
                 <h3>🎯 Gesture Mappings</h3>
                 <div class="gesture-mappings">
                     <div class="gesture-mapping">
@@ -448,31 +536,52 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card card-compact">
                 <h3>⚙️ Guardrails</h3>
-                <div class="setting-row">
-                    <label>Confidence Threshold</label>
-                    <input type="range" id="confidenceThreshold" min="50" max="100" value="80">
-                    <span id="confidenceValue" class="setting-value">80%</span>
+                <div class="guardrails-grid">
+                    <div class="guardrail-item">
+                        <label>Confidence</label>
+                        <div class="range-row">
+                            <input type="range" id="confidenceThreshold" min="50" max="100" value="80">
+                            <span id="confidenceValue" class="value">80%</span>
+                        </div>
+                    </div>
+                    <div class="guardrail-item">
+                        <label>Cooldown (sec)</label>
+                        <input type="number" id="cooldownTime" min="1" max="10" value="3">
+                    </div>
+                    <div class="guardrail-item">
+                        <label>Debounce</label>
+                        <input type="number" id="debounceCount" min="1" max="5" value="2">
+                    </div>
+                    <div class="guardrail-item">
+                        <label>Interval (ms)</label>
+                        <input type="number" id="detectionInterval" min="500" max="3000" value="1000" step="100">
+                    </div>
                 </div>
-                <div class="setting-row">
-                    <label>Cooldown (seconds)</label>
-                    <input type="number" id="cooldownTime" min="1" max="10" value="3">
-                </div>
-                <div class="setting-row">
-                    <label>Debounce (detections)</label>
-                    <input type="number" id="debounceCount" min="1" max="5" value="2">
-                </div>
-                <div class="setting-row">
-                    <label>Detection Interval (ms)</label>
-                    <input type="number" id="detectionInterval" min="500" max="3000" value="1000" step="100">
-                </div>
-                <div class="detection-toggle">
+                <div class="detection-controls">
                     <button id="startDetectionBtn" class="btn btn-success">Start Detection</button>
                     <button id="stopDetectionBtn" class="btn btn-danger" disabled>Stop</button>
                 </div>
             </div>
+            
+            <div id="lastAction" class="last-action">
+                Last action: <span class="action-text">None</span>
+            </div>
         </div>
+
+        <div class="activity-section">
+            <div class="card card-compact">
+                <h3>📋 Activity Log</h3>
+                <div id="activityLog" class="activity-log">
+                    <span class="activity-empty">No activity yet. Start detection to see gestures here.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:none;">
+        <input type="password" id="obsPassword" placeholder="Password">
     </div>
 
     <script src="../shared/moondream-client.js"></script>

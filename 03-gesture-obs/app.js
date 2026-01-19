@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const detectionInterval = document.getElementById('detectionInterval');
     const startDetectionBtn = document.getElementById('startDetectionBtn');
     const stopDetectionBtn = document.getElementById('stopDetectionBtn');
+    const activityLog = document.getElementById('activityLog');
 
     let moondreamClient = null;
     let obsClient = null;
@@ -129,10 +130,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             obsConnectBtn.classList.add('btn-danger');
             document.getElementById('obsHelp').style.display = 'none';
             populateActionSelects();
+            addActivityLogEntry('📡', 'OBS Connected', 'info');
         } else {
             obsStatusEl.classList.remove('connected');
             obsStatusEl.querySelector('.text').textContent = 'Disconnected';
-            obsConnectBtn.textContent = 'Connect to OBS';
+            obsConnectBtn.textContent = 'Connect';
             obsConnectBtn.classList.remove('btn-danger');
             obsConnectBtn.classList.add('btn-primary');
             currentSceneEl.textContent = 'Not Connected';
@@ -247,6 +249,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         lastActionEl.innerHTML = `Last action: <span class="action-text">${action}</span> <small>(just now)</small>`;
     }
 
+    function addActivityLogEntry(gesture, action, type = 'success') {
+        const emptyMsg = activityLog.querySelector('.activity-empty');
+        if (emptyMsg) emptyMsg.remove();
+        
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const item = document.createElement('div');
+        item.className = `activity-item ${type}`;
+        item.innerHTML = `<span>${gesture}</span> → <span>${action}</span> <span class="time">${time}</span>`;
+        
+        activityLog.insertBefore(item, activityLog.firstChild);
+        
+        while (activityLog.children.length > 10) {
+            activityLog.removeChild(activityLog.lastChild);
+        }
+    }
+
     async function executeOBSAction(actionValue) {
         if (!actionValue || !obsClient.isConnected()) return false;
 
@@ -313,6 +331,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (success) {
                 const actionLabel = thumbsUpAction.options[thumbsUpAction.selectedIndex].text;
                 updateLastAction(actionLabel);
+                addActivityLogEntry('👍', actionLabel, 'success');
             }
             thumbsUpDetections = 0;
         }
@@ -324,6 +343,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (success) {
                 const actionLabel = thumbsDownAction.options[thumbsDownAction.selectedIndex].text;
                 updateLastAction(actionLabel);
+                addActivityLogEntry('👎', actionLabel, 'success');
             }
             thumbsDownDetections = 0;
         }
@@ -348,6 +368,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         stopDetectionBtn.disabled = false;
         
         window.reasoningConsole.logInfo('Gesture detection started');
+        addActivityLogEntry('▶️', 'Detection started', 'info');
         detectionLoop();
     }
 
@@ -366,6 +387,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateGestureIndicator(thumbsDownIndicator, false);
         
         window.reasoningConsole.logInfo('Gesture detection stopped');
+        addActivityLogEntry('⏹️', 'Detection stopped', 'info');
     }
 
     cameraSelect.addEventListener('change', () => {
