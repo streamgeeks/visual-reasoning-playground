@@ -183,6 +183,25 @@ Example: "Start meeting" + people visible = HIGH confidence → trigger
 
 ---
 
+### 📸 Tool 9: Smart AI Photographer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/09-smart-photographer/)
+Auto-capture photos when AI detects your target.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Moondream API  │────▶│  Target Found?  │
+│   Frame     │     │    /detect      │     │   YES → 📸      │
+└─────────────┘     │ "person smiling"│     └────────┬────────┘
+                    └─────────────────┘              │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │  Photo Gallery  │
+                                            │  + Download     │
+                                            └─────────────────┘
+```
+📁 `09-smart-photographer/`
+
+---
+
 ### 🎯 Featured: PTZ Auto-Tracker — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/PTZOptics-Moondream-Tracker/)
 Autonomous PTZ camera tracking using AI vision.
 

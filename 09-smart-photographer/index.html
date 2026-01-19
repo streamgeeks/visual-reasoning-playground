@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart AI Photographer - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .photo-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .photo-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--surface);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .photo-item:hover {
+            transform: scale(1.02);
+        }
+        .photo-item img {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            display: block;
+        }
+        .photo-item .photo-info {
+            padding: 6px 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: var(--surface);
+        }
+        .photo-item .photo-trigger {
+            font-weight: 600;
+            color: var(--primary-light);
+            display: block;
+            margin-bottom: 2px;
+        }
+        .photo-item .download-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0,0,0,0.7);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: white;
+            font-size: 0.7rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .photo-item:hover .download-btn {
+            opacity: 1;
+        }
+        .capture-flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .capture-flash.flash {
+            animation: flash 0.3s ease-out;
+        }
+        @keyframes flash {
+            0% { opacity: 0.8; }
+            100% { opacity: 0; }
+        }
+        .capture-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: var(--success);
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .capture-indicator.idle {
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+        .capture-indicator .pulse {
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        .capture-indicator.idle .pulse {
+            background: var(--text-muted);
+            animation: none;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .gallery-header h3 {
+            margin: 0;
+        }
+        .btn-clear {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+        .empty-gallery {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .lightbox.active {
+            display: flex;
+        }
+        .lightbox img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 8px;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Smart AI Photographer</h1>
+        <p class="subtitle">Tool #9 - Auto-capture photos when AI detects your target</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <div class="capture-flash" id="captureFlash"></div>
+                </div>
+
+                <div class="gallery-header">
+                    <h3>📸 Captured Photos (<span id="photoCount">0</span>)</h3>
+                    <button id="clearGalleryBtn" class="btn btn-secondary btn-clear">Clear All</button>
+                </div>
+                <div id="photoGallery" class="photo-gallery">
+                    <div class="empty-gallery">Photos will appear here when captured</div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+
+                <div class="capture-indicator idle" id="captureIndicator">
+                    <div class="pulse"></div>
+                    <span id="captureStatus">Ready to capture</span>
+                </div>
+
+                <div class="control-group">
+                    <label for="targetObject">Capture When Detected</label>
+                    <input type="text" id="targetObject" value="person smiling" placeholder="e.g., person, thumbs up, dog">
+                    <small>Describe what triggers a photo capture</small>
+                </div>
+
+                <div class="control-group">
+                    <label for="detectionRate">Check Rate: <span id="rateValue">1.0</span>/sec</label>
+                    <input type="range" id="detectionRate" min="0.5" max="3" step="0.1" value="1">
+                    <small>How often to check for target</small>
+                </div>
+
+                <div class="control-group">
+                    <label for="cooldown">Cooldown: <span id="cooldownValue">3</span> seconds</label>
+                    <input type="range" id="cooldown" min="1" max="10" step="1" value="3">
+                    <small>Wait time between captures</small>
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="playSound" checked>
+                        Play shutter sound
+                    </label>
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Watching</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value" id="totalCaptures">0</div>
+                        <div class="label">Photos Taken</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="detectionsCount">0</div>
+                        <div class="label">Detections</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+        <button class="lightbox-close" id="lightboxClose">×</button>
+        <img id="lightboxImg" src="" alt="Full size photo">
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>

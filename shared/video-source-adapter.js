@@ -20,7 +20,8 @@
         'color-assistant': '../assets/sample-videos/color-analyzer-demo.mp4',
         'multimodal-studio': '../assets/sample-videos/scene-describer-demo.mp4',
         'multimodal-fusion': '../assets/sample-videos/scene-describer-demo.mp4',
-        'PTZOptics-Moondream-Tracker': '../assets/sample-videos/ptz-controller-demo.mp4'
+        'PTZOptics-Moondream-Tracker': '../assets/sample-videos/ptz-controller-demo.mp4',
+        'smart-photographer': '../assets/sample-videos/scene-describer-demo.mp4'
     };
 
     const ADAPTER_STYLES = `
