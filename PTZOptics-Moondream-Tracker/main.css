@@ -11,26 +11,6 @@ html, body {
     font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
 }
 
-body video {
-    transition: filter 250ms linear;
-}
-
-body.loading video {
-    filter: grayscale(1) brightness(0.25);
-}
-
-body.loading:before {
-    content: "Loading Camera...";
-    color: white;
-    text-align: center;
-    width: 100%;
-    position: absolute;
-    top: 20px;
-    font-size: 3em;
-    font-weight: bold;
-    z-index: 100;
-}
-
 html, body, video, canvas {
     width: 100%;
     height: 100%;

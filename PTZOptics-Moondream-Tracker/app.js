@@ -174,8 +174,7 @@ $(function () {
         await startVideoStream();
         
         resizeCanvas();
-        
-        $('body').removeClass('loading');
+        renderDeadzone();
         
         updateStatus('Ready. Configure settings and click Start Tracking.');
         window.reasoningConsole.logInfo('PTZ Tracker initialized');
@@ -257,6 +256,7 @@ $(function () {
             $('#centerOffsetXValue').text(val);
             localStorage.setItem('centerOffsetX', val.toString());
             ptzController.setCenterOffset({ horizontal: val });
+            renderDeadzone();
         });
         
         $('#centerOffsetY').on('input', function() {
@@ -265,6 +265,7 @@ $(function () {
             $('#centerOffsetYValue').text(val);
             localStorage.setItem('centerOffsetY', val.toString());
             ptzController.setCenterOffset({ vertical: val });
+            renderDeadzone();
         });
         
         $('#deadzoneX').on('input', function() {
@@ -274,6 +275,7 @@ $(function () {
             localStorage.setItem('deadzoneX', val.toString());
             ptzController.setDeadzone({ horizontal: val });
             switchToCustomMode();
+            renderDeadzone();
         });
         
         $('#deadzoneY').on('input', function() {
@@ -283,6 +285,7 @@ $(function () {
             localStorage.setItem('deadzoneY', val.toString());
             ptzController.setDeadzone({ vertical: val });
             switchToCustomMode();
+            renderDeadzone();
         });
         
         $('#toggleAdvanced').on('click', function() {
@@ -368,6 +371,7 @@ $(function () {
             detectionInterval = setInterval(detectionLoop, intervalMs);
         }
         
+        renderDeadzone();
         updateStatus(`Applied ${preset.name} preset`);
         window.reasoningConsole.logInfo(`Applied preset: ${preset.name}`);
     }
@@ -456,6 +460,7 @@ $(function () {
         });
         
         $('body').append(canvas);
+        renderDeadzone();
     }
 
     async function startTracking() {
@@ -552,10 +557,57 @@ $(function () {
         }
     }
 
+    function renderDeadzone() {
+        if (!ctx || !canvas || !video) return;
+        
+        ctx.clearRect(0, 0, canvas[0].width, canvas[0].height);
+        
+        const centerX = (settings.centerOffsetX / 100) * video.videoWidth;
+        const centerY = (settings.centerOffsetY / 100) * video.videoHeight;
+        const halfDeadzoneW = (settings.deadzoneX / 100) * video.videoWidth / 2;
+        const halfDeadzoneH = (settings.deadzoneY / 100) * video.videoHeight / 2;
+        
+        ctx.strokeStyle = 'rgba(42, 157, 143, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]);
+        ctx.strokeRect(
+            centerX - halfDeadzoneW,
+            centerY - halfDeadzoneH,
+            halfDeadzoneW * 2,
+            halfDeadzoneH * 2
+        );
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'rgba(42, 157, 143, 0.1)';
+        ctx.fillRect(
+            centerX - halfDeadzoneW,
+            centerY - halfDeadzoneH,
+            halfDeadzoneW * 2,
+            halfDeadzoneH * 2
+        );
+        
+        ctx.strokeStyle = 'rgba(147, 204, 234, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 20, centerY);
+        ctx.lineTo(centerX + 20, centerY);
+        ctx.moveTo(centerX, centerY - 20);
+        ctx.lineTo(centerX, centerY + 20);
+        ctx.stroke();
+        
+        ctx.fillStyle = 'rgba(147, 204, 234, 0.7)';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('Deadzone', centerX - halfDeadzoneW + 4, centerY - halfDeadzoneH + 4);
+    }
+
     function renderDetection(detection) {
         if (!ctx || !canvas) return;
         
         ctx.clearRect(0, 0, canvas[0].width, canvas[0].height);
+        
+        renderDeadzone();
         
         if (!detection) return;
         
@@ -576,6 +628,7 @@ $(function () {
         ctx.fillStyle = '#93CCEA';
         const label = settings.targetObject;
         ctx.font = '16px sans-serif';
+        ctx.textAlign = 'left';
         const textWidth = ctx.measureText(label).width;
         const textHeight = 16;
         
