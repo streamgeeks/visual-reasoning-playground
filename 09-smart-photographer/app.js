@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const captureFlash = document.getElementById('captureFlash');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const targetInput = document.getElementById('targetObject');
     const rateSlider = document.getElementById('detectionRate');
     const rateValueSpan = document.getElementById('rateValue');
@@ -50,18 +52,57 @@ document.addEventListener('DOMContentLoaded', async function() {
         client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
     }
 
-    async function startCamera() {
+    let currentStream = null;
+
+    async function enumerateCameras() {
         try {
-            window.reasoningConsole.logInfo('Requesting camera access...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: false
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, i) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${i + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
+            
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+            return videoDevices;
+        } catch (error) {
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+            return [];
+        }
+    }
+
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            window.reasoningConsole.logInfo('Requesting camera access...');
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720 },
+                audio: false
+            };
+            
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            
             video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             };
+            
+            await enumerateCameras();
+            if (deviceId) {
+                cameraSelect.value = deviceId;
+            }
+            
             window.reasoningConsole.logInfo('Camera connected');
             updateStatus('Camera ready');
         } catch (error) {
@@ -281,6 +322,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         photoCountSpan.textContent = '0';
         window.reasoningConsole.logInfo('Gallery cleared');
     }
+
+    cameraSelect.addEventListener('change', () => {
+        if (cameraSelect.value) {
+            startCamera(cameraSelect.value);
+        }
+    });
+
+    refreshCamerasBtn.addEventListener('click', enumerateCameras);
 
     rateSlider.addEventListener('input', () => {
         rateValueSpan.textContent = parseFloat(rateSlider.value).toFixed(1);

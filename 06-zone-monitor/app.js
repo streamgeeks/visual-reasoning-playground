@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const videoContainer = document.getElementById('videoContainer');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const zoneNameInput = document.getElementById('zoneName');
     const zoneTargetInput = document.getElementById('zoneTarget');
     const zoneColorInput = document.getElementById('zoneColor');
@@ -42,18 +44,53 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
-    async function startCamera() {
+    let currentStream = null;
+
+    async function enumerateCameras() {
         try {
-            window.reasoningConsole.logInfo('Requesting camera access...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: false
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, i) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${i + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
+            
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+        } catch (error) {
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+        }
+    }
+
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            window.reasoningConsole.logInfo('Requesting camera access...');
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720 },
+                audio: false
+            };
+            
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            
             video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             };
+            
+            await enumerateCameras();
+            if (deviceId) cameraSelect.value = deviceId;
+            
             updateStatus('Camera ready - Add zones to monitor');
             window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {

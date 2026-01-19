@@ -187,6 +187,14 @@
             <div class="control-panel">
                 <h2>Settings</h2>
 
+                <div class="control-group">
+                    <label for="cameraSelect">Camera</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="cameraSelect" style="flex: 1;"></select>
+                        <button id="refreshCamerasBtn" class="btn btn-secondary" style="padding: 8px 12px;">↻</button>
+                    </div>
+                </div>
+
                 <div class="capture-indicator idle" id="captureIndicator">
                     <div class="pulse"></div>
                     <span id="captureStatus">Ready to capture</span>

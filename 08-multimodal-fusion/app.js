@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const analysisRateInput = document.getElementById('analysisRate');
     const confidenceThresholdInput = document.getElementById('confidenceThreshold');
     const rateValue = document.getElementById('rateValue');
@@ -36,6 +38,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     let recognition = null;
     let audioContext = null;
     let analyser = null;
+    let currentStream = null;
 
     let state = {
         video: { scene: '', confidence: 0, people: false, peopleCount: 0, lastPeopleTime: 0 },
@@ -89,15 +92,47 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('fusionThreshold', confidenceThresholdInput.value);
     }
 
-    async function startCamera() {
+    async function enumerateCameras() {
         try {
-            window.reasoningConsole.logInfo('Requesting camera and microphone access...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: true
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, i) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${i + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
-            setupAudioVisualizer(stream);
+            
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+        } catch (error) {
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+        }
+    }
+
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            window.reasoningConsole.logInfo('Requesting camera and microphone access...');
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720 },
+                audio: true
+            };
+            
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            setupAudioVisualizer(currentStream);
+            
+            await enumerateCameras();
+            if (deviceId) cameraSelect.value = deviceId;
+            
             updateStatus('Camera and microphone ready');
             window.reasoningConsole.logInfo('Media devices initialized');
             return true;
@@ -107,6 +142,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             return false;
         }
     }
+
+    cameraSelect.addEventListener('change', () => {
+        if (cameraSelect.value) {
+            startCamera(cameraSelect.value);
+        }
+    });
+
+    refreshCamerasBtn.addEventListener('click', enumerateCameras);
 
     function setupAudioVisualizer(stream) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();

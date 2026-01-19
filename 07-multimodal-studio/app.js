@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
     const trackingOverlay = document.getElementById('trackingOverlay');
     const ctx = trackingOverlay.getContext('2d');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const micIcon = document.getElementById('micIcon');
     const audioState = document.getElementById('audioState');
     const liveTranscript = document.getElementById('liveTranscript');
@@ -32,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     let commandCount = 0;
     let trackingCount = 0;
     let currentMode = 'voice';
+    let currentStream = null;
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -60,24 +63,62 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     intentParser = new IntentParser();
 
-    async function startCamera() {
+    async function enumerateCameras() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: false
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, i) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${i + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
+            
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+        } catch (error) {
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+        }
+    }
+
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720 },
+                audio: false
+            };
+            
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
             
             await new Promise(resolve => { video.onloadedmetadata = resolve; });
             
             trackingOverlay.width = video.videoWidth;
             trackingOverlay.height = video.videoHeight;
             
+            await enumerateCameras();
+            if (deviceId) cameraSelect.value = deviceId;
+            
             window.reasoningConsole.logInfo('Camera started');
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
         }
     }
+
+    cameraSelect.addEventListener('change', () => {
+        if (cameraSelect.value) {
+            startCamera(cameraSelect.value);
+        }
+    });
+
+    refreshCamerasBtn.addEventListener('click', enumerateCameras);
 
     async function connectAll() {
         connectBtn.disabled = true;

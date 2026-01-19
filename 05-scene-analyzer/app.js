@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
     const snapshotBtn = document.getElementById('snapshotBtn');
     const newSnapshotBtn = document.getElementById('newSnapshotBtn');
     const clearBtn = document.getElementById('clearBtn');
@@ -16,6 +18,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     let currentSnapshot = null;
     let questionCount = 0;
     let totalResponseTime = 0;
+    let currentStream = null;
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -35,14 +38,46 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
 
-    async function startCamera() {
+    async function enumerateCameras() {
         try {
-            window.reasoningConsole.logInfo('Requesting camera access...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: false
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, i) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${i + 1}`;
+                cameraSelect.appendChild(option);
             });
-            video.srcObject = stream;
+            
+            window.reasoningConsole.logInfo(`Found ${videoDevices.length} camera(s)`);
+        } catch (error) {
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+        }
+    }
+
+    async function startCamera(deviceId = null) {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            window.reasoningConsole.logInfo('Requesting camera access...');
+            
+            const constraints = {
+                video: deviceId 
+                    ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+                    : { width: 1280, height: 720 },
+                audio: false
+            };
+            
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            
+            await enumerateCameras();
+            if (deviceId) cameraSelect.value = deviceId;
+            
             updateStatus('Camera ready - Take a snapshot to start');
             window.reasoningConsole.logInfo('Camera initialized successfully');
         } catch (error) {
@@ -50,6 +85,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.reasoningConsole.logError('Camera access failed: ' + error.message);
         }
     }
+
+    cameraSelect.addEventListener('change', () => {
+        if (cameraSelect.value) {
+            startCamera(cameraSelect.value);
+        }
+    });
+
+    refreshCamerasBtn.addEventListener('click', enumerateCameras);
 
     function updateStatus(message, isError = false) {
         statusBar.textContent = message;

@@ -63,6 +63,43 @@
         .quick-btn:hover {
             background: var(--primary);
         }
+        .camera-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+        .camera-controls select {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+        .btn-icon {
+            padding: 10px 14px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+        .btn-icon:hover {
+            background: rgba(48, 102, 190, 0.8);
+        }
+        .video-container {
+            position: relative;
+        }
         .snapshot-preview {
             width: 100%;
             max-height: 150px;
@@ -84,6 +121,12 @@
             <div class="video-section">
                 <div class="video-container">
                     <video id="video" autoplay muted playsinline></video>
+                    <div class="camera-controls">
+                        <select id="cameraSelect">
+                            <option value="">Select Camera...</option>
+                        </select>
+                        <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">🔄</button>
+                    </div>
                 </div>
 
                 <div class="chat-container">
