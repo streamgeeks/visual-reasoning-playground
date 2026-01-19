@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const directionSelect = document.getElementById('direction');
     const rateSlider = document.getElementById('detectionRate');
     const rateValueSpan = document.getElementById('rateValue');
+    const thresholdSlider = document.getElementById('trackingThreshold');
+    const thresholdValueSpan = document.getElementById('thresholdValue');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const resetBtn = document.getElementById('resetBtn');
@@ -113,7 +115,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function matchObjectToTracked(detection) {
-        const threshold = 0.15;
+        const threshold = parseInt(thresholdSlider.value) / 100;
         let bestMatch = null;
         let bestDistance = threshold;
 
@@ -289,6 +291,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     linePositionSlider.addEventListener('input', updateEntryLine);
     rateSlider.addEventListener('input', () => {
         rateValueSpan.textContent = parseFloat(rateSlider.value).toFixed(1);
+    });
+    thresholdSlider.addEventListener('input', () => {
+        thresholdValueSpan.textContent = thresholdSlider.value;
     });
     startBtn.addEventListener('click', startCounting);
     stopBtn.addEventListener('click', stopCounting);
