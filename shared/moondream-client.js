@@ -24,12 +24,6 @@ class MoondreamClient {
         this.apiKey = apiKey;
     }
 
-    /**
-     * Capture a frame from a video element
-     * @param {HTMLVideoElement} video - Video element to capture from
-     * @param {number} quality - JPEG quality (0-1), default 0.8
-     * @returns {string} Base64 data URL of the captured frame
-     */
     captureFrame(video, quality = 0.8) {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
@@ -38,7 +32,14 @@ class MoondreamClient {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        return canvas.toDataURL('image/jpeg', quality);
+        try {
+            return canvas.toDataURL('image/jpeg', quality);
+        } catch (e) {
+            if (e.name === 'SecurityError') {
+                throw new Error('Cannot capture frame from sample video. Please switch to Live Camera mode to use AI detection, or run a CORS-enabled server.');
+            }
+            throw e;
+        }
     }
 
     /**

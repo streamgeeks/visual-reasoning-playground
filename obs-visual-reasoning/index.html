@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Reasoning AI for OBS</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-top">
+                <h1>Visual Reasoning AI</h1>
+                <button id="settingsBtn" class="icon-btn" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="status-bar">
+                <div class="status-item" id="obsStatus">
+                    <span class="status-dot disconnected"></span>
+                    <span class="status-text">OBS</span>
+                </div>
+                <div class="status-item" id="cameraStatus">
+                    <span class="status-dot disconnected"></span>
+                    <span class="status-text">Camera</span>
+                </div>
+                <div class="status-item" id="aiStatus">
+                    <span class="status-dot disconnected"></span>
+                    <span class="status-text">AI</span>
+                </div>
+            </div>
+        </header>
+
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="gestures">Gestures</button>
+            <button class="tab-btn" data-tab="describe">Describe</button>
+            <button class="tab-btn" data-tab="autoswitch">Auto-Switch</button>
+        </nav>
+
+        <main class="tab-content">
+            <section id="gestures-tab" class="tab-panel active">
+                <div class="video-preview">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="gestureCanvas"></canvas>
+                    <div class="gesture-indicators">
+                        <div id="gestureDisplay" class="gesture-display">
+                            <span class="gesture-icon">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Gesture Mappings</h3>
+                    <div class="mapping-row">
+                        <span class="gesture-label">Thumbs Up</span>
+                        <select id="thumbsUpAction" class="action-select">
+                            <option value="">No action</option>
+                        </select>
+                    </div>
+                    <div class="mapping-row">
+                        <span class="gesture-label">Thumbs Down</span>
+                        <select id="thumbsDownAction" class="action-select">
+                            <option value="">No action</option>
+                        </select>
+                    </div>
+                    <div class="mapping-row">
+                        <span class="gesture-label">Open Palm</span>
+                        <select id="openPalmAction" class="action-select">
+                            <option value="">No action</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <button id="startGestureBtn" class="btn btn-primary">Start Detection</button>
+                    <button id="stopGestureBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+            </section>
+
+            <section id="describe-tab" class="tab-panel">
+                <div class="video-preview">
+                    <video id="describeVideo" autoplay muted playsinline></video>
+                </div>
+
+                <div class="section">
+                    <div class="toggle-row">
+                        <span>Auto-Describe</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="autoDescribeToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-row">
+                        <span>Interval</span>
+                        <select id="describeInterval">
+                            <option value="2000">2 sec</option>
+                            <option value="3000" selected>3 sec</option>
+                            <option value="5000">5 sec</option>
+                            <option value="10000">10 sec</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Current Scene</h3>
+                    <div id="currentDescription" class="description-box">
+                        Click "Auto-Describe" to start AI scene analysis...
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Activity Feed</h3>
+                    <div id="activityFeed" class="activity-feed">
+                        <div class="activity-item placeholder">No activity yet</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="autoswitch-tab" class="tab-panel">
+                <div class="section">
+                    <div class="toggle-row">
+                        <span>Auto-Switch Enabled</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="autoSwitchToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Switching Rules</h3>
+                    <div id="rulesContainer">
+                        <div class="rule-item empty-state">
+                            No rules configured
+                        </div>
+                    </div>
+                    <button id="addRuleBtn" class="btn btn-secondary btn-full">+ Add Rule</button>
+                </div>
+
+                <div class="section">
+                    <h3>Current Scene</h3>
+                    <div class="current-scene-display">
+                        <span class="scene-label">LIVE:</span>
+                        <span id="currentSceneName" class="scene-name">Not Connected</span>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Last Trigger</h3>
+                    <div id="lastTrigger" class="last-trigger">
+                        No triggers yet
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div id="settingsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button id="closeSettingsBtn" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h3>Moondream API</h3>
+                        <div class="input-group">
+                            <label>API Key</label>
+                            <input type="password" id="apiKeyInput" placeholder="Enter your Moondream API key">
+                            <a href="https://console.moondream.ai" target="_blank" class="help-link">Get API Key</a>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>OBS Connection</h3>
+                        <div class="input-group">
+                            <label>WebSocket URL</label>
+                            <input type="text" id="obsUrlInput" value="localhost:4455" placeholder="localhost:4455">
+                        </div>
+                        <div class="input-group">
+                            <label>Password (optional)</label>
+                            <input type="password" id="obsPasswordInput" placeholder="OBS WebSocket password">
+                        </div>
+                        <button id="connectObsBtn" class="btn btn-primary btn-full">Connect to OBS</button>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Camera</h3>
+                        <div class="input-group">
+                            <label>Select Camera</label>
+                            <select id="cameraSelect">
+                                <option value="">Select camera...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Detection Settings</h3>
+                        <div class="setting-row">
+                            <label>Cooldown (seconds)</label>
+                            <input type="number" id="cooldownInput" value="5" min="1" max="30">
+                        </div>
+                        <div class="setting-row">
+                            <label>Debounce (detections)</label>
+                            <input type="number" id="debounceInput" value="2" min="1" max="5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ruleModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Add Auto-Switch Rule</h2>
+                    <button id="closeRuleBtn" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group">
+                        <label>When AI sees (keywords)</label>
+                        <input type="text" id="ruleKeywords" placeholder="e.g., whiteboard, standing, presentation">
+                        <span class="help-text">Comma-separated keywords to match in scene description</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Switch to scene</label>
+                        <select id="ruleScene">
+                            <option value="">Select scene...</option>
+                        </select>
+                    </div>
+                    <button id="saveRuleBtn" class="btn btn-primary btn-full">Save Rule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="obs-client.js"></script>
+    <script src="modules/gesture-control.js"></script>
+    <script src="modules/scene-describer.js"></script>
+    <script src="modules/auto-switcher.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

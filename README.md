@@ -7,7 +7,11 @@
 
 **AI-powered visual reasoning tools for broadcast, live streaming, and ProAV professionals.**
 
-8 ready-to-use tools demonstrating real-world applications of Vision Language Models (VLMs) using [Moondream](https://moondream.ai). From PTZ camera auto-tracking to multimodal audio+video automation.
+12 ready-to-use tools demonstrating real-world applications of Vision Language Models (VLMs) using [Moondream](https://moondream.ai). From PTZ camera auto-tracking to multimodal audio+video automation.
+
+> 🚀 **[Try All Tools Online Now](https://streamgeeks.github.io/visual-reasoning-playground/)** - No installation required!
+
+> 🎮 **Playground Mode**: All tools work without a camera! Sample videos included for testing.
 
 > **From the book**: *Visual Reasoning AI for Broadcast and ProAV* by Paul Richards
 > 
@@ -34,64 +38,287 @@ New way: Just ask "Is there a person standing at the podium?"
 
 ---
 
-## The 8 Playground Tools
+## The Tools
 
-| # | Tool | Description | Folder |
-|---|------|-------------|--------|
-| 1 | **Scene Describer** | Natural language descriptions of any scene | `01-scene-describer/` |
-| 2 | **Detection Boxes** | Draw bounding boxes around specified objects | `02-detection-boxes/` |
-| 3 | **PTZ Auto-Tracker** | PTZOptics camera follows any object you describe | `PTZOptics-Moondream-Tracker/` |
-| 4 | **Smart Counter** | Count objects entering/exiting with persistence | `04-smart-counter/` |
-| 5 | **Scene Analyzer** | Ask questions, get contextual answers | `05-scene-analyzer/` |
-| 6 | **Zone Monitor** | Draw zones, trigger webhooks on activity | `06-zone-monitor/` |
-| 7 | **Color Assistant** | Match camera style to reference image | `07-color-assistant/` |
-| 8 | **Multimodal Fusion** | Combine audio + video for smart automation | `08-multimodal-fusion/` |
+### 👁️ Tool 1: Scene Describer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/01-scene-describer/)
+Natural language descriptions of any scene in real-time.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Moondream API  │────▶│  "A person at   │
+│   Frame     │     │    /caption     │     │   a desk with   │
+└─────────────┘     └─────────────────┘     │   a laptop..."  │
+                                            └─────────────────┘
+```
+📁 `01-scene-describer/`
+
+---
+
+### 📦 Tool 2: Detection Boxes — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/02-detection-boxes/)
+Draw bounding boxes around any object you describe.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Moondream API  │────▶│   Video Feed    │
+│   Frame     │     │    /detect      │     │   + Colored     │
+└─────────────┘     │ "person","mug"  │     │   Bounding Boxes│
+                    └─────────────────┘     └─────────────────┘
+```
+📁 `02-detection-boxes/`
+
+---
+
+### ✋ Tool 3: Gesture OBS Control — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/03-gesture-obs/)
+Control OBS scene switching with hand gestures.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Moondream API  │────▶│  OBS WebSocket  │
+│   Frame     │     │ "thumbs up?" →  │     │  Scene Switch   │
+└─────────────┘     │   YES/NO        │     └─────────────────┘
+                    └─────────────────┘              │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │   OBS Studio    │
+                                            │   Scene 1 → 2   │
+                                            └─────────────────┘
+```
+📁 `03-gesture-obs/`
+
+---
+
+### 🔢 Tool 4: Smart Counter — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04-smart-counter/)
+Count objects entering or exiting across a virtual line.
+
+```
+                    ┌─────────────────┐
+                    │  Define Line    │
+                    │  ─ ─ ─ ─ ─ ─ ─  │
+                    └────────┬────────┘
+                             │
+┌─────────────┐     ┌────────▼────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Track Objects  │────▶│   IN: 12        │
+│   Frame     │     │  Across Line    │     │   OUT: 8        │
+└─────────────┘     └─────────────────┘     │   TOTAL: +4     │
+                                            └─────────────────┘
+```
+📁 `04-smart-counter/`
+
+---
+
+### 🔍 Tool 5: Scene Analyzer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/05-scene-analyzer/)
+Ask questions about what the camera sees.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Camera    │────▶│  Moondream API  │────▶│  "Yes, there    │
+│   Frame     │     │     /query      │     │   are 3 people  │
+└─────────────┘     └─────────────────┘     │   in the room"  │
+                             ▲              └─────────────────┘
+                    ┌────────┴────────┐
+                    │  "How many      │
+                    │   people?"      │
+                    └─────────────────┘
+```
+📁 `05-scene-analyzer/`
+
+---
+
+### 🚧 Tool 6: Zone Monitor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/06-zone-monitor/)
+Draw custom zones, get alerts when objects enter.
+
+```
+┌─────────────────────────────────┐
+│         Camera View             │
+│   ┌───────────┐                 │
+│   │  ZONE A   │    ○ person     │
+│   │  (alert!) │   enters        │
+│   └───────────┘     │           │
+└─────────────────────┼───────────┘
+                      ▼
+              ┌───────────────┐
+              │   Webhook     │────▶  Alert!
+              │   Trigger     │
+              └───────────────┘
+```
+📁 `06-zone-monitor/`
+
+---
+
+### 🎨 Tool 7: AI Color Assistant — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/07-color-assistant/)
+Match your camera's color settings to a reference image.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Reference  │────▶│   Moondream     │     │  Suggested      │
+│   Image     │     │   Analyze Both  │────▶│  Adjustments:   │
+└─────────────┘     └─────────────────┘     │  WB: +200K      │
+                             ▲              │  Sat: -10       │
+┌─────────────┐              │              │  Exp: +0.5      │
+│   Camera    │──────────────┘              └─────────────────┘
+│   Feed      │
+└─────────────┘
+```
+📁 `07-color-assistant/`
+
+---
+
+### 🔊 Tool 8: Multimodal Fusion — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/08-multimodal-fusion/)
+Combine audio + video for intelligent automation.
+
+```
+┌─────────────┐
+│   Camera    │────┐
+│   (Video)   │    │     ┌─────────────────┐     ┌─────────────┐
+└─────────────┘    ├────▶│  Fusion Engine  │────▶│  Trigger    │
+                   │     │  Video + Audio  │     │  Automation │
+┌─────────────┐    │     │  Confidence: 95%│     └─────────────┘
+│ Microphone  │────┘     └─────────────────┘
+│  (Speech)   │
+└─────────────┘
+
+Example: "Start meeting" + people visible = HIGH confidence → trigger
+```
+📁 `08-multimodal-fusion/`
+
+---
+
+### 🎯 Featured: PTZ Auto-Tracker — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/PTZOptics-Moondream-Tracker/)
+Autonomous PTZ camera tracking using AI vision.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  PTZOptics  │────▶│  Moondream API  │────▶│  Calculate      │
+│   Camera    │     │    /detect      │     │  Pan/Tilt       │
+└─────────────┘     │  "red shirt"    │     │  Commands       │
+      ▲             └─────────────────┘     └────────┬────────┘
+      │                                              │
+      │             ┌─────────────────┐              │
+      └─────────────│  PTZOptics API  │◀─────────────┘
+                    │  Move Camera    │
+                    └─────────────────┘
+```
+📁 `PTZOptics-Moondream-Tracker/`
+
+---
+
+### 🏆 Scoreboard Extractor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04-scoreboard-extractor/)
+Extract scores from physical scoreboards using AI vision.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Scoreboard │────▶│  Moondream API  │────▶│  HOME: 24       │
+│   Camera    │     │  "Read score"   │     │  AWAY: 18       │
+└─────────────┘     └─────────────────┘     │  QTR: 3         │
+                                            └────────┬────────┘
+                                                     │
+                                            ┌────────▼────────┐
+                                            │  Graphics       │
+                                            │  Overlay        │
+                                            └─────────────────┘
+```
+📁 `04-scoreboard-extractor/`
+
+---
+
+### 🖼️ Framing Assistant — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/05-framing-assistant/)
+AI-powered framing suggestions for PTZ cameras.
+
+```
+┌─────────────────────────────────┐
+│         Camera View             │
+│                                 │
+│      ┌ ─ ─ ─ ─ ─ ┐              │
+│      │ Suggested │  ○ subject   │
+│      │  Frame    │              │
+│      └ ─ ─ ─ ─ ─ ┘              │
+└─────────────────────────────────┘
+              │
+              ▼
+    "Move camera UP 5°, 
+     zoom IN 10% for
+     better composition"
+```
+📁 `05-framing-assistant/`
+
+---
+
+### 🎬 Multimodal Studio — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/07-multimodal-studio/)
+Full production automation: PTZ + OBS + Audio + AI.
+
+```
+┌─────────────┐
+│  PTZOptics  │────┐
+│   Camera    │    │
+└─────────────┘    │     ┌─────────────────┐     ┌─────────────┐
+                   ├────▶│    Multimodal   │────▶│  PTZ Move   │
+┌─────────────┐    │     │     Studio      │     ├─────────────┤
+│ Microphone  │────┤     │   Controller    │────▶│  OBS Scene  │
+│  (Voice)    │    │     └─────────────────┘     ├─────────────┤
+└─────────────┘    │                             │  Webhook    │
+                   │                             └─────────────┘
+┌─────────────┐    │
+│     OBS     │────┘
+│   Studio    │
+└─────────────┘
+
+Voice: "Camera 2, close up" → PTZ moves + OBS switches
+```
+📁 `07-multimodal-studio/`
+
+---
+
+### 🔌 OBS Plugin: Visual Reasoning AI — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/obs-visual-reasoning/)
+Complete AI control panel as an OBS Browser Dock.
+
+```
+┌─────────────────────────────────────────────────────┐
+│           OBS BROWSER DOCK                          │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────┬───────────┬────────────┐               │
+│  │Gestures │ Describe  │ Auto-Switch│  ← Tabs       │
+│  └─────────┴───────────┴────────────┘               │
+│                                                     │
+│  ┌─────────────────────────────────┐                │
+│  │        Camera Preview           │                │
+│  │     [Gesture Detection]         │                │
+│  └─────────────────────────────────┘                │
+│                                                     │
+│  👍 Thumbs Up  → Scene: Wide Shot                   │
+│  👎 Thumbs Down → Scene: Close Up                   │
+│                                                     │
+│  Auto-Switch Rules:                                 │
+│  "whiteboard" → Whiteboard Cam                      │
+│  "standing"   → Full Body Shot                      │
+└─────────────────────────────────────────────────────┘
+              │
+              ▼
+    ┌─────────────────┐
+    │   OBS Studio    │
+    │  Scene Switch   │
+    │  Start/Stop Rec │
+    └─────────────────┘
+```
+📁 `obs-visual-reasoning/`
 
 ---
 
 ## Quick Start
 
-### 1. Get Your API Key
-Sign up at [console.moondream.ai](https://console.moondream.ai) (free tier available)
+### Option A: Try Online Instantly (Recommended)
 
-### 2. Clone & Serve
+1. **Get Your API Key** - Sign up at [console.moondream.ai](https://console.moondream.ai) (free tier available)
+2. **Open Any Tool** - Visit the [Visual Reasoning Playground](https://streamgeeks.github.io/visual-reasoning-playground/)
+3. **Enter Your API Key** - Paste it once, and you're ready to go!
+
+### Option B: Run Locally
+
 ```bash
 git clone https://github.com/streamgeeks/visual-reasoning-playground.git
 cd visual-reasoning-playground
-python -m http.server 8000
+python server.py
 ```
-
-### 3. Open Any Tool
-Navigate to `http://localhost:8000/01-scene-describer/` and enter your API key.
-
----
-
-## Tool Highlights
-
-### PTZ Auto-Tracker (Tool 3)
-**The flagship tool** - automatic PTZ camera tracking using Moondream + PTZOptics API.
-
-- Zero-shot tracking: "track the person in the red shirt"
-- Works with any PTZOptics camera
-- Adjustable speed, deadzone, and detection rate
-- Production-ready with operation presets
-
-```
-Camera Input → Moondream Detection → PTZ Commands → Smooth Tracking
-```
-
-[Full documentation →](PTZOptics-Moondream-Tracker/)
-
-### Multimodal Fusion (Tool 8)
-**The most advanced tool** - combines what the camera sees with what the microphone hears.
-
-- Video: Moondream scene understanding
-- Audio: Speech recognition + intent extraction
-- Fusion: Confidence-weighted decision making
-
-**Example**: "Start meeting" + people visible = 95% confidence → trigger room automation
-
-[Full documentation →](08-multimodal-fusion/)
+Then open `http://localhost:8000` and select any tool. The included `server.py` enables CORS so sample videos work with AI detection.
 
 ---
 
@@ -129,18 +356,13 @@ These tools are designed to integrate with your existing workflow:
 
 ## Architecture
 
-All tools follow a consistent pattern:
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Video Source   │────▶│  Moondream API  │────▶│  Your Action    │
-│  (Webcam/NDI)   │     │  (Cloud VLM)    │     │  (PTZ/OBS/etc)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+All tools follow a consistent pattern: **Video → AI → Action**
 
 **Shared utilities** in `shared/`:
-- `moondream-client.js` - Unified API client
-- `styles.css` - Consistent UI components
+- `moondream-client.js` - Unified API client with detect, caption, query, point methods
+- `video-source-adapter.js` - Toggle between live camera and sample videos  
+- `api-key-manager.js` - Secure API key storage and validation
+- `styles.css` - Consistent dark theme UI components
 
 ---
 

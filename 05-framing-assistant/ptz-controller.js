@@ -3,6 +3,7 @@ class PTZController {
         this.cameraIP = cameraIP;
         this.isMoving = false;
         this.speed = { pan: 8, tilt: 8 };
+        this.moveDuration = 500; // ms before stop command
     }
 
     setCameraIP(ip) {
@@ -103,7 +104,7 @@ class PTZController {
                 if (onProgress) onProgress('Panning left...');
                 await this.panLeft();
             }
-            await this.delay(300);
+            await this.delay(this.moveDuration);
             await this.stop();
         }
 
@@ -115,7 +116,7 @@ class PTZController {
                 if (onProgress) onProgress('Tilting up...');
                 await this.tiltUp();
             }
-            await this.delay(300);
+            await this.delay(this.moveDuration);
             await this.stop();
         }
 

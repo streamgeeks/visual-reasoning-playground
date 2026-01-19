@@ -33,6 +33,17 @@
         <h2>PTZOptics Moondream Tracker</h2>
         
         <div class="control-group">
+            <label for="webcamSelect">Video Source:</label>
+            <div style="display: flex; gap: 8px;">
+                <select id="webcamSelect" class="settings-input" style="flex: 1;">
+                    <option value="">Loading cameras...</option>
+                </select>
+                <button type="button" id="refreshCamerasBtn" class="btn" style="padding: 8px 12px;">🔄</button>
+            </div>
+            <small>Select which webcam to use for tracking</small>
+        </div>
+        
+        <div class="control-group">
             <label for="targetObject">Target Object:</label>
             <input type="text" id="targetObject" class="settings-input" placeholder="e.g., person, ball, hand" />
             <small>Describe what you want to track (e.g., "person", "red ball", "coffee mug")</small>

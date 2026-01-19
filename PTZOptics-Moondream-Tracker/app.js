@@ -62,6 +62,7 @@ $(function () {
         targetObject: localStorage.getItem('targetObject') || '',
         operationStyle: localStorage.getItem('operationStyle') || 'balanced',
         detectionRate: parseFloat(localStorage.getItem('detectionRate')) || 1.0,
+        selectedWebcam: localStorage.getItem('selectedWebcam') || '',
         cameraWidth: 1920,
         cameraHeight: 1080,
         panSpeed: parseInt(localStorage.getItem('panSpeed')) || 5,
@@ -71,9 +72,42 @@ $(function () {
         deadzoneX: parseFloat(localStorage.getItem('deadzoneX')) || 5,
         deadzoneY: parseFloat(localStorage.getItem('deadzoneY')) || 5
     };
+    
+    let availableCameras = [];
 
     let prevTime;
     let pastFrameTimes = [];
+
+    async function enumerateCameras() {
+        try {
+            await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            availableCameras = devices.filter(device => device.kind === 'videoinput');
+            
+            const $select = $('#webcamSelect');
+            $select.empty();
+            
+            if (availableCameras.length === 0) {
+                $select.append('<option value="">No cameras found</option>');
+                return;
+            }
+            
+            availableCameras.forEach((camera, index) => {
+                const label = camera.label || `Camera ${index + 1}`;
+                const selected = camera.deviceId === settings.selectedWebcam ? 'selected' : '';
+                $select.append(`<option value="${camera.deviceId}" ${selected}>${label}</option>`);
+            });
+            
+            if (!settings.selectedWebcam && availableCameras.length > 0) {
+                settings.selectedWebcam = availableCameras[0].deviceId;
+            }
+            
+            window.reasoningConsole.logInfo(`Found ${availableCameras.length} camera(s)`);
+        } catch (error) {
+            $('#webcamSelect').html('<option value="">Camera access denied</option>');
+            window.reasoningConsole.logError('Failed to enumerate cameras: ' + error.message);
+        }
+    }
 
     async function init() {
         video = $('#video')[0];
@@ -136,6 +170,7 @@ $(function () {
         
         setupEventListeners();
         
+        await enumerateCameras();
         await startVideoStream();
         
         resizeCanvas();
@@ -147,6 +182,18 @@ $(function () {
     }
 
     function setupEventListeners() {
+        $('#webcamSelect').on('change', async function() {
+            settings.selectedWebcam = $(this).val();
+            localStorage.setItem('selectedWebcam', settings.selectedWebcam);
+            window.reasoningConsole.logInfo('Switching webcam...');
+            await startVideoStream();
+        });
+        
+        $('#refreshCamerasBtn').on('click', async function() {
+            window.reasoningConsole.logInfo('Refreshing camera list...');
+            await enumerateCameras();
+        });
+        
         $('#cameraIP').on('change', function() {
             settings.cameraIP = $(this).val();
             localStorage.setItem('cameraIP', settings.cameraIP);
@@ -301,18 +348,31 @@ $(function () {
 
     async function startVideoStream() {
         try {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+            
             window.reasoningConsole.logInfo('Requesting camera access...');
+            
+            const videoConstraints = {
+                width: settings.cameraWidth,
+                height: settings.cameraHeight
+            };
+            
+            if (settings.selectedWebcam) {
+                videoConstraints.deviceId = { exact: settings.selectedWebcam };
+            }
+            
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
-                video: {
-                    width: settings.cameraWidth,
-                    height: settings.cameraHeight,
-                    facingMode: 'environment'
-                }
+                video: videoConstraints
             });
             
             video.srcObject = stream;
-            window.reasoningConsole.logInfo('Camera stream established');
+            
+            const track = stream.getVideoTracks()[0];
+            const cameraLabel = track.label || 'Unknown camera';
+            window.reasoningConsole.logInfo(`Camera stream established: ${cameraLabel}`);
             
             return new Promise((resolve) => {
                 video.onloadeddata = function () {

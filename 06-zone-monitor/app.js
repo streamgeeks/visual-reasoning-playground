@@ -204,21 +204,36 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     };
 
+    function captureSnapshot() {
+        const snapCanvas = document.createElement('canvas');
+        snapCanvas.width = 160;
+        snapCanvas.height = 90;
+        const snapCtx = snapCanvas.getContext('2d');
+        snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
+        return snapCanvas.toDataURL('image/jpeg', 0.7);
+    }
+
     function addAlert(zone, objects) {
         const timestamp = new Date().toLocaleTimeString();
+        const snapshot = captureSnapshot();
+        
         alerts.unshift({
             zone: zone.name,
             target: zone.target,
             count: objects.length,
-            timestamp
+            timestamp,
+            snapshot
         });
 
         if (alerts.length > 20) alerts.pop();
 
         alertLogDiv.innerHTML = alerts.map(a => `
             <div class="alert-item">
-                <strong>${a.zone}</strong>: ${a.count} ${a.target}(s) detected
-                <span style="float: right">${a.timestamp}</span>
+                <img src="${a.snapshot}" alt="Detection snapshot" class="alert-thumbnail">
+                <div class="alert-details">
+                    <strong>${a.zone}</strong>: ${a.count} ${a.target}(s) detected
+                    <div class="alert-time">${a.timestamp}</div>
+                </div>
             </div>
         `).join('');
 

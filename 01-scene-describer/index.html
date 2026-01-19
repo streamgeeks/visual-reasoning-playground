@@ -296,6 +296,218 @@
                 right: 15px !important;
             }
         }
+
+        .detection-section {
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .detection-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .detection-header:hover {
+            background: var(--surface-light);
+        }
+
+        .detection-header h3 {
+            margin: 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .collapse-icon {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            transition: transform 0.2s;
+        }
+
+        .detection-section.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .detection-section.collapsed .detection-content {
+            display: none;
+        }
+
+        .detection-content {
+            padding: 0 15px 15px 15px;
+        }
+
+        #detectionList {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .detection-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+        }
+
+        .detection-row input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .detection-row input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .detection-row input[type="text"]::placeholder {
+            color: var(--text-muted);
+        }
+
+        .detection-row input[type="color"] {
+            width: 36px;
+            height: 36px;
+            padding: 2px;
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            cursor: pointer;
+            background: var(--surface);
+        }
+
+        .detection-row input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .detection-row input[type="color"]::-webkit-color-swatch {
+            border-radius: 2px;
+            border: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--surface-light);
+            transition: 0.2s;
+            border-radius: 22px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--primary);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(18px);
+        }
+
+        .btn-delete-detection {
+            padding: 6px 10px;
+            background: transparent;
+            border: 1px solid var(--error);
+            border-radius: 4px;
+            color: var(--error);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .btn-delete-detection:hover {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-add-detection {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px dashed var(--surface-light);
+            border-radius: 6px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-add-detection:hover:not(:disabled) {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-add-detection:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .detection-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 12px;
+        }
+
+        .detection-controls .btn-primary {
+            flex: 0 0 auto;
+            padding: 10px 20px;
+        }
+
+        .video-container {
+            position: relative;
+        }
+
+        .video-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .detection-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-left: auto;
+            padding-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -309,6 +521,7 @@
         <div class="video-section">
             <div class="video-container">
                 <video id="video" autoplay muted playsinline></video>
+                <canvas id="detectionCanvas"></canvas>
                 <div class="camera-controls">
                     <select id="cameraSelect">
                         <option value="">Select Camera...</option>
@@ -322,6 +535,26 @@
                 <div class="question-input-group">
                     <input type="text" id="questionInput" placeholder="e.g., How many people are in the frame? What color is the object on the left?">
                     <button id="askBtn" class="btn btn-secondary">Ask</button>
+                </div>
+            </div>
+
+            <div class="detection-section">
+                <div class="detection-header" id="detectionToggle">
+                    <h3>📦 Draw Detection Boxes</h3>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div class="detection-content" id="detectionContent">
+                    <div id="detectionList">
+                        <!-- Detection rows will be added here -->
+                    </div>
+                    <button id="addDetectionBtn" class="btn btn-add-detection">+ Add Detection</button>
+                    <div class="detection-controls">
+                        <button id="detectNowBtn" class="btn btn-primary">Detect Now</button>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoDetect">
+                            Auto-detect
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>

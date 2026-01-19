@@ -17,7 +17,22 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     let client = null;
     let autoDescribeInterval = null;
+    let autoDetectInterval = null;
     let currentStream = null;
+
+    const DEFAULT_COLORS = ['#93CCEA', '#2A9D8F', '#E9C46A', '#E76F51', '#9B5DE5'];
+    const MAX_DETECTIONS = 5;
+    let detections = [];
+    let detectionResults = {};
+    
+    const detectionCanvas = document.getElementById('detectionCanvas');
+    const detectionCtx = detectionCanvas.getContext('2d');
+    const detectionList = document.getElementById('detectionList');
+    const addDetectionBtn = document.getElementById('addDetectionBtn');
+    const detectNowBtn = document.getElementById('detectNowBtn');
+    const autoDetectCheckbox = document.getElementById('autoDetect');
+    const detectionToggle = document.getElementById('detectionToggle');
+    const detectionSection = document.querySelector('.detection-section');
 
     window.reasoningConsole = new ReasoningConsole({
         startCollapsed: false
@@ -330,6 +345,257 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.reasoningConsole.logInfo('Module 1: Foundations of Visual Reasoning AI');
     
     loadSavedPreferences();
+
+    detectionToggle.addEventListener('click', () => {
+        detectionSection.classList.toggle('collapsed');
+        savePreference('detectionCollapsed', detectionSection.classList.contains('collapsed'));
+    });
+
+    function getNextColor() {
+        return DEFAULT_COLORS[detections.length % DEFAULT_COLORS.length];
+    }
+
+    function createDetectionRow(target = '', color = null, enabled = true) {
+        const id = Date.now() + Math.random();
+        const rowColor = color || getNextColor();
+        
+        const row = document.createElement('div');
+        row.className = 'detection-row';
+        row.dataset.id = id;
+        
+        row.innerHTML = `
+            <input type="text" placeholder="e.g., person, red car, coffee mug" value="${target}">
+            <input type="color" value="${rowColor}">
+            <label class="toggle-switch">
+                <input type="checkbox" ${enabled ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+            </label>
+            <button class="btn-delete-detection">✕</button>
+        `;
+        
+        const textInput = row.querySelector('input[type="text"]');
+        const colorInput = row.querySelector('input[type="color"]');
+        const toggleInput = row.querySelector('input[type="checkbox"]');
+        const deleteBtn = row.querySelector('.btn-delete-detection');
+        
+        textInput.addEventListener('input', () => {
+            updateDetectionData();
+            clearDetectionResults(id);
+        });
+        colorInput.addEventListener('input', () => {
+            updateDetectionData();
+            drawDetectionBoxes();
+        });
+        toggleInput.addEventListener('change', () => {
+            updateDetectionData();
+            drawDetectionBoxes();
+        });
+        deleteBtn.addEventListener('click', () => {
+            row.remove();
+            delete detectionResults[id];
+            updateDetectionData();
+            drawDetectionBoxes();
+            updateAddButton();
+        });
+        
+        detectionList.appendChild(row);
+        updateDetectionData();
+        updateAddButton();
+        
+        return row;
+    }
+
+    function updateDetectionData() {
+        detections = [];
+        const rows = detectionList.querySelectorAll('.detection-row');
+        rows.forEach(row => {
+            const id = row.dataset.id;
+            const target = row.querySelector('input[type="text"]').value.trim();
+            const color = row.querySelector('input[type="color"]').value;
+            const enabled = row.querySelector('input[type="checkbox"]').checked;
+            detections.push({ id, target, color, enabled });
+        });
+        savePreference('detections', detections);
+    }
+
+    function clearDetectionResults(id) {
+        delete detectionResults[id];
+        drawDetectionBoxes();
+    }
+
+    function updateAddButton() {
+        addDetectionBtn.disabled = detections.length >= MAX_DETECTIONS;
+    }
+
+    function resizeCanvas() {
+        const rect = video.getBoundingClientRect();
+        detectionCanvas.width = rect.width;
+        detectionCanvas.height = rect.height;
+        drawDetectionBoxes();
+    }
+
+    function drawDetectionBoxes() {
+        detectionCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+        
+        const canvasWidth = detectionCanvas.width;
+        const canvasHeight = detectionCanvas.height;
+        
+        detections.forEach(detection => {
+            if (!detection.enabled || !detection.target) return;
+            
+            const results = detectionResults[detection.id];
+            if (!results || !results.objects || results.objects.length === 0) return;
+            
+            const count = results.objects.length;
+            
+            results.objects.forEach((obj, idx) => {
+                const x = obj.x_min * canvasWidth;
+                const y = obj.y_min * canvasHeight;
+                const width = (obj.x_max - obj.x_min) * canvasWidth;
+                const height = (obj.y_max - obj.y_min) * canvasHeight;
+                
+                detectionCtx.strokeStyle = detection.color;
+                detectionCtx.lineWidth = 4;
+                detectionCtx.strokeRect(x, y, width, height);
+                
+                const labelText = count > 1 ? `${detection.target} (${idx + 1})` : detection.target;
+                detectionCtx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+                const textMetrics = detectionCtx.measureText(labelText);
+                const labelPadX = 10;
+                const labelPadY = 6;
+                const labelHeight = 14 + labelPadY * 2;
+                const labelWidth = textMetrics.width + labelPadX * 2;
+                
+                const labelX = x;
+                const labelY = y - labelHeight;
+                
+                detectionCtx.fillStyle = detection.color;
+                detectionCtx.beginPath();
+                detectionCtx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+                detectionCtx.fill();
+                
+                detectionCtx.fillStyle = '#FFFFFF';
+                detectionCtx.fillText(labelText, labelX + labelPadX, labelY + labelPadY + 12);
+            });
+        });
+    }
+
+    async function runDetection() {
+        if (!client) {
+            window.reasoningConsole.logError('No API key configured');
+            updateStatus('Please configure your Moondream API key', 'error');
+            window.apiKeyManager.showModal();
+            return;
+        }
+        
+        const activeDetections = detections.filter(d => d.enabled && d.target);
+        if (activeDetections.length === 0) {
+            window.reasoningConsole.logInfo('No active detections configured');
+            return;
+        }
+        
+        detectNowBtn.disabled = true;
+        updateStatus('Running detection...');
+        
+        const startTime = Date.now();
+        
+        try {
+            const promises = activeDetections.map(async (detection) => {
+                try {
+                    const result = await client.detectInVideo(video, detection.target);
+                    detectionResults[detection.id] = result;
+                    window.reasoningConsole.logInfo(`Detected ${result.objects.length} "${detection.target}"`);
+                    return { id: detection.id, success: true, count: result.objects.length };
+                } catch (error) {
+                    window.reasoningConsole.logError(`Detection failed for "${detection.target}": ${error.message}`);
+                    return { id: detection.id, success: false, error: error.message };
+                }
+            });
+            
+            const results = await Promise.all(promises);
+            const elapsed = Date.now() - startTime;
+            
+            drawDetectionBoxes();
+            
+            const successCount = results.filter(r => r.success).length;
+            const totalObjects = results.filter(r => r.success).reduce((sum, r) => sum + r.count, 0);
+            
+            updateStatus(`Detected ${totalObjects} object(s) across ${successCount} target(s) in ${elapsed}ms`, 'success');
+            window.reasoningConsole.logDecision('Detection complete', `${totalObjects} objects found in ${elapsed}ms`);
+            
+            updateJsonOutput({
+                type: 'object_detection',
+                timestamp: new Date().toISOString(),
+                latency_ms: elapsed,
+                detections: activeDetections.map(d => ({
+                    target: d.target,
+                    color: d.color,
+                    results: detectionResults[d.id]
+                }))
+            });
+            
+        } catch (error) {
+            window.reasoningConsole.logError(error.message);
+            updateStatus('Detection error: ' + error.message, 'error');
+        } finally {
+            detectNowBtn.disabled = false;
+        }
+    }
+
+    function toggleAutoDetect() {
+        if (autoDetectCheckbox.checked) {
+            const interval = parseInt(autoIntervalInput.value) * 1000;
+            autoDetectInterval = setInterval(runDetection, interval);
+            window.reasoningConsole.logInfo(`Auto-detect enabled: every ${autoIntervalInput.value}s`);
+        } else {
+            clearInterval(autoDetectInterval);
+            autoDetectInterval = null;
+            window.reasoningConsole.logInfo('Auto-detect disabled');
+        }
+    }
+
+    addDetectionBtn.addEventListener('click', () => {
+        if (detections.length < MAX_DETECTIONS) {
+            createDetectionRow();
+        }
+    });
+
+    detectNowBtn.addEventListener('click', runDetection);
+    
+    autoDetectCheckbox.addEventListener('change', () => {
+        savePreference('autoDetect', autoDetectCheckbox.checked);
+        toggleAutoDetect();
+    });
+
+    video.addEventListener('loadedmetadata', resizeCanvas);
+    video.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas);
+
+    function loadDetectionPreferences() {
+        if (window.VRPPrefs) {
+            const collapsed = VRPPrefs.getToolPref(TOOL_ID, 'detectionCollapsed', false);
+            const savedDetections = VRPPrefs.getToolPref(TOOL_ID, 'detections', []);
+            const savedAutoDetect = VRPPrefs.getToolPref(TOOL_ID, 'autoDetect', false);
+            
+            if (collapsed) {
+                detectionSection.classList.add('collapsed');
+            }
+            
+            if (savedDetections.length > 0) {
+                savedDetections.forEach(d => {
+                    createDetectionRow(d.target, d.color, d.enabled);
+                });
+            }
+            
+            autoDetectCheckbox.checked = savedAutoDetect;
+            if (savedAutoDetect) {
+                setTimeout(toggleAutoDetect, 2500);
+            }
+        }
+    }
+    
+    loadDetectionPreferences();
+    setTimeout(resizeCanvas, 500);
 
     if (window.VideoSourceAdapter) {
         VideoSourceAdapter.init({

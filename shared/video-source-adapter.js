@@ -2,9 +2,9 @@
     'use strict';
 
     const SAMPLE_VIDEOS = {
-        'scene-describer': '../assets/sample-videos/scene-describer-demo.mp4',
+        'scene-describer': '../assets/sample-videos/object-tracker-demo.mp4',
         'object-tracker': '../assets/sample-videos/object-tracker-demo.mp4',
-        'detection-boxes': '../assets/sample-videos/object-tracker-demo.mp4',
+        'detection-boxes': '../assets/sample-videos/scene-describer-demo.mp4',
         'gesture-detector': '../assets/sample-videos/gesture-detector-demo.mp4',
         'gesture-obs': '../assets/sample-videos/gesture-detector-demo.mp4',
         'ptz-controller': '../assets/sample-videos/ptz-controller-demo.mp4',
@@ -12,9 +12,9 @@
         'motion-detector': '../assets/sample-videos/motion-detector-demo.mp4',
         'face-detector': '../assets/sample-videos/face-detector-demo.mp4',
         'text-reader': '../assets/sample-videos/text-reader-demo.mp4',
-        'scoreboard-extractor': '../assets/sample-videos/text-reader-demo.mp4',
+        'scoreboard-extractor': '../assets/sample-videos/scoreboard-demo.mp4',
         'zone-monitor': '../assets/sample-videos/motion-detector-demo.mp4',
-        'smart-counter': '../assets/sample-videos/object-tracker-demo.mp4',
+        'smart-counter': '../assets/sample-videos/smart-counter-demo.mp4',
         'scene-analyzer': '../assets/sample-videos/scene-describer-demo.mp4',
         'framing-assistant': '../assets/sample-videos/ptz-controller-demo.mp4',
         'color-assistant': '../assets/sample-videos/color-analyzer-demo.mp4',
@@ -109,17 +109,24 @@
 
     function getToolId() {
         const path = window.location.pathname;
+        
         const match = path.match(/\/(\d+-[^/]+)\/?/);
         if (match) {
             return match[1].replace(/^\d+-/, '');
         }
+        
+        const folderMatch = path.match(/\/([^/]+)\/?$/);
+        if (folderMatch && folderMatch[1] !== '') {
+            return folderMatch[1].replace(/^\d+-/, '');
+        }
+        
         return null;
     }
 
     const VideoSourceAdapter = {
         videoElement: null,
         cameraStream: null,
-        isUsingCamera: true,
+        isUsingCamera: false,
         toolId: null,
         toggleContainer: null,
         badge: null,
@@ -151,8 +158,8 @@
             this.toggleContainer.className = 'vrp-source-toggle';
             this.toggleContainer.innerHTML = `
                 <label>Source:</label>
-                <div class="vrp-source-switch active" id="vrpSourceSwitch"></div>
-                <span class="vrp-source-label" id="vrpSourceLabel">Live Camera</span>
+                <div class="vrp-source-switch" id="vrpSourceSwitch"></div>
+                <span class="vrp-source-label" id="vrpSourceLabel">Sample Video</span>
             `;
 
             const insertTarget = typeof target === 'string' 
@@ -204,6 +211,9 @@
             const labelEl = this.toggleContainer.querySelector('#vrpSourceLabel');
 
             try {
+                this.videoElement.removeAttribute('crossOrigin');
+                this.videoElement.src = '';
+                
                 if (this.cameraStream) {
                     this.videoElement.srcObject = this.cameraStream;
                 } else {
@@ -242,6 +252,8 @@
             const labelEl = this.toggleContainer.querySelector('#vrpSourceLabel');
             const videoUrl = SAMPLE_VIDEOS[this.toolId];
 
+            console.log('VideoSourceAdapter: toolId =', this.toolId, 'videoUrl =', videoUrl);
+
             if (!videoUrl) {
                 console.error('No sample video for tool:', this.toolId);
                 if (window.VRPUtils) {
@@ -250,19 +262,33 @@
                 return;
             }
 
-            if (this.cameraStream) {
+            if (this.videoElement.srcObject) {
+                const tracks = this.videoElement.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
                 this.videoElement.srcObject = null;
             }
+            if (this.cameraStream) {
+                this.cameraStream.getTracks().forEach(track => track.stop());
+                this.cameraStream = null;
+            }
 
-            this.videoElement.src = videoUrl;
+            this.videoElement.crossOrigin = 'anonymous';
             this.videoElement.loop = true;
             this.videoElement.muted = true;
+            this.videoElement.playsInline = true;
+            this.videoElement.src = videoUrl;
+            this.videoElement.load();
             
-            try {
-                await this.videoElement.play();
-            } catch (e) {
-                console.warn('Auto-play blocked, user interaction needed');
-            }
+            this.videoElement.onerror = (e) => {
+                console.error('Video load error:', e, videoUrl);
+            };
+            
+            this.videoElement.oncanplay = () => {
+                console.log('VideoSourceAdapter: Video can play');
+                this.videoElement.play().catch(e => {
+                    console.warn('Auto-play blocked:', e);
+                });
+            };
 
             this.isUsingCamera = false;
             switchEl.classList.remove('active');
@@ -304,8 +330,8 @@
                 insertInto: cameraControls || video.parentElement
             });
 
-            this.switchToCamera().catch(() => {
-                this.switchToSample();
+            this.switchToSample().catch(() => {
+                this.switchToCamera();
             });
 
             return true;
@@ -321,8 +347,8 @@
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', autoInitOnReady);
+        document.addEventListener('DOMContentLoaded', () => setTimeout(autoInitOnReady, 500));
     } else {
-        setTimeout(autoInitOnReady, 100);
+        setTimeout(autoInitOnReady, 500);
     }
 })();
