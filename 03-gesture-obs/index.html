@@ -448,6 +448,65 @@
                 max-height: none;
             }
         }
+
+        .plugin-banner {
+            background: linear-gradient(135deg, rgba(48, 102, 190, 0.15) 0%, rgba(42, 157, 143, 0.15) 100%);
+            border: 1px solid rgba(48, 102, 190, 0.3);
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin: 0 20px 10px 20px;
+            max-width: 1360px;
+            margin-left: auto;
+            margin-right: auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .plugin-banner-text {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .plugin-banner-text .icon {
+            font-size: 1.5rem;
+        }
+
+        .plugin-banner-text strong {
+            color: var(--primary-light);
+        }
+
+        .plugin-banner-text span {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .plugin-banner-btn {
+            padding: 8px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+
+        .plugin-banner-btn:hover {
+            background: #2555a3;
+        }
+
+        @media (max-width: 600px) {
+            .plugin-banner {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -456,6 +515,18 @@
         <p class="subtitle">Control OBS with hand gestures</p>
         <a href="../" class="project-link">← Back to Playground</a>
     </header>
+
+    <div class="plugin-banner">
+        <div class="plugin-banner-text">
+            <span class="icon">🔌</span>
+            <div>
+                <strong>OBS Studio Script Available!</strong>
+                <span>Install directly in OBS - no browser needed</span>
+            </div>
+        </div>
+        <a href="https://github.com/streamgeeks/visual-reasoning-playground/blob/master/03-gesture-obs/moondream-gesture-control.py" 
+           target="_blank" class="plugin-banner-btn">Download Script →</a>
+    </div>
 
     <div class="main-layout">
         <div class="video-section">

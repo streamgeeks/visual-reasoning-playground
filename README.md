@@ -83,6 +83,9 @@ Control OBS scene switching with hand gestures.
                                             │   Scene 1 → 2   │
                                             └─────────────────┘
 ```
+
+> 🔌 **OBS Script Available!** Install directly in OBS Studio: [moondream-gesture-control.py](https://github.com/streamgeeks/visual-reasoning-playground/blob/master/03-gesture-obs/moondream-gesture-control.py)
+
 📁 `03-gesture-obs/`
 
 ---
@@ -364,12 +367,40 @@ These tools are designed to integrate with your existing workflow:
 
 | Platform | Integration |
 |----------|-------------|
-| **OBS Studio** | WebSocket triggers, scene switching |
+| **OBS Studio** | WebSocket triggers, scene switching, **native Python script** |
 | **vMix** | HTTP API commands, input control |
 | **PTZOptics** | Full API 2.0 support for all PTZ cameras |
 | **NDI** | Works with NDI video sources |
 | **Webhooks** | Trigger any HTTP endpoint |
 | **Home Assistant** | Smart home automation |
+
+---
+
+## OBS Studio Plugin
+
+### Moondream Gesture Control Script
+
+Control OBS scenes with hand gestures - runs natively inside OBS Studio!
+
+**Installation:**
+1. Download [`moondream-gesture-control.py`](https://github.com/streamgeeks/visual-reasoning-playground/blob/master/03-gesture-obs/moondream-gesture-control.py)
+2. In OBS: **Tools → Scripts → + → Select the .py file**
+3. Configure your Moondream API key and gesture mappings
+4. Enable detection and start gesturing!
+
+**Features:**
+- 👍 Thumbs up → Switch to Scene A
+- 👎 Thumbs down → Switch to Scene B
+- Configurable detection interval and cooldown
+- Debug mode for troubleshooting
+- No browser required - runs entirely within OBS
+
+**Requirements:**
+- OBS Studio 28.0 or later
+- Moondream API key ([get one free](https://moondream.ai))
+- Webcam
+
+> 💡 **Try before installing:** Use the [web demo](https://streamgeeks.github.io/visual-reasoning-playground/03-gesture-obs/) to test gesture detection before installing the OBS script.
 
 ---
 
