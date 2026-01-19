@@ -293,6 +293,40 @@ $(function () {
         $('#stopBtn').on('click', stopTracking);
         
         $(window).on('resize', resizeCanvas);
+        
+        setupManualPTZControls();
+    }
+    
+    function setupManualPTZControls() {
+        const ptzButtons = {
+            '#ptzUp': () => ptzController.tiltUp(),
+            '#ptzDown': () => ptzController.tiltDown(),
+            '#ptzLeft': () => ptzController.panLeft(),
+            '#ptzRight': () => ptzController.panRight(),
+            '#ptzZoomIn': () => ptzController.zoomIn(),
+            '#ptzZoomOut': () => ptzController.zoomOut(),
+            '#ptzHome': () => ptzController.home()
+        };
+        
+        Object.entries(ptzButtons).forEach(([selector, action]) => {
+            const $btn = $(selector);
+            
+            $btn.on('mousedown touchstart', async function(e) {
+                e.preventDefault();
+                if (!settings.cameraIP) {
+                    updateStatus('Enter PTZ camera IP first', true);
+                    return;
+                }
+                await action();
+            });
+            
+            $btn.on('mouseup mouseleave touchend', async function(e) {
+                e.preventDefault();
+                if (selector !== '#ptzHome' && ptzController) {
+                    await ptzController.stop();
+                }
+            });
+        });
     }
 
     function applyOperationPreset(style) {

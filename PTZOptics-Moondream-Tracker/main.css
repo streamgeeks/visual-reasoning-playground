@@ -386,3 +386,128 @@ video, canvas {
 #fps:after {
     content: " detections/sec";
 }
+
+/* Manual PTZ Controls */
+.manual-ptz-section {
+    margin-top: 20px;
+    border-top: 1px solid rgba(147, 204, 234, 0.3);
+    padding-top: 15px;
+}
+
+.ptz-controls-grid {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.ptz-dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    gap: 4px;
+}
+
+.ptz-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #3066BE;
+    border-radius: 6px;
+    background: rgba(147, 204, 234, 0.15);
+    color: #93CCEA;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ptz-btn:hover {
+    background: rgba(147, 204, 234, 0.3);
+    border-color: #93CCEA;
+    box-shadow: 0 0 8px rgba(147, 204, 234, 0.4);
+}
+
+.ptz-btn:active {
+    background: #3066BE;
+    color: white;
+    transform: scale(0.95);
+}
+
+.ptz-up { grid-column: 2; grid-row: 1; }
+.ptz-left { grid-column: 1; grid-row: 2; }
+.ptz-home { grid-column: 2; grid-row: 2; font-size: 18px; }
+.ptz-right { grid-column: 3; grid-row: 2; }
+.ptz-down { grid-column: 2; grid-row: 3; }
+
+.zoom-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.zoom-label {
+    font-size: 0.75em;
+    color: #939598;
+    text-transform: uppercase;
+}
+
+.ptz-zoom {
+    width: 44px;
+    height: 36px;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* Performance Note */
+.performance-note {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(147, 204, 234, 0.08);
+    border: 1px solid rgba(147, 204, 234, 0.25);
+    border-radius: 6px;
+}
+
+.performance-note p {
+    margin: 10px 0;
+    font-size: 0.85em;
+    color: #ccc;
+    line-height: 1.5;
+}
+
+.performance-note ol {
+    margin: 10px 0;
+    padding-left: 20px;
+    font-size: 0.8em;
+    color: #aaa;
+}
+
+.performance-note li {
+    margin: 6px 0;
+}
+
+.performance-note code {
+    background: rgba(0, 0, 51, 0.6);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+    color: #93CCEA;
+}
+
+.docs-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: #93CCEA;
+    font-size: 0.85em;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.docs-link:hover {
+    color: #3066BE;
+    text-decoration: underline;
+}

@@ -135,6 +135,38 @@
         </div>
         
         <div id="status" class="status-message">Initializing...</div>
+        
+        <!-- Manual PTZ Controls -->
+        <div class="manual-ptz-section">
+            <h3 class="section-heading">Manual PTZ Controls</h3>
+            <div class="ptz-controls-grid">
+                <div class="ptz-dpad">
+                    <button id="ptzUp" class="ptz-btn ptz-up" title="Tilt Up">▲</button>
+                    <button id="ptzLeft" class="ptz-btn ptz-left" title="Pan Left">◀</button>
+                    <button id="ptzHome" class="ptz-btn ptz-home" title="Home Position">⌂</button>
+                    <button id="ptzRight" class="ptz-btn ptz-right" title="Pan Right">▶</button>
+                    <button id="ptzDown" class="ptz-btn ptz-down" title="Tilt Down">▼</button>
+                </div>
+                <div class="zoom-controls">
+                    <button id="ptzZoomIn" class="ptz-btn ptz-zoom" title="Zoom In">+</button>
+                    <span class="zoom-label">Zoom</span>
+                    <button id="ptzZoomOut" class="ptz-btn ptz-zoom" title="Zoom Out">−</button>
+                </div>
+            </div>
+            <small>Hold buttons to move camera. Release to stop.</small>
+        </div>
+        
+        <!-- Performance Note -->
+        <div class="performance-note">
+            <h3 class="section-heading">⚡ Performance Tip</h3>
+            <p>The Moondream cloud API processes ~1-2 frames/second. For smoother tracking (5-10+ fps), run Moondream locally:</p>
+            <ol>
+                <li>Install: <code>pip install moondream</code></li>
+                <li>Run: <code>moondream serve --host 0.0.0.0 --port 3475</code></li>
+                <li>Use local endpoint in API settings</li>
+            </ol>
+            <a href="https://github.com/vikhyat/moondream" target="_blank" class="docs-link">View Moondream Documentation →</a>
+        </div>
     </div>
     
     <!-- FPS Counter -->

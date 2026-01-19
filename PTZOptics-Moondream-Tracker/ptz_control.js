@@ -37,7 +37,8 @@ class PTZController {
         // Movement speed (adjust based on your camera model)
         this.speed = {
             pan: 5,
-            tilt: 5
+            tilt: 5,
+            zoom: 5
         };
     }
 
@@ -137,6 +138,33 @@ class PTZController {
         console.log('TILTING UP');
         this.isMoving = true;
         return this.sendCommand(`ptzcmd&up&${this.speed.tilt}&${this.speed.tilt}`);
+    }
+
+    /**
+     * Zoom camera in
+     */
+    async zoomIn() {
+        console.log('ZOOMING IN');
+        this.isMoving = true;
+        return this.sendCommand(`ptzcmd&zoomin&${this.speed.zoom}`);
+    }
+
+    /**
+     * Zoom camera out
+     */
+    async zoomOut() {
+        console.log('ZOOMING OUT');
+        this.isMoving = true;
+        return this.sendCommand(`ptzcmd&zoomout&${this.speed.zoom}`);
+    }
+
+    /**
+     * Go to home position
+     */
+    async home() {
+        console.log('GOING HOME');
+        this.isMoving = false;
+        return this.sendCommand('ptzcmd&home');
     }
 
     /**
