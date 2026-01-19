@@ -2,8 +2,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const targetInput = document.getElementById('targetObject');
-    const boxColorInput = document.getElementById('boxColor');
+    const objectTogglesDiv = document.getElementById('objectToggles');
+    const addObjectBtn = document.getElementById('addObjectBtn');
+    const borderThicknessSlider = document.getElementById('borderThickness');
+    const borderValueSpan = document.getElementById('borderValue');
+    const labelSizeSlider = document.getElementById('labelSize');
+    const labelValueSpan = document.getElementById('labelValue');
     const continuousCheckbox = document.getElementById('continuousMode');
     const rateGroup = document.getElementById('rateGroup');
     const rateSlider = document.getElementById('detectionRate');
@@ -18,6 +22,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     let client = null;
     let detectionLoop = null;
     let isRunning = false;
+    let detectionResults = {};
+
+    const DEFAULT_COLORS = ['#93CCEA', '#2A9D8F', '#E9C46A', '#E76F51', '#9B5DE5', '#F72585'];
+    
+    const DEFAULT_OBJECTS = [
+        { name: 'Glass of Water', color: '#93CCEA', enabled: true },
+        { name: 'Laptop', color: '#2A9D8F', enabled: true },
+        { name: 'Coffee', color: '#E9C46A', enabled: true }
+    ];
+
+    let objects = [];
+    let styleSettings = {
+        borderThickness: 4,
+        labelSize: 18
+    };
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -37,8 +56,102 @@ document.addEventListener('DOMContentLoaded', async function() {
         client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
     }
 
-    const savedTarget = localStorage.getItem('detectionTarget');
-    if (savedTarget) targetInput.value = savedTarget;
+    function loadPreferences() {
+        const savedObjects = localStorage.getItem('detectionBoxObjects');
+        const savedStyle = localStorage.getItem('detectionBoxStyle');
+        
+        if (savedObjects) {
+            objects = JSON.parse(savedObjects);
+        } else {
+            objects = DEFAULT_OBJECTS.map(o => ({ ...o }));
+        }
+        
+        if (savedStyle) {
+            styleSettings = JSON.parse(savedStyle);
+        }
+        
+        borderThicknessSlider.value = styleSettings.borderThickness;
+        borderValueSpan.textContent = styleSettings.borderThickness + 'px';
+        labelSizeSlider.value = styleSettings.labelSize;
+        labelValueSpan.textContent = styleSettings.labelSize + 'px';
+        
+        renderObjectToggles();
+    }
+
+    function savePreferences() {
+        localStorage.setItem('detectionBoxObjects', JSON.stringify(objects));
+        localStorage.setItem('detectionBoxStyle', JSON.stringify(styleSettings));
+    }
+
+    function getNextColor() {
+        return DEFAULT_COLORS[objects.length % DEFAULT_COLORS.length];
+    }
+
+    function renderObjectToggles() {
+        objectTogglesDiv.innerHTML = '';
+        
+        objects.forEach((obj, index) => {
+            const toggle = document.createElement('div');
+            toggle.className = 'object-toggle';
+            toggle.innerHTML = `
+                <input type="checkbox" ${obj.enabled ? 'checked' : ''} data-index="${index}">
+                <input type="text" value="${obj.name}" data-index="${index}" placeholder="Object name">
+                <input type="color" value="${obj.color}" data-index="${index}">
+                <button class="btn-remove" data-index="${index}">✕</button>
+            `;
+            objectTogglesDiv.appendChild(toggle);
+        });
+        
+        objectTogglesDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                objects[idx].enabled = e.target.checked;
+                savePreferences();
+            });
+        });
+        
+        objectTogglesDiv.querySelectorAll('input[type="text"]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                objects[idx].name = e.target.value;
+                savePreferences();
+            });
+        });
+        
+        objectTogglesDiv.querySelectorAll('input[type="color"]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                objects[idx].color = e.target.value;
+                savePreferences();
+                drawAllDetections();
+            });
+        });
+        
+        objectTogglesDiv.querySelectorAll('.btn-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                objects.splice(idx, 1);
+                savePreferences();
+                renderObjectToggles();
+                drawAllDetections();
+            });
+        });
+    }
+
+    function addObject(name = '', color = null) {
+        objects.push({
+            name: name,
+            color: color || getNextColor(),
+            enabled: true
+        });
+        savePreferences();
+        renderObjectToggles();
+        
+        const inputs = objectTogglesDiv.querySelectorAll('input[type="text"]');
+        if (inputs.length > 0 && !name) {
+            inputs[inputs.length - 1].focus();
+        }
+    }
 
     async function startCamera() {
         try {
@@ -65,7 +178,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         statusBar.className = 'status-bar' + (isError ? ' error' : '');
     }
 
-    async function detect() {
+    async function detectAll() {
         if (!client) {
             window.reasoningConsole.logError('No API key configured');
             updateStatus('Please configure your API key', true);
@@ -73,106 +186,143 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
 
-        if (!targetInput.value) {
-            window.reasoningConsole.logError('No target object specified');
-            updateStatus('Please enter an object to detect', true);
+        const enabledObjects = objects.filter(o => o.enabled && o.name.trim());
+        
+        if (enabledObjects.length === 0) {
+            window.reasoningConsole.logError('No objects enabled for detection');
+            updateStatus('Please enable at least one object to detect', true);
             return;
         }
-
-        localStorage.setItem('detectionTarget', targetInput.value);
 
         const startTime = Date.now();
         updateStatus('Detecting...');
-        window.reasoningConsole.logInfo(`Searching for "${targetInput.value}"...`);
-
+        
+        detectBtn.disabled = true;
+        
         try {
-            const result = await client.detectInVideo(video, targetInput.value);
-            const elapsed = Date.now() - startTime;
-
-            window.reasoningConsole.logApiCall('/detect', elapsed);
-
-            detectTimeSpan.textContent = elapsed + 'ms';
-            objectCountSpan.textContent = result.objects.length;
-
-            const avgConfidence = result.objects.length > 0 
-                ? result.objects.reduce((sum, o) => sum + (o.confidence || 1), 0) / result.objects.length 
-                : 0;
-
-            window.reasoningConsole.logDetection(
-                targetInput.value, 
-                result.objects.length, 
-                avgConfidence,
-                result.objects.length > 0 ? `positions logged` : ''
-            );
-
-            result.objects.forEach((obj, i) => {
-                window.reasoningConsole.logInfo(
-                    `Object #${i+1}: center (${(obj.x * 100).toFixed(1)}%, ${(obj.y * 100).toFixed(1)}%), ` +
-                    `size ${(obj.width * 100).toFixed(1)}% x ${(obj.height * 100).toFixed(1)}%`
-                );
+            const promises = enabledObjects.map(async (obj) => {
+                try {
+                    const result = await client.detectInVideo(video, obj.name);
+                    detectionResults[obj.name] = {
+                        objects: result.objects,
+                        color: obj.color
+                    };
+                    return { name: obj.name, count: result.objects.length, success: true };
+                } catch (error) {
+                    window.reasoningConsole.logError(`Detection failed for "${obj.name}": ${error.message}`);
+                    return { name: obj.name, count: 0, success: false, error: error.message };
+                }
             });
-
-            drawDetections(result.objects);
-            displayDetectionList(result.objects);
-
-            if (result.objects.length > 0) {
-                updateStatus(`Found ${result.objects.length} object(s) in ${elapsed}ms`);
+            
+            const results = await Promise.all(promises);
+            const elapsed = Date.now() - startTime;
+            
+            window.reasoningConsole.logApiCall('/detect', elapsed);
+            
+            const totalCount = results.reduce((sum, r) => sum + r.count, 0);
+            objectCountSpan.textContent = totalCount;
+            detectTimeSpan.textContent = elapsed + 'ms';
+            
+            results.forEach(r => {
+                if (r.success) {
+                    window.reasoningConsole.logInfo(`Found ${r.count} "${r.name}"`);
+                }
+            });
+            
+            drawAllDetections();
+            displayDetectionList();
+            
+            if (totalCount > 0) {
+                updateStatus(`Found ${totalCount} object(s) in ${elapsed}ms`);
             } else {
-                updateStatus(`No "${targetInput.value}" found (${elapsed}ms)`);
+                updateStatus(`No objects found (${elapsed}ms)`);
             }
-
+            
         } catch (error) {
             window.reasoningConsole.logError(error.message);
             updateStatus('Error: ' + error.message, true);
+        } finally {
+            detectBtn.disabled = false;
         }
     }
 
-    function drawDetections(objects) {
+    function drawAllDetections() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        const color = boxColorInput.value;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.font = '16px sans-serif';
-
-        objects.forEach((obj, index) => {
-            const x = obj.x_min * canvas.width;
-            const y = obj.y_min * canvas.height;
-            const w = (obj.x_max - obj.x_min) * canvas.width;
-            const h = (obj.y_max - obj.y_min) * canvas.height;
-
-            ctx.strokeRect(x, y, w, h);
-
-            ctx.fillStyle = color;
-            const label = `${targetInput.value} #${index + 1}`;
-            const textWidth = ctx.measureText(label).width;
-            ctx.fillRect(x, y - 20, textWidth + 8, 20);
-
-            ctx.fillStyle = '#000';
-            ctx.fillText(label, x + 4, y - 5);
-
-            ctx.beginPath();
-            ctx.arc(obj.x * canvas.width, obj.y * canvas.height, 5, 0, Math.PI * 2);
-            ctx.fillStyle = color;
-            ctx.fill();
+        const thickness = styleSettings.borderThickness;
+        const fontSize = styleSettings.labelSize;
+        
+        Object.entries(detectionResults).forEach(([name, data]) => {
+            const obj = objects.find(o => o.name === name);
+            if (!obj || !obj.enabled) return;
+            
+            const color = data.color;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = thickness;
+            ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+            
+            data.objects.forEach((detection, index) => {
+                const x = detection.x_min * canvas.width;
+                const y = detection.y_min * canvas.height;
+                const w = (detection.x_max - detection.x_min) * canvas.width;
+                const h = (detection.y_max - detection.y_min) * canvas.height;
+                
+                ctx.strokeRect(x, y, w, h);
+                
+                const label = data.objects.length > 1 ? `${name} #${index + 1}` : name;
+                const textMetrics = ctx.measureText(label);
+                const labelPadX = 8;
+                const labelPadY = 4;
+                const labelHeight = fontSize + labelPadY * 2;
+                const labelWidth = textMetrics.width + labelPadX * 2;
+                
+                const labelX = x;
+                const labelY = y - labelHeight - 2;
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText(label, labelX + labelPadX, labelY + labelPadY + fontSize - 2);
+                
+                ctx.beginPath();
+                ctx.arc(detection.x * canvas.width, detection.y * canvas.height, thickness + 2, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
         });
     }
 
-    function displayDetectionList(objects) {
-        if (objects.length === 0) {
+    function displayDetectionList() {
+        const allDetections = [];
+        
+        Object.entries(detectionResults).forEach(([name, data]) => {
+            const obj = objects.find(o => o.name === name);
+            if (!obj || !obj.enabled) return;
+            
+            data.objects.forEach((detection, index) => {
+                allDetections.push({
+                    name: data.objects.length > 1 ? `${name} #${index + 1}` : name,
+                    confidence: detection.confidence || 1,
+                    color: data.color
+                });
+            });
+        });
+        
+        if (allDetections.length === 0) {
             detectionsDiv.innerHTML = '<p style="color: var(--text-muted)">No objects detected</p>';
             return;
         }
-
-        detectionsDiv.innerHTML = objects.map((obj, i) => {
-            const confidence = Math.round((obj.confidence || 1) * 100);
+        
+        detectionsDiv.innerHTML = allDetections.map(det => {
+            const confidence = Math.round(det.confidence * 100);
             return `
                 <div class="detection-item">
-                    <span>${targetInput.value} #${i + 1}</span>
+                    <span style="color: ${det.color}">${det.name}</span>
                     <span>${confidence}%</span>
                 </div>
                 <div class="confidence-bar">
-                    <div class="confidence-fill" style="width: ${confidence}%"></div>
+                    <div class="confidence-fill" style="width: ${confidence}%; background: ${det.color}"></div>
                 </div>
             `;
         }).join('');
@@ -190,7 +340,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         const loop = async () => {
             if (!isRunning) return;
-            await detect();
+            await detectAll();
             if (isRunning) {
                 detectionLoop = setTimeout(loop, interval);
             }
@@ -207,6 +357,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateStatus('Stopped');
     }
 
+    addObjectBtn.addEventListener('click', () => addObject());
+    
+    borderThicknessSlider.addEventListener('input', () => {
+        styleSettings.borderThickness = parseInt(borderThicknessSlider.value);
+        borderValueSpan.textContent = styleSettings.borderThickness + 'px';
+        savePreferences();
+        drawAllDetections();
+    });
+    
+    labelSizeSlider.addEventListener('input', () => {
+        styleSettings.labelSize = parseInt(labelSizeSlider.value);
+        labelValueSpan.textContent = styleSettings.labelSize + 'px';
+        savePreferences();
+        drawAllDetections();
+    });
+
     continuousCheckbox.addEventListener('change', () => {
         rateGroup.style.display = continuousCheckbox.checked ? 'block' : 'none';
     });
@@ -219,12 +385,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (continuousCheckbox.checked) {
             startContinuous();
         } else {
-            detect();
+            detectAll();
         }
     });
 
     stopBtn.addEventListener('click', stopContinuous);
 
     window.reasoningConsole.logInfo('Detection Box Drawer initialized');
+    
+    loadPreferences();
     await startCamera();
 });

@@ -26,6 +26,106 @@
             background: var(--success);
             border-radius: 2px;
         }
+        .object-toggles {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .object-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+        }
+        .object-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .object-toggle input[type="text"] {
+            flex: 1;
+            padding: 6px 10px;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .object-toggle input[type="color"] {
+            width: 32px;
+            height: 32px;
+            padding: 2px;
+            border: 1px solid var(--surface-light);
+            border-radius: 4px;
+            cursor: pointer;
+            background: var(--surface);
+        }
+        .object-toggle .btn-remove {
+            padding: 4px 8px;
+            background: transparent;
+            border: 1px solid var(--error);
+            border-radius: 4px;
+            color: var(--error);
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .object-toggle .btn-remove:hover {
+            background: var(--error);
+            color: white;
+        }
+        .btn-add-object {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px dashed var(--surface-light);
+            border-radius: 6px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+        .btn-add-object:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .style-settings {
+            background: var(--background);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+        .style-settings h4 {
+            margin: 0 0 12px 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .style-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .style-row:last-child {
+            margin-bottom: 0;
+        }
+        .style-row label {
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .style-row input[type="range"] {
+            width: 120px;
+        }
+        .style-value {
+            min-width: 40px;
+            text-align: right;
+            color: var(--primary-light);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -45,20 +145,29 @@
             </div>
 
             <div class="control-panel">
-                <h2>Settings</h2>
+                <h2>Objects to Detect</h2>
 
-                <div class="control-group">
-                    <label for="targetObject">Object to Detect</label>
-                    <input type="text" id="targetObject" placeholder="e.g., person, cup, phone">
-                    <small>Describe what you want to find</small>
+                <div class="object-toggles" id="objectToggles">
+                    <!-- Object toggles will be added here -->
+                </div>
+                
+                <button id="addObjectBtn" class="btn-add-object">+ Add Custom Object</button>
+
+                <div class="style-settings">
+                    <h4>Box Style</h4>
+                    <div class="style-row">
+                        <label>Border Thickness</label>
+                        <input type="range" id="borderThickness" min="2" max="10" value="4">
+                        <span class="style-value" id="borderValue">4px</span>
+                    </div>
+                    <div class="style-row">
+                        <label>Label Size</label>
+                        <input type="range" id="labelSize" min="14" max="28" value="18">
+                        <span class="style-value" id="labelValue">18px</span>
+                    </div>
                 </div>
 
-                <div class="control-group">
-                    <label for="boxColor">Box Color</label>
-                    <input type="color" id="boxColor" value="#93CCEA">
-                </div>
-
-                <div class="control-group">
+                <div class="control-group" style="margin-top: 15px;">
                     <label>
                         <input type="checkbox" id="continuousMode"> 
                         Continuous detection
