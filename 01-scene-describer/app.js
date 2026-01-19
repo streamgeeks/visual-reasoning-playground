@@ -585,12 +585,16 @@ document.addEventListener('DOMContentLoaded', async function() {
                 savedDetections.forEach(d => {
                     createDetectionRow(d.target, d.color, d.enabled);
                 });
+            } else {
+                createDetectionRow('helmet', '#93CCEA', true);
             }
             
             autoDetectCheckbox.checked = savedAutoDetect;
             if (savedAutoDetect) {
                 setTimeout(toggleAutoDetect, 2500);
             }
+        } else {
+            createDetectionRow('helmet', '#93CCEA', true);
         }
     }
     
