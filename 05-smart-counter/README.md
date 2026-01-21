@@ -1,4 +1,4 @@
-# Tool #4: Smart Counter
+# Tool #5: Smart Counter
 
 **Count objects entering or exiting a space.**
 
@@ -13,7 +13,7 @@ Define a virtual line in the camera view. The system counts objects (people, car
 ## Quick Start
 
 ```bash
-cd 04-smart-counter
+cd 05-smart-counter
 python -m http.server 8000
 # Open http://localhost:8000
 ```
@@ -61,7 +61,7 @@ python -m http.server 8000
 ## Files
 
 ```
-04-smart-counter/
+05-smart-counter/
 ├── index.html    # UI with entry line overlay
 ├── app.js        # Counting and tracking logic
 └── README.md     # This file
@@ -71,7 +71,7 @@ python -m http.server 8000
 
 - [Book Chapter 8: Smart Counter](../../book/chapters/08-smart-counter.md)
 - [Tool #2: Detection Boxes](../02-detection-boxes/)
-- [Tool #6: Zone Monitor](../06-zone-monitor/)
+- [Tool #7: Zone Monitor](../07-zone-monitor/)
 
 ---
 

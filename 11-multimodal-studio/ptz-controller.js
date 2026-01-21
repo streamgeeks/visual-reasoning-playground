@@ -1,12 +1,21 @@
 class PTZController {
-    constructor(cameraIP) {
+    constructor(cameraIP, options = {}) {
         this.cameraIP = cameraIP;
         this.isMoving = false;
         this.speed = { pan: 8, tilt: 8 };
+        this.useAuth = options.useAuth || false;
+        this.username = options.username || '';
+        this.password = options.password || '';
     }
 
     setCameraIP(ip) {
         this.cameraIP = ip;
+    }
+
+    setAuth(useAuth, username = '', password = '') {
+        this.useAuth = useAuth;
+        this.username = username;
+        this.password = password;
     }
 
     async sendCommand(command) {
@@ -18,7 +27,15 @@ class PTZController {
         if (window.reasoningConsole) {
             window.reasoningConsole.logInfo(`PTZ: ${command}`);
         }
-        await fetch(url, { method: 'GET', mode: 'no-cors' });
+        
+        const fetchOptions = { method: 'GET', mode: 'no-cors' };
+        
+        if (this.useAuth && this.username) {
+            const credentials = btoa(`${this.username}:${this.password}`);
+            fetchOptions.headers = { 'Authorization': `Basic ${credentials}` };
+        }
+        
+        await fetch(url, fetchOptions);
         return true;
     }
 

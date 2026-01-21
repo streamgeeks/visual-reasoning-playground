@@ -373,6 +373,22 @@
                     </div>
                 </div>
 
+                <div class="connection-box" style="margin-bottom: 10px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="useAuth" style="width: auto;">
+                        <span>PTZ HTTP Authentication</span>
+                    </label>
+                    <div id="authFields" style="display: none; margin-top: 8px;">
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="authUsername" placeholder="Username" style="flex: 1;">
+                            <input type="password" id="authPassword" placeholder="Password" style="flex: 1;">
+                        </div>
+                        <small style="color: var(--warning); display: block; margin-top: 5px; font-size: 0.7rem;">
+                            Enable if your PTZ camera requires HTTP login
+                        </small>
+                    </div>
+                </div>
+
                 <div class="connection-box" style="margin-bottom: 15px;">
                     <label>OBS WebSocket Password (if set)</label>
                     <input type="password" id="obsPassword" placeholder="Optional">

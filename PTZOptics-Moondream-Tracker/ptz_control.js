@@ -4,9 +4,14 @@
  */
 
 class PTZController {
-    constructor(cameraIP) {
+    constructor(cameraIP, options = {}) {
         this.cameraIP = cameraIP;
         this.isMoving = false;
+        
+        // Authentication settings
+        this.useAuth = options.useAuth || false;
+        this.username = options.username || '';
+        this.password = options.password || '';
         
         // Center offset - adjust where "center" actually is in the frame
         // Values are percentages: 0 = left/top edge, 50 = actual center, 100 = right/bottom edge
@@ -40,6 +45,12 @@ class PTZController {
             tilt: 5,
             zoom: 5
         };
+    }
+
+    setAuth(useAuth, username = '', password = '') {
+        this.useAuth = useAuth;
+        this.username = username;
+        this.password = password;
     }
 
     /**
@@ -77,17 +88,24 @@ class PTZController {
         this.speed = { ...this.speed, ...speed };
     }
 
-    /**
+/**
      * Send HTTP command to PTZ camera
      * @param {string} command - Camera command endpoint
      */
     async sendCommand(command) {
         try {
             const url = `http://${this.cameraIP}/cgi-bin/ptzctrl.cgi?${command}`;
-            const response = await fetch(url, { 
+            const fetchOptions = { 
                 method: 'GET',
-                mode: 'no-cors' // Required for cross-origin camera requests
-            });
+                mode: 'no-cors'
+            };
+            
+            if (this.useAuth && this.username) {
+                const credentials = btoa(`${this.username}:${this.password}`);
+                fetchOptions.headers = { 'Authorization': `Basic ${credentials}` };
+            }
+            
+            const response = await fetch(url, fetchOptions);
             return response;
         } catch (error) {
             console.error('PTZ command error:', error);

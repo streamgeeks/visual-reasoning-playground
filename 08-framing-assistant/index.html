@@ -148,7 +148,7 @@
 <body>
     <header class="app-header">
         <h1>PTZ Framing Assistant</h1>
-        <p class="subtitle">Tool #5a - Auto-frame subjects using AI detection + PTZ camera control</p>
+        <p class="subtitle">Tool #8 - Auto-frame subjects using AI detection + PTZ camera control</p>
         <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
     </header>
 
@@ -181,6 +181,23 @@
                         <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
                     </div>
                     <small id="connectionStatus" class="disconnected">Not connected</small>
+                    
+                    <div class="auth-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="useAuth" style="width: auto;">
+                            <span>Enable HTTP Authentication</span>
+                        </label>
+                        <div id="authFields" style="display: none; margin-top: 10px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                                <input type="text" id="authUsername" placeholder="Username" style="flex: 1;">
+                                <input type="password" id="authPassword" placeholder="Password" style="flex: 1;">
+                            </div>
+                            <small class="auth-note" style="color: var(--warning); display: block;">
+                                If your camera has HTTP authentication enabled, check this box and enter your credentials. 
+                                Default PTZOptics credentials are often admin/admin.
+                            </small>
+                        </div>
+                    </div>
                 </div>
 
                 <h2>Auto-Frame Settings</h2>
@@ -202,6 +219,13 @@
                         <button class="btn btn-secondary zoom-btn" data-zoom="medium">Medium</button>
                         <button class="btn btn-secondary zoom-btn" data-zoom="tight">Tight</button>
                     </div>
+                </div>
+
+                <!-- Deadzone Control -->
+                <div class="control-group">
+                    <label>Center Deadzone: <span id="deadzoneValue">12</span>%</label>
+                    <input type="range" id="deadzoneSlider" min="5" max="25" value="12" style="width: 100%;">
+                    <small>Camera won't move when target is within this zone. Larger = smoother, smaller = tighter tracking.</small>
                 </div>
 
                 <!-- Main Action Button -->

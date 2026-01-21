@@ -148,7 +148,7 @@
 <body>
     <header class="app-header">
         <h1>Color Assistant</h1>
-        <p class="subtitle">Tool #5b - Analyze scene colors and adjust PTZ camera settings</p>
+        <p class="subtitle">Tool #9 - Analyze scene colors and adjust PTZ camera settings</p>
         <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
     </header>
 
@@ -194,6 +194,22 @@
                         <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
                     </div>
                     <small id="connectionStatus" class="disconnected">Not connected</small>
+                    
+                    <div class="auth-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="useAuth" style="width: auto;">
+                            <span>Enable HTTP Authentication</span>
+                        </label>
+                        <div id="authFields" style="display: none; margin-top: 10px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                                <input type="text" id="authUsername" placeholder="Username" style="flex: 1;">
+                                <input type="password" id="authPassword" placeholder="Password" style="flex: 1;">
+                            </div>
+                            <small class="auth-note" style="color: var(--warning); display: block;">
+                                If your camera has HTTP authentication enabled, check this box and enter your credentials.
+                            </small>
+                        </div>
+                    </div>
                 </div>
 
                 <h2>Color Analysis</h2>

@@ -15,7 +15,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const cameraIPInput = document.getElementById('cameraIP');
     const testConnectionBtn = document.getElementById('testConnectionBtn');
     const connectionStatus = document.getElementById('connectionStatus');
+    const useAuthCheckbox = document.getElementById('useAuth');
+    const authFields = document.getElementById('authFields');
+    const authUsernameInput = document.getElementById('authUsername');
+    const authPasswordInput = document.getElementById('authPassword');
     const targetObjectInput = document.getElementById('targetObject');
+    const deadzoneSlider = document.getElementById('deadzoneSlider');
+    const deadzoneValueSpan = document.getElementById('deadzoneValue');
     const autoFrameBtn = document.getElementById('autoFrameBtn');
     const stopBtn = document.getElementById('stopBtn');
     const framingIndicator = document.getElementById('framingIndicator');
@@ -32,6 +38,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     let detectCount = 0;
     let moveCount = 0;
     let currentZoomPreset = 'wide';
+    let deadzone = 0.12;
+    let moveDuration = 350;
 
     // Zoom preset values (PTZOptics absolute zoom positions 0-16384)
     const ZOOM_PRESETS = {
@@ -72,6 +80,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (savedTarget) {
         targetObjectInput.value = savedTarget;
     }
+
+    // Load saved deadzone
+    const savedDeadzone = localStorage.getItem('ptz_deadzone');
+    if (savedDeadzone) {
+        deadzone = parseFloat(savedDeadzone);
+    }
+    deadzoneSlider.value = Math.round(deadzone * 100);
+    deadzoneValueSpan.textContent = Math.round(deadzone * 100);
+
+    // Load saved auth settings
+    const savedUseAuth = localStorage.getItem('ptz_use_auth') === 'true';
+    const savedUsername = localStorage.getItem('ptz_auth_username') || '';
+    const savedPassword = localStorage.getItem('ptz_auth_password') || '';
+    
+    useAuthCheckbox.checked = savedUseAuth;
+    authFields.style.display = savedUseAuth ? 'block' : 'none';
+    authUsernameInput.value = savedUsername;
+    authPasswordInput.value = savedPassword;
+
+    // Toggle auth fields visibility
+    useAuthCheckbox.addEventListener('change', () => {
+        authFields.style.display = useAuthCheckbox.checked ? 'block' : 'none';
+        localStorage.setItem('ptz_use_auth', useAuthCheckbox.checked);
+    });
 
     // ==================== Camera Functions ====================
 
@@ -131,6 +163,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Set overlay size
             overlay.width = video.videoWidth;
             overlay.height = video.videoHeight;
+            
+            drawDeadzone();
 
             updateStatus('Camera ready');
             window.reasoningConsole.logInfo(`Camera started: ${video.videoWidth}x${video.videoHeight}`);
@@ -154,24 +188,36 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         localStorage.setItem('ptz_camera_ip', ip);
-        ptzController = new PTZController(ip);
+        
+        const useAuth = useAuthCheckbox.checked;
+        const username = authUsernameInput.value.trim();
+        const password = authPasswordInput.value;
+        
+        localStorage.setItem('ptz_use_auth', useAuth);
+        localStorage.setItem('ptz_auth_username', username);
+        localStorage.setItem('ptz_auth_password', password);
+        
+        ptzController = new PTZController(ip, {
+            useAuth: useAuth,
+            username: username,
+            password: password
+        });
 
         testConnectionBtn.disabled = true;
         connectionStatus.textContent = 'Testing...';
         connectionStatus.className = '';
 
         try {
-            // Send a stop command as a test (harmless)
             await ptzController.stop();
             
-            connectionStatus.textContent = 'Connected';
+            connectionStatus.textContent = useAuth ? 'Connected (with auth)' : 'Connected';
             connectionStatus.className = 'connected';
             updateStatus('PTZ camera connected');
-            window.reasoningConsole.logInfo(`PTZ connected at ${ip}`);
+            window.reasoningConsole.logInfo(`PTZ connected at ${ip}${useAuth ? ' with authentication' : ''}`);
         } catch (error) {
             connectionStatus.textContent = 'Connection failed';
             connectionStatus.className = 'disconnected';
-            updateStatus('PTZ connection failed', true);
+            updateStatus('PTZ connection failed - check IP and authentication', true);
             window.reasoningConsole.logError('PTZ connection failed: ' + error.message);
         } finally {
             testConnectionBtn.disabled = false;
@@ -319,13 +365,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 const offsetX = objectCenterX - frameCenterX;
                 const offsetY = objectCenterY - frameCenterY;
 
-                // Deadzone - don't move if close enough to center
-                const deadzone = 0.08;
-
                 framingStatusText.textContent = `Found at (${(objectCenterX * 100).toFixed(0)}%, ${(objectCenterY * 100).toFixed(0)}%)`;
 
                 if (Math.abs(offsetX) > deadzone || Math.abs(offsetY) > deadzone) {
-                    await adjustCamera(offsetX, offsetY, deadzone);
+                    await adjustCamera(offsetX, offsetY);
                 } else {
                     framingStatusText.textContent = 'Centered';
                     window.reasoningConsole.logDecision('Object centered', 'No movement needed');
@@ -346,11 +389,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    async function adjustCamera(offsetX, offsetY, deadzone) {
+    async function adjustCamera(offsetX, offsetY) {
         if (!ptzController) return;
 
         try {
-            // Horizontal adjustment
+            let moved = false;
+            
             if (Math.abs(offsetX) > deadzone) {
                 if (offsetX > 0) {
                     window.reasoningConsole.logInfo('Panning right...');
@@ -359,12 +403,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                     window.reasoningConsole.logInfo('Panning left...');
                     await ptzController.panLeft();
                 }
-                await delay(150);
-                await ptzController.stop();
-                moveCount++;
+                moved = true;
             }
 
-            // Vertical adjustment
             if (Math.abs(offsetY) > deadzone) {
                 if (offsetY > 0) {
                     window.reasoningConsole.logInfo('Tilting down...');
@@ -373,12 +414,15 @@ document.addEventListener('DOMContentLoaded', async function() {
                     window.reasoningConsole.logInfo('Tilting up...');
                     await ptzController.tiltUp();
                 }
-                await delay(150);
-                await ptzController.stop();
-                moveCount++;
+                moved = true;
             }
 
-            moveCountSpan.textContent = moveCount;
+            if (moved) {
+                await delay(moveDuration);
+                await ptzController.stop();
+                moveCount++;
+                moveCountSpan.textContent = moveCount;
+            }
 
         } catch (error) {
             window.reasoningConsole.logError('PTZ adjustment failed: ' + error.message);
@@ -389,6 +433,33 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function clearOverlay() {
         ctx.clearRect(0, 0, overlay.width, overlay.height);
+        drawDeadzone();
+    }
+
+    function drawDeadzone() {
+        const centerX = overlay.width / 2;
+        const centerY = overlay.height / 2;
+        const halfWidth = deadzone * overlay.width;
+        const halfHeight = deadzone * overlay.height;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]);
+        ctx.strokeRect(
+            centerX - halfWidth,
+            centerY - halfHeight,
+            halfWidth * 2,
+            halfHeight * 2
+        );
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(
+            centerX - halfWidth,
+            centerY - halfHeight,
+            halfWidth * 2,
+            halfHeight * 2
+        );
     }
 
     function drawDetectionBox(obj, label) {
@@ -458,6 +529,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             }
         });
+    });
+
+    deadzoneSlider.addEventListener('input', () => {
+        const value = parseInt(deadzoneSlider.value);
+        deadzone = value / 100;
+        deadzoneValueSpan.textContent = value;
+        localStorage.setItem('ptz_deadzone', deadzone.toString());
+        clearOverlay();
     });
 
     // Manual PTZ controls

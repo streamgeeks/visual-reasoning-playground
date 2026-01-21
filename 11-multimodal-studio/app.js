@@ -14,6 +14,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     const obsPasswordInput = document.getElementById('obsPassword');
     const ptzStatus = document.getElementById('ptzStatus');
     const obsStatus = document.getElementById('obsStatus');
+    const useAuthCheckbox = document.getElementById('useAuth');
+    const authFields = document.getElementById('authFields');
+    const authUsernameInput = document.getElementById('authUsername');
+    const authPasswordInput = document.getElementById('authPassword');
     const connectBtn = document.getElementById('connectBtn');
     const trackingTargetInput = document.getElementById('trackingTarget');
     const startBtn = document.getElementById('startBtn');
@@ -60,6 +64,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     const savedObsHost = localStorage.getItem('obs_host');
     if (savedObsHost) obsHostInput.value = savedObsHost;
+
+    const savedUseAuth = localStorage.getItem('ptz_use_auth') === 'true';
+    const savedUsername = localStorage.getItem('ptz_auth_username') || '';
+    const savedPassword = localStorage.getItem('ptz_auth_password') || '';
+    
+    useAuthCheckbox.checked = savedUseAuth;
+    authFields.style.display = savedUseAuth ? 'block' : 'none';
+    authUsernameInput.value = savedUsername;
+    authPasswordInput.value = savedPassword;
+
+    useAuthCheckbox.addEventListener('change', () => {
+        authFields.style.display = useAuthCheckbox.checked ? 'block' : 'none';
+        localStorage.setItem('ptz_use_auth', useAuthCheckbox.checked);
+    });
 
     intentParser = new IntentParser();
 
@@ -126,13 +144,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         const ptzIP = ptzIPInput.value.trim();
         if (ptzIP) {
             localStorage.setItem('ptz_camera_ip', ptzIP);
-            ptzController = new PTZController(ptzIP);
+            
+            const useAuth = useAuthCheckbox.checked;
+            const username = authUsernameInput.value.trim();
+            const password = authPasswordInput.value;
+            
+            localStorage.setItem('ptz_use_auth', useAuth);
+            localStorage.setItem('ptz_auth_username', username);
+            localStorage.setItem('ptz_auth_password', password);
+            
+            ptzController = new PTZController(ptzIP, {
+                useAuth: useAuth,
+                username: username,
+                password: password
+            });
             
             try {
                 await ptzController.stop();
-                ptzStatus.textContent = 'Connected';
+                ptzStatus.textContent = useAuth ? 'Connected (auth)' : 'Connected';
                 ptzStatus.className = 'status connected';
-                window.reasoningConsole.logInfo(`PTZ connected at ${ptzIP}`);
+                window.reasoningConsole.logInfo(`PTZ connected at ${ptzIP}${useAuth ? ' with auth' : ''}`);
             } catch (e) {
                 ptzStatus.textContent = 'Connection failed';
                 ptzStatus.className = 'status disconnected';

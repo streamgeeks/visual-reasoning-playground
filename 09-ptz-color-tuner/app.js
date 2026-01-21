@@ -4,6 +4,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     const cameraIPInput = document.getElementById('cameraIP');
     const testConnectionBtn = document.getElementById('testConnectionBtn');
     const connectionStatus = document.getElementById('connectionStatus');
+    const useAuthCheckbox = document.getElementById('useAuth');
+    const authFields = document.getElementById('authFields');
+    const authUsernameInput = document.getElementById('authUsername');
+    const authPasswordInput = document.getElementById('authPassword');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const beforeSnapshot = document.getElementById('beforeSnapshot');
     const afterSnapshot = document.getElementById('afterSnapshot');
@@ -53,6 +57,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (savedCameraIP) {
         cameraIPInput.value = savedCameraIP;
     }
+
+    const savedUseAuth = localStorage.getItem('ptz_use_auth') === 'true';
+    const savedUsername = localStorage.getItem('ptz_auth_username') || '';
+    const savedPassword = localStorage.getItem('ptz_auth_password') || '';
+    
+    useAuthCheckbox.checked = savedUseAuth;
+    authFields.style.display = savedUseAuth ? 'block' : 'none';
+    authUsernameInput.value = savedUsername;
+    authPasswordInput.value = savedPassword;
+
+    useAuthCheckbox.addEventListener('change', () => {
+        authFields.style.display = useAuthCheckbox.checked ? 'block' : 'none';
+        localStorage.setItem('ptz_use_auth', useAuthCheckbox.checked);
+    });
 
     async function enumerateCameras() {
         try {
@@ -117,7 +135,20 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         localStorage.setItem('ptz_camera_ip', ip);
-        colorController = new PTZColorController(ip);
+        
+        const useAuth = useAuthCheckbox.checked;
+        const username = authUsernameInput.value.trim();
+        const password = authPasswordInput.value;
+        
+        localStorage.setItem('ptz_use_auth', useAuth);
+        localStorage.setItem('ptz_auth_username', username);
+        localStorage.setItem('ptz_auth_password', password);
+        
+        colorController = new PTZColorController(ip, {
+            useAuth: useAuth,
+            username: username,
+            password: password
+        });
 
         testConnectionBtn.disabled = true;
         connectionStatus.textContent = 'Testing...';
@@ -125,14 +156,14 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         try {
             await colorController.setBrightness(8);
-            connectionStatus.textContent = 'Connected';
+            connectionStatus.textContent = useAuth ? 'Connected (with auth)' : 'Connected';
             connectionStatus.className = 'connected';
             updateStatus('PTZ camera connected');
-            window.reasoningConsole.logInfo(`PTZ connected at ${ip}`);
+            window.reasoningConsole.logInfo(`PTZ connected at ${ip}${useAuth ? ' with authentication' : ''}`);
         } catch (error) {
             connectionStatus.textContent = 'Connection failed';
             connectionStatus.className = 'disconnected';
-            updateStatus('PTZ connection failed', true);
+            updateStatus('PTZ connection failed - check IP and authentication', true);
             window.reasoningConsole.logError('PTZ connection failed: ' + error.message);
         } finally {
             testConnectionBtn.disabled = false;

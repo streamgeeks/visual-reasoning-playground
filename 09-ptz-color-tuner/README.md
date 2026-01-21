@@ -1,6 +1,6 @@
-# Color Assistant
+# Tool #9: PTZ Color Tuner
 
-**Tool #5b** - Analyze scene colors and adjust PTZ camera settings
+**Analyze scene colors and adjust PTZ camera settings**
 
 Part of the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
 
@@ -100,7 +100,7 @@ The app uses the PTZOptics parameter API:
 
 ## Related
 
-- [Framing Assistant](../05-framing-assistant/) - PTZ auto-framing
+- [Framing Assistant](../08-framing-assistant/) - PTZ auto-framing
 - [Module 5 Slides](../../course/slide-decks/module-05-framing-color.md)
 - [PTZOptics API Documentation](https://ptzoptics.com/api)
 

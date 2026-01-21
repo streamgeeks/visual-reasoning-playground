@@ -1,4 +1,4 @@
-# Tool #6: Zone Monitor
+# Tool #7: Zone Monitor
 
 **Draw zones on camera view and trigger alerts on activity.**
 
@@ -13,7 +13,7 @@ Draw virtual zones on your camera feed. When specified objects are detected with
 ## Quick Start
 
 ```bash
-cd 06-zone-monitor
+cd 07-zone-monitor
 python -m http.server 8000
 # Open http://localhost:8000
 ```
@@ -67,7 +67,7 @@ python -m http.server 8000
 ## Files
 
 ```
-06-zone-monitor/
+07-zone-monitor/
 ├── index.html    # UI with zone drawing
 ├── app.js        # Zone management and monitoring
 └── README.md     # This file
@@ -76,7 +76,7 @@ python -m http.server 8000
 ## Related
 
 - [Book Chapter 10: Zone Monitor](../../book/chapters/10-zone-monitor.md)
-- [Tool #4: Smart Counter](../04-smart-counter/)
+- [Tool #5: Smart Counter](../05-smart-counter/)
 - [Tool #2: Detection Boxes](../02-detection-boxes/)
 
 ---

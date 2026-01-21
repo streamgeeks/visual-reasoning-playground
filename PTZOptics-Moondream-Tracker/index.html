@@ -55,6 +55,20 @@
         </div>
         
         <div class="control-group">
+            <label class="checkbox-label" style="cursor: pointer;">
+                <input type="checkbox" id="useAuth" />
+                <span>Enable HTTP Authentication</span>
+            </label>
+            <div id="authFields" style="display: none; margin-top: 8px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 5px;">
+                    <input type="text" id="authUsername" class="settings-input" placeholder="Username" style="flex: 1;" />
+                    <input type="password" id="authPassword" class="settings-input" placeholder="Password" style="flex: 1;" />
+                </div>
+                <small style="color: #E9C46A;">Check this if your PTZ camera requires HTTP login (default: admin/admin)</small>
+            </div>
+        </div>
+        
+        <div class="control-group">
             <label for="operationStyle">Camera Operation Style:</label>
             <select id="operationStyle" class="settings-input">
                 <option value="custom">Custom (Manual Settings)</option>

@@ -1,4 +1,4 @@
-# Tool #5: Scene Analyzer
+# Tool #6: Scene Analyzer
 
 **Understand scenes and answer questions about them.**
 
@@ -13,7 +13,7 @@ Take a snapshot and have a conversation about it. Ask questions about what's in 
 ## Quick Start
 
 ```bash
-cd 05-scene-analyzer
+cd 06-scene-analyzer
 python -m http.server 8000
 # Open http://localhost:8000
 ```
@@ -65,7 +65,7 @@ python -m http.server 8000
 ## Files
 
 ```
-05-scene-analyzer/
+06-scene-analyzer/
 ├── index.html    # Chat-style UI
 ├── app.js        # Q&A logic
 └── README.md     # This file
@@ -75,7 +75,7 @@ python -m http.server 8000
 
 - [Book Chapter 9: Scene Analyzer](../../book/chapters/09-scene-analyzer.md)
 - [Tool #1: Scene Describer](../01-scene-describer/)
-- [Tool #6: Zone Monitor](../06-zone-monitor/)
+- [Tool #7: Zone Monitor](../07-zone-monitor/)
 
 ---
 

@@ -218,7 +218,7 @@ const deadzone = 0.08;  // 8% of frame
 ## Files
 
 ```
-07-multimodal-studio/
+11-multimodal-studio/
 ├── index.html           # Main UI
 ├── app.js               # Application orchestration
 ├── audio-processor.js   # Wake word + speech recognition
@@ -232,7 +232,7 @@ const deadzone = 0.08;  // 8% of frame
 ## Related
 
 - [Module 7 Slides](../../course/slide-decks/module-07-capstone.md)
-- [PTZ Framing Assistant](../05-framing-assistant/)
+- [PTZ Framing Assistant](../08-framing-assistant/)
 - [Gesture OBS Control](../03-gesture-obs/)
 
 ---

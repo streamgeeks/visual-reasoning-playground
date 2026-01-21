@@ -373,8 +373,8 @@ Before deploying a visual reasoning system:
 2. **Explore the examples**
    - `01-scene-describer/` - Basic VLM queries
    - `03-gesture-obs/` - OBS integration pattern
-   - `05-framing-assistant/` - PTZ control pattern
-   - `07-multimodal-studio/` - Voice + vision
+   - `08-framing-assistant/` - PTZ control pattern
+   - `11-multimodal-studio/` - Voice + vision
 
 3. **Build your project**
    - Start from the example closest to your use case

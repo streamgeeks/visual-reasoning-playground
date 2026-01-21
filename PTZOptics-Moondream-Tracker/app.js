@@ -74,7 +74,10 @@ $(function () {
         autoZoomEnabled: localStorage.getItem('autoZoomEnabled') === 'true',
         minHeadroom: parseFloat(localStorage.getItem('minHeadroom')) || 10,
         maxHeadroom: parseFloat(localStorage.getItem('maxHeadroom')) || 30,
-        zoomSpeed: parseInt(localStorage.getItem('zoomSpeed')) || 3
+        zoomSpeed: parseInt(localStorage.getItem('zoomSpeed')) || 3,
+        useAuth: localStorage.getItem('ptz_use_auth') === 'true',
+        authUsername: localStorage.getItem('ptz_auth_username') || '',
+        authPassword: localStorage.getItem('ptz_auth_password') || ''
     };
     
     let availableCameras = [];
@@ -144,6 +147,11 @@ $(function () {
         $('#detectionRate').val(settings.detectionRate);
         $('#detectionRateValue').text(settings.detectionRate.toFixed(1));
         
+        $('#useAuth').prop('checked', settings.useAuth);
+        $('#authFields').css('display', settings.useAuth ? 'block' : 'none');
+        $('#authUsername').val(settings.authUsername);
+        $('#authPassword').val(settings.authPassword);
+        
         $('#panSpeed').val(settings.panSpeed);
         $('#panSpeedValue').text(settings.panSpeed);
         $('#tiltSpeed').val(settings.tiltSpeed);
@@ -165,7 +173,11 @@ $(function () {
         $('#zoomSpeed').val(settings.zoomSpeed);
         $('#zoomSpeedValue').text(settings.zoomSpeed);
         
-        ptzController = new PTZController(settings.cameraIP);
+        ptzController = new PTZController(settings.cameraIP, {
+            useAuth: settings.useAuth,
+            username: settings.authUsername,
+            password: settings.authPassword
+        });
         
         ptzController.setSpeed({
             pan: settings.panSpeed,
@@ -211,6 +223,25 @@ $(function () {
             localStorage.setItem('cameraIP', settings.cameraIP);
             ptzController.setCameraIP(settings.cameraIP);
             window.reasoningConsole.logInfo(`Camera IP set to ${settings.cameraIP}`);
+        });
+        
+        $('#useAuth').on('change', function() {
+            settings.useAuth = $(this).is(':checked');
+            localStorage.setItem('ptz_use_auth', settings.useAuth);
+            $('#authFields').css('display', settings.useAuth ? 'block' : 'none');
+            ptzController.setAuth(settings.useAuth, settings.authUsername, settings.authPassword);
+        });
+        
+        $('#authUsername').on('change', function() {
+            settings.authUsername = $(this).val();
+            localStorage.setItem('ptz_auth_username', settings.authUsername);
+            ptzController.setAuth(settings.useAuth, settings.authUsername, settings.authPassword);
+        });
+        
+        $('#authPassword').on('change', function() {
+            settings.authPassword = $(this).val();
+            localStorage.setItem('ptz_auth_password', settings.authPassword);
+            ptzController.setAuth(settings.useAuth, settings.authUsername, settings.authPassword);
         });
         
         $('#targetObject').on('change', function() {

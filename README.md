@@ -90,7 +90,7 @@ Control OBS scene switching with hand gestures.
 
 ---
 
-### 🔢 Tool 4: Smart Counter — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04-smart-counter/)
+### 🔢 Tool 5: Smart Counter — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/05-smart-counter/)
 Count objects entering or exiting across a virtual line.
 
 ```
@@ -105,11 +105,11 @@ Count objects entering or exiting across a virtual line.
 └─────────────┘     └─────────────────┘     │   TOTAL: +4     │
                                             └─────────────────┘
 ```
-📁 `04-smart-counter/`
+📁 `05-smart-counter/`
 
 ---
 
-### 🔍 Tool 5: Scene Analyzer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/05-scene-analyzer/)
+### 🔍 Tool 6: Scene Analyzer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/06-scene-analyzer/)
 Ask questions about what the camera sees.
 
 ```
@@ -123,11 +123,11 @@ Ask questions about what the camera sees.
                     │   people?"      │
                     └─────────────────┘
 ```
-📁 `05-scene-analyzer/`
+📁 `06-scene-analyzer/`
 
 ---
 
-### 🚧 Tool 6: Zone Monitor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/06-zone-monitor/)
+### 🚧 Tool 7: Zone Monitor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/07-zone-monitor/)
 Draw custom zones, get alerts when objects enter.
 
 ```
@@ -144,11 +144,11 @@ Draw custom zones, get alerts when objects enter.
               │   Trigger     │
               └───────────────┘
 ```
-📁 `06-zone-monitor/`
+📁 `07-zone-monitor/`
 
 ---
 
-### 🎨 Tool 7: AI Color Assistant — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/07-color-assistant/)
+### 🎨 Tool 10: Color Matcher — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/10-color-matcher/)
 Match your camera's color settings to a reference image.
 
 ```
@@ -162,11 +162,11 @@ Match your camera's color settings to a reference image.
 │   Feed      │
 └─────────────┘
 ```
-📁 `07-color-assistant/`
+📁 `10-color-matcher/`
 
 ---
 
-### 🔊 Tool 8: Multimodal Fusion — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/08-multimodal-fusion/)
+### 🔊 Tool 12: Multimodal Fusion — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/12-multimodal-fusion/)
 Combine audio + video for intelligent automation.
 
 ```
@@ -182,11 +182,11 @@ Combine audio + video for intelligent automation.
 
 Example: "Start meeting" + people visible = HIGH confidence → trigger
 ```
-📁 `08-multimodal-fusion/`
+📁 `12-multimodal-fusion/`
 
 ---
 
-### 📸 Tool 9: Smart AI Photographer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/09-smart-photographer/)
+### 📸 Tool 13: Smart AI Photographer — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/13-smart-photographer/)
 Auto-capture photos when AI detects your target.
 
 ```
@@ -201,7 +201,7 @@ Auto-capture photos when AI detects your target.
                                             │  + Download     │
                                             └─────────────────┘
 ```
-📁 `09-smart-photographer/`
+📁 `13-smart-photographer/`
 
 ---
 
@@ -243,7 +243,7 @@ Extract scores from physical scoreboards using AI vision.
 
 ---
 
-### 🖼️ Framing Assistant — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/05-framing-assistant/)
+### 🖼️ Tool 8: Framing Assistant — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/08-framing-assistant/)
 AI-powered framing suggestions for PTZ cameras.
 
 ```
@@ -261,11 +261,11 @@ AI-powered framing suggestions for PTZ cameras.
      zoom IN 10% for
      better composition"
 ```
-📁 `05-framing-assistant/`
+📁 `08-framing-assistant/`
 
 ---
 
-### 🎬 Multimodal Studio — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/07-multimodal-studio/)
+### 🎬 Tool 11: Multimodal Studio — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/11-multimodal-studio/)
 Full production automation: PTZ + OBS + Audio + AI.
 
 ```
@@ -286,7 +286,7 @@ Full production automation: PTZ + OBS + Audio + AI.
 
 Voice: "Camera 2, close up" → PTZ moves + OBS switches
 ```
-📁 `07-multimodal-studio/`
+📁 `11-multimodal-studio/`
 
 ---
 

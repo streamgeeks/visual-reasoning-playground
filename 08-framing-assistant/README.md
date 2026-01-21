@@ -1,6 +1,6 @@
-# PTZ Framing Assistant
+# Tool #8: PTZ Framing Assistant
 
-**Tool #5a** - Auto-frame subjects using AI detection + PTZ camera control
+**Auto-frame subjects using AI detection + PTZ camera control**
 
 Part of the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
 
@@ -41,6 +41,23 @@ Select your camera or video input from the dropdown. This can be:
 Enter your PTZOptics camera's IP address and click "Test" to verify connection.
 
 The camera must be on the same network and have HTTP control enabled.
+
+#### HTTP Authentication
+
+If your PTZOptics camera has HTTP authentication enabled, you must check the "Enable HTTP Authentication" checkbox and enter your credentials:
+
+| Setting | Description |
+|---------|-------------|
+| Enable HTTP Authentication | Check this if your camera requires login |
+| Username | Your camera's HTTP username (default: `admin`) |
+| Password | Your camera's HTTP password (default: `admin`) |
+
+**How to check if authentication is required:**
+1. Open a browser and go to `http://<camera-ip>/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop`
+2. If you see a login prompt, authentication is enabled
+3. If the page loads without a prompt, authentication is disabled
+
+**Note:** Credentials are stored locally in your browser for convenience. For production use, consider your security requirements.
 
 ### 3. Set Target Object
 
@@ -133,6 +150,9 @@ const moveDuration = 150;
 | Issue | Solution |
 |-------|----------|
 | Camera not connecting | Check IP address, ensure camera is on same network |
+| PTZ commands not working | Enable HTTP Authentication and enter credentials |
+| Manual controls unresponsive | Camera likely requires auth - check "Enable HTTP Authentication" |
+| "Connection failed" error | Verify IP, check if camera requires authentication |
 | Jerky movement | Increase deadzone value, reduce PTZ speed |
 | Object not detected | Try different target description, improve lighting |
 | Slow response | Reduce video resolution, check API rate limits |

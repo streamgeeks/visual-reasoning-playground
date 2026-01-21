@@ -1,10 +1,19 @@
 class PTZColorController {
-    constructor(cameraIP) {
+    constructor(cameraIP, options = {}) {
         this.cameraIP = cameraIP;
+        this.useAuth = options.useAuth || false;
+        this.username = options.username || '';
+        this.password = options.password || '';
     }
 
     setCameraIP(ip) {
         this.cameraIP = ip;
+    }
+
+    setAuth(useAuth, username = '', password = '') {
+        this.useAuth = useAuth;
+        this.username = username;
+        this.password = password;
     }
 
     async sendCommand(command) {
@@ -17,7 +26,14 @@ class PTZColorController {
             window.reasoningConsole.logInfo(`Color Command: ${command}`);
         }
         
-        await fetch(url, { method: 'GET', mode: 'no-cors' });
+        const fetchOptions = { method: 'GET', mode: 'no-cors' };
+        
+        if (this.useAuth && this.username) {
+            const credentials = btoa(`${this.username}:${this.password}`);
+            fetchOptions.headers = { 'Authorization': `Basic ${credentials}` };
+        }
+        
+        await fetch(url, fetchOptions);
         return true;
     }
 

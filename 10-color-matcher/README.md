@@ -1,4 +1,4 @@
-# Tool #7: AI Color Correction Assistant
+# Tool #10: Color Matcher
 
 **Match your camera's style to a reference image.**
 
@@ -13,7 +13,7 @@ Upload a reference image showing the style you want, capture your current camera
 ## Quick Start
 
 ```bash
-cd 07-color-assistant
+cd 10-color-matcher
 python -m http.server 8000
 # Open http://localhost:8000
 ```
@@ -60,7 +60,7 @@ The AI analyzes and compares:
 ## Files
 
 ```
-07-color-assistant/
+10-color-matcher/
 ├── index.html    # Comparison UI
 ├── app.js        # Analysis logic
 └── README.md     # This file

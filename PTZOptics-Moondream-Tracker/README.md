@@ -265,11 +265,11 @@ If your camera uses different endpoints, modify the `sendCommand()` function in 
 | [Scene Describer](../01-scene-describer/) | Describe what the camera sees |
 | [Detection Boxes](../02-detection-boxes/) | Draw boxes around objects |
 | **Auto-Tracker** (this tool) | PTZ camera follows any object |
-| [Smart Counter](../04-smart-counter/) | Count objects entering a space |
-| [Scene Analyzer](../05-scene-analyzer/) | Ask questions about scenes |
-| [Zone Monitor](../06-zone-monitor/) | Trigger actions on zone activity |
-| [Color Assistant](../07-color-assistant/) | Match camera to reference style |
-| [Multimodal Fusion](../08-multimodal-fusion/) | Audio + video combined intelligence |
+| [Smart Counter](../05-smart-counter/) | Count objects entering a space |
+| [Scene Analyzer](../06-scene-analyzer/) | Ask questions about scenes |
+| [Zone Monitor](../07-zone-monitor/) | Trigger actions on zone activity |
+| [Color Matcher](../10-color-matcher/) | Match camera to reference style |
+| [Multimodal Fusion](../12-multimodal-fusion/) | Audio + video combined intelligence |
 
 ## License
 
