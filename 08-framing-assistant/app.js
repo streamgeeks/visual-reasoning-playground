@@ -550,6 +550,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     autoFrameBtn.addEventListener('click', startAutoFraming);
     stopBtn.addEventListener('click', stopAutoFraming);
 
+    document.querySelectorAll('.target-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            targetObjectInput.value = btn.dataset.target;
+            localStorage.setItem('ptz_target_object', btn.dataset.target);
+            window.reasoningConsole.logInfo(`Target preset selected: ${btn.dataset.target}`);
+        });
+    });
+
+    const currentTarget = targetObjectInput.value.trim().toLowerCase();
+    document.querySelectorAll('.target-btn').forEach(btn => {
+        if (btn.dataset.target === currentTarget) {
+            btn.classList.add('active');
+        }
+    });
+
     // ==================== Initialize ====================
 
     await enumerateCameras();

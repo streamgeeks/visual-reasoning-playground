@@ -206,9 +206,14 @@
                 <div class="control-group">
                     <label>Target Object</label>
                     <div class="target-input">
-                        <input type="text" id="targetObject" placeholder="person, face, speaker">
+                        <input type="text" id="targetObject" placeholder="or type custom target...">
                     </div>
-                    <small>What should the camera track and frame?</small>
+                    <div class="target-presets" style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="btn btn-secondary target-btn" data-target="person">👤 Person</button>
+                        <button class="btn btn-secondary target-btn" data-target="face">😊 Face</button>
+                        <button class="btn btn-secondary target-btn" data-target="phone">📱 Phone</button>
+                    </div>
+                    <small>Select a preset or type a custom target to track</small>
                 </div>
 
                 <!-- Zoom Presets -->
