@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracking Comparison - MediaPipe vs Moondream VLM</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .mode-toggle {
+            display: flex;
+            background: var(--background);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 20px;
+        }
+        .mode-toggle button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .mode-toggle button.active {
+            background: var(--primary);
+            color: white;
+        }
+        .mode-toggle button:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .metrics-panel {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .metric-card {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        .metric-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .metric-card .label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .metric-card.highlight .value {
+            color: var(--success);
+        }
+        .metric-card.warning .value {
+            color: var(--warning);
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.9rem;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison-table th {
+            background: var(--background);
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .comparison-table .winner {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .detection-mode-info {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .detection-mode-info h4 {
+            margin: 0 0 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .detection-mode-info p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge.local {
+            background: var(--success);
+            color: white;
+        }
+        .badge.cloud {
+            background: var(--warning);
+            color: black;
+        }
+
+        .mediapipe-options {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .mediapipe-options button {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mediapipe-options button.active {
+            border-color: var(--primary);
+            background: rgba(42, 157, 143, 0.1);
+        }
+        .mediapipe-options button:hover:not(.active) {
+            border-color: var(--text-muted);
+        }
+
+        .latency-bar {
+            height: 8px;
+            background: var(--background);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        .latency-bar .fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .latency-bar .fill.fast {
+            background: var(--success);
+        }
+        .latency-bar .fill.medium {
+            background: var(--warning);
+        }
+        .latency-bar .fill.slow {
+            background: var(--error);
+        }
+
+        .history-log {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+        .history-log .entry {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+        }
+        .history-log .entry:last-child {
+            border-bottom: none;
+        }
+        .history-log .time {
+            color: var(--text-muted);
+        }
+        .history-log .mediapipe {
+            color: var(--success);
+        }
+        .history-log .moondream {
+            color: var(--warning);
+        }
+
+        .ptz-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            max-width: 150px;
+            margin: 15px auto;
+        }
+        .ptz-controls .btn {
+            padding: 10px;
+            font-size: 1rem;
+        }
+        .ptz-controls .btn.center {
+            background: var(--error);
+        }
+
+        .connection-panel {
+            background: var(--background);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        .connection-row {
+            display: flex;
+            gap: 10px;
+        }
+        .connection-row input {
+            flex: 1;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            background: var(--background);
+        }
+        .status-indicator .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        .status-indicator.active .dot {
+            background: var(--success);
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Tracking Comparison</h1>
+        <p class="subtitle">Tool #14 - Compare MediaPipe (Local CV) vs Moondream (Cloud VLM) for PTZ Tracking</p>
+        <a href="../" class="project-link">← Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlay"></canvas>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <div class="mode-toggle">
+                    <button id="mediapipeMode" class="active">MediaPipe (Local)</button>
+                    <button id="moondreamMode">Moondream (VLM)</button>
+                </div>
+
+                <div id="mediapipeInfo" class="detection-mode-info">
+                    <h4>
+                        <span>MediaPipe Detection</span>
+                        <span class="badge local">Local</span>
+                    </h4>
+                    <p>Runs entirely in your browser using WebAssembly. No API calls, no latency, no cost. Limited to pre-trained detection types.</p>
+                </div>
+
+                <div id="moondreamInfo" class="detection-mode-info" style="display: none;">
+                    <h4>
+                        <span>Moondream VLM Detection</span>
+                        <span class="badge cloud">Cloud API</span>
+                    </h4>
+                    <p>Vision Language Model that understands natural language. Describe anything you want to track. Higher latency due to API calls.</p>
+                </div>
+
+                <div id="mediapipeOptions" class="mediapipe-options">
+                    <button class="mp-type active" data-type="face">😊 Face</button>
+                    <button class="mp-type" data-type="pose">🧍 Pose</button>
+                </div>
+
+                <div id="moondreamOptions" style="display: none;">
+                    <div class="control-group">
+                        <label>Target Object</label>
+                        <input type="text" id="targetObject" placeholder="person, face, red shirt, coffee mug...">
+                        <small>Describe anything you want to track</small>
+                    </div>
+                </div>
+
+                <div class="metrics-panel">
+                    <div class="metric-card highlight">
+                        <div class="value" id="latencyValue">--</div>
+                        <div class="label">Latency (ms)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="value" id="fpsValue">--</div>
+                        <div class="label">FPS</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="value" id="detectionsValue">0</div>
+                        <div class="label">Detections</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="value" id="ptzMovesValue">0</div>
+                        <div class="label">PTZ Moves</div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Latency Comparison</label>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="width: 80px; font-size: 0.8rem;">MediaPipe:</span>
+                        <div class="latency-bar" style="flex: 1;">
+                            <div id="mpLatencyBar" class="fill fast" style="width: 10%;"></div>
+                        </div>
+                        <span id="mpLatencyText" style="width: 60px; font-size: 0.8rem; text-align: right;">~15ms</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="width: 80px; font-size: 0.8rem;">Moondream:</span>
+                        <div class="latency-bar" style="flex: 1;">
+                            <div id="mdLatencyBar" class="fill slow" style="width: 80%;"></div>
+                        </div>
+                        <span id="mdLatencyText" style="width: 60px; font-size: 0.8rem; text-align: right;">~400ms</span>
+                    </div>
+                </div>
+
+                <h3>Camera Setup</h3>
+
+                <div class="control-group">
+                    <label>Video Source</label>
+                    <select id="cameraSelect">
+                        <option value="">Loading cameras...</option>
+                    </select>
+                </div>
+
+                <div class="connection-panel">
+                    <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; display: block;">PTZOptics Camera IP</label>
+                    <div class="connection-row">
+                        <input type="text" id="cameraIP" placeholder="192.168.1.100">
+                        <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
+                    </div>
+                    <small id="connectionStatus" style="color: var(--error);">Not connected</small>
+                    
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="useAuth" style="width: auto;">
+                            <span style="font-size: 0.85rem;">Enable HTTP Authentication</span>
+                        </label>
+                        <div id="authFields" style="display: none; margin-top: 10px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                                <input type="text" id="authUsername" placeholder="Username" style="flex: 1;">
+                                <input type="password" id="authPassword" placeholder="Password" style="flex: 1;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Center Deadzone: <span id="deadzoneValue">10</span>%</label>
+                    <input type="range" id="deadzoneSlider" min="2" max="25" value="10" style="width: 100%;">
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-primary">Start Tracking</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <label>Manual PTZ Control</label>
+                    <div class="ptz-controls">
+                        <div></div>
+                        <button class="btn btn-secondary" data-ptz="up">↑</button>
+                        <div></div>
+                        <button class="btn btn-secondary" data-ptz="left">←</button>
+                        <button class="btn btn-secondary center" data-ptz="stop">■</button>
+                        <button class="btn btn-secondary" data-ptz="right">→</button>
+                        <div></div>
+                        <button class="btn btn-secondary" data-ptz="down">↓</button>
+                        <div></div>
+                    </div>
+                </div>
+
+                <div id="status" class="status-bar">Select detection mode and start tracking</div>
+
+                <h3>Performance History</h3>
+                <div class="history-log" id="historyLog">
+                    <div class="entry">
+                        <span>Waiting for tracking to start...</span>
+                    </div>
+                </div>
+
+                <h3>Comparison Summary</h3>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>MediaPipe</th>
+                            <th>Moondream</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Avg Latency</td>
+                            <td id="mpAvgLatency" class="winner">~15-30ms</td>
+                            <td id="mdAvgLatency">~300-500ms</td>
+                        </tr>
+                        <tr>
+                            <td>Max FPS</td>
+                            <td id="mpMaxFps" class="winner">30+</td>
+                            <td id="mdMaxFps">2-3</td>
+                        </tr>
+                        <tr>
+                            <td>Flexibility</td>
+                            <td id="mpFlexibility">Face/Pose only</td>
+                            <td id="mdFlexibility" class="winner">Any object</td>
+                        </tr>
+                        <tr>
+                            <td>Offline</td>
+                            <td class="winner">Yes</td>
+                            <td>No</td>
+                        </tr>
+                        <tr>
+                            <td>Cost</td>
+                            <td class="winner">Free</td>
+                            <td>Per API call</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MediaPipe Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+    <!-- Shared Scripts -->
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+
+    <!-- App Scripts -->
+    <script src="ptz-controller.js"></script>
+    <script src="mediapipe-detector.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>
