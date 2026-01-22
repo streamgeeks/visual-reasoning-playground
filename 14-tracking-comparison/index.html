@@ -11,7 +11,7 @@
             background: var(--background);
             border-radius: 8px;
             padding: 4px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         .mode-toggle button {
             flex: 1;
@@ -22,7 +22,7 @@
             cursor: pointer;
             border-radius: 6px;
             font-weight: 600;
-            transition: all 0.2s;
+            transition: all 0.3s;
         }
         .mode-toggle button.active {
             background: var(--primary);
@@ -30,6 +30,10 @@
         }
         .mode-toggle button:hover:not(.active) {
             background: rgba(255,255,255,0.1);
+        }
+        .mode-toggle button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .metrics-panel {
@@ -88,6 +92,10 @@
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 15px;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .detection-mode-info.hidden {
+            display: none;
         }
         .detection-mode-info h4 {
             margin: 0 0 8px 0;
@@ -121,6 +129,10 @@
             display: flex;
             gap: 8px;
             margin-bottom: 15px;
+            transition: opacity 0.3s;
+        }
+        .mediapipe-options.hidden {
+            display: none;
         }
         .mediapipe-options button {
             flex: 1;
@@ -138,6 +150,13 @@
         }
         .mediapipe-options button:hover:not(.active) {
             border-color: var(--text-muted);
+        }
+
+        .moondream-options {
+            transition: opacity 0.3s;
+        }
+        .moondream-options.hidden {
+            display: none;
         }
 
         .latency-bar {
@@ -165,7 +184,7 @@
             background: var(--background);
             border-radius: 8px;
             padding: 12px;
-            max-height: 200px;
+            max-height: 150px;
             overflow-y: auto;
             font-family: monospace;
             font-size: 0.8rem;
@@ -194,7 +213,7 @@
             grid-template-columns: repeat(3, 1fr);
             gap: 5px;
             max-width: 150px;
-            margin: 15px auto;
+            margin: 10px auto;
         }
         .ptz-controls .btn {
             padding: 10px;
@@ -208,7 +227,7 @@
             background: var(--background);
             border-radius: 8px;
             padding: 12px;
-            margin-bottom: 15px;
+            margin-top: 15px;
         }
         .connection-row {
             display: flex;
@@ -218,28 +237,95 @@
             flex: 1;
         }
 
-        .status-indicator {
-            display: inline-flex;
+        .camera-setup-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .under-video-controls {
+            background: var(--surface);
+            border-radius: 0 0 8px 8px;
+            padding: 15px;
+            margin-top: -8px;
+        }
+
+        .under-video-controls .control-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .under-video-controls .control-col {
+            flex: 1;
+        }
+
+        .under-video-controls label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .under-video-controls select,
+        .under-video-controls input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 0.85rem;
+        }
+
+        .ptz-section {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .ptz-section .input-group {
+            flex: 1;
+        }
+
+        .auth-toggle {
+            display: flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 10px;
-            border-radius: 4px;
             font-size: 0.8rem;
-            background: var(--background);
+            color: var(--text-muted);
+            margin-top: 8px;
+            cursor: pointer;
         }
-        .status-indicator .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--text-muted);
+
+        .auth-toggle input {
+            width: auto;
         }
-        .status-indicator.active .dot {
-            background: var(--success);
-            animation: pulse 1s infinite;
+
+        .auth-fields {
+            display: none;
+            margin-top: 8px;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .auth-fields.visible {
+            display: flex;
+            gap: 8px;
+        }
+        .auth-fields input {
+            flex: 1;
+            padding: 6px 8px;
+            font-size: 0.8rem;
+        }
+
+        .connection-status {
+            font-size: 0.75rem;
+            margin-top: 5px;
+        }
+        .connection-status.connected {
+            color: var(--success);
+        }
+        .connection-status.disconnected {
+            color: var(--error);
         }
     </style>
 </head>
@@ -257,6 +343,35 @@
                     <video id="video" autoplay muted playsinline></video>
                     <canvas id="overlay"></canvas>
                 </div>
+                
+                <div class="under-video-controls">
+                    <div class="control-row">
+                        <div class="control-col">
+                            <label>Video Source</label>
+                            <select id="cameraSelect">
+                                <option value="">Loading cameras...</option>
+                            </select>
+                        </div>
+                        <div class="control-col">
+                            <label>PTZ Camera IP</label>
+                            <div class="ptz-section">
+                                <div class="input-group">
+                                    <input type="text" id="cameraIP" placeholder="192.168.1.100">
+                                </div>
+                                <button id="testConnectionBtn" class="btn btn-secondary" style="padding: 8px 12px;">Test</button>
+                            </div>
+                            <div id="connectionStatus" class="connection-status disconnected">Not connected</div>
+                        </div>
+                    </div>
+                    <label class="auth-toggle">
+                        <input type="checkbox" id="useAuth">
+                        <span>HTTP Authentication</span>
+                    </label>
+                    <div id="authFields" class="auth-fields">
+                        <input type="text" id="authUsername" placeholder="Username">
+                        <input type="password" id="authPassword" placeholder="Password">
+                    </div>
+                </div>
             </div>
 
             <div class="control-panel">
@@ -273,7 +388,7 @@
                     <p>Runs entirely in your browser using WebAssembly. No API calls, no latency, no cost. Limited to pre-trained detection types.</p>
                 </div>
 
-                <div id="moondreamInfo" class="detection-mode-info" style="display: none;">
+                <div id="moondreamInfo" class="detection-mode-info hidden">
                     <h4>
                         <span>Moondream VLM Detection</span>
                         <span class="badge cloud">Cloud API</span>
@@ -286,7 +401,7 @@
                     <button class="mp-type" data-type="pose">🧍 Pose</button>
                 </div>
 
-                <div id="moondreamOptions" style="display: none;">
+                <div id="moondreamOptions" class="moondream-options hidden">
                     <div class="control-group">
                         <label>Target Object</label>
                         <input type="text" id="targetObject" placeholder="person, face, red shirt, coffee mug...">
@@ -328,37 +443,6 @@
                             <div id="mdLatencyBar" class="fill slow" style="width: 80%;"></div>
                         </div>
                         <span id="mdLatencyText" style="width: 60px; font-size: 0.8rem; text-align: right;">~400ms</span>
-                    </div>
-                </div>
-
-                <h3>Camera Setup</h3>
-
-                <div class="control-group">
-                    <label>Video Source</label>
-                    <select id="cameraSelect">
-                        <option value="">Loading cameras...</option>
-                    </select>
-                </div>
-
-                <div class="connection-panel">
-                    <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; display: block;">PTZOptics Camera IP</label>
-                    <div class="connection-row">
-                        <input type="text" id="cameraIP" placeholder="192.168.1.100">
-                        <button id="testConnectionBtn" class="btn btn-secondary">Test</button>
-                    </div>
-                    <small id="connectionStatus" style="color: var(--error);">Not connected</small>
-                    
-                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="useAuth" style="width: auto;">
-                            <span style="font-size: 0.85rem;">Enable HTTP Authentication</span>
-                        </label>
-                        <div id="authFields" style="display: none; margin-top: 10px;">
-                            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
-                                <input type="text" id="authUsername" placeholder="Username" style="flex: 1;">
-                                <input type="password" id="authPassword" placeholder="Password" style="flex: 1;">
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -437,18 +521,15 @@
         </div>
     </div>
 
-    <!-- MediaPipe Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
-    <!-- Shared Scripts -->
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
     <script src="../shared/reasoning-console.js"></script>
 
-    <!-- App Scripts -->
     <script src="ptz-controller.js"></script>
     <script src="mediapipe-detector.js"></script>
     <script src="app.js"></script>

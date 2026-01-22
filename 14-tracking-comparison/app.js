@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         const savedAuth = localStorage.getItem('comparison_use_auth') === 'true';
         useAuthCheckbox.checked = savedAuth;
-        authFields.style.display = savedAuth ? 'block' : 'none';
+        authFields.classList.toggle('visible', savedAuth);
         authUsernameInput.value = localStorage.getItem('comparison_auth_user') || '';
         authPasswordInput.value = localStorage.getItem('comparison_auth_pass') || '';
     }
@@ -146,27 +146,36 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('comparison_auth_pass', authPasswordInput.value);
     }
 
-    mediapipeModeBtn.addEventListener('click', () => {
-        currentMode = 'mediapipe';
-        mediapipeModeBtn.classList.add('active');
-        moondreamModeBtn.classList.remove('active');
-        mediapipeInfo.style.display = 'block';
-        moondreamInfo.style.display = 'none';
-        mediapipeOptions.style.display = 'flex';
-        moondreamOptions.style.display = 'none';
-        updateStatus('MediaPipe mode selected - Local detection');
-    });
+    async function switchMode(newMode) {
+        if (isTracking) {
+            await stopTracking();
+        }
 
-    moondreamModeBtn.addEventListener('click', () => {
-        currentMode = 'moondream';
-        moondreamModeBtn.classList.add('active');
-        mediapipeModeBtn.classList.remove('active');
-        moondreamInfo.style.display = 'block';
-        mediapipeInfo.style.display = 'none';
-        moondreamOptions.style.display = 'block';
-        mediapipeOptions.style.display = 'none';
-        updateStatus('Moondream mode selected - Cloud VLM detection');
-    });
+        currentMode = newMode;
+
+        mediapipeModeBtn.classList.toggle('active', newMode === 'mediapipe');
+        moondreamModeBtn.classList.toggle('active', newMode === 'moondream');
+
+        mediapipeInfo.classList.toggle('hidden', newMode !== 'mediapipe');
+        moondreamInfo.classList.toggle('hidden', newMode !== 'moondream');
+        mediapipeOptions.classList.toggle('hidden', newMode !== 'mediapipe');
+        moondreamOptions.classList.toggle('hidden', newMode !== 'moondream');
+
+        clearOverlay();
+        detectionCount = 0;
+        detectionsValue.textContent = '0';
+        latencyValue.textContent = '--';
+        fpsValue.textContent = '--';
+
+        if (newMode === 'mediapipe') {
+            updateStatus('MediaPipe mode - Local browser detection');
+        } else {
+            updateStatus('Moondream mode - Cloud VLM detection');
+        }
+    }
+
+    mediapipeModeBtn.addEventListener('click', () => switchMode('mediapipe'));
+    moondreamModeBtn.addEventListener('click', () => switchMode('moondream'));
 
     document.querySelectorAll('.mp-type').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -200,16 +209,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             await ptzController.stop();
             connectionStatus.textContent = 'Connected';
-            connectionStatus.style.color = 'var(--success)';
+            connectionStatus.classList.remove('disconnected');
+            connectionStatus.classList.add('connected');
             updateStatus('PTZ camera connected');
         } catch (e) {
             connectionStatus.textContent = 'Connection failed';
-            connectionStatus.style.color = 'var(--error)';
+            connectionStatus.classList.remove('connected');
+            connectionStatus.classList.add('disconnected');
         }
     });
 
     useAuthCheckbox.addEventListener('change', () => {
-        authFields.style.display = useAuthCheckbox.checked ? 'block' : 'none';
+        authFields.classList.toggle('visible', useAuthCheckbox.checked);
         saveSettings();
     });
 
@@ -274,6 +285,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         isTracking = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
+        mediapipeModeBtn.disabled = true;
+        moondreamModeBtn.disabled = true;
         detectionCount = 0;
         if (ptzController) ptzController.resetMoveCount();
 
@@ -287,6 +300,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         isTracking = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
+        mediapipeModeBtn.disabled = false;
+        moondreamModeBtn.disabled = false;
+
+        if (trackingLoop) {
+            clearTimeout(trackingLoop);
+            trackingLoop = null;
+        }
 
         if (ptzController) await ptzController.stop();
 
