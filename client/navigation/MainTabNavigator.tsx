@@ -5,14 +5,14 @@ import { BlurView } from "expo-blur";
 import { Platform, StyleSheet } from "react-native";
 
 import LiveStackNavigator from "@/navigation/LiveStackNavigator";
-import PresetsStackNavigator from "@/navigation/PresetsStackNavigator";
+import GalleryStackNavigator from "@/navigation/GalleryStackNavigator";
 import ReplayStackNavigator from "@/navigation/ReplayStackNavigator";
 import SettingsStackNavigator from "@/navigation/SettingsStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 
 export type MainTabParamList = {
   LiveTab: undefined;
-  PresetsTab: undefined;
+  GalleryTab: undefined;
   ReplayTab: undefined;
   SettingsTab: undefined;
 };
@@ -59,12 +59,12 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen
-        name="PresetsTab"
-        component={PresetsStackNavigator}
+        name="GalleryTab"
+        component={GalleryStackNavigator}
         options={{
-          title: "Presets",
+          title: "Gallery",
           tabBarIcon: ({ color, size }) => (
-            <Feather name="bookmark" size={size} color={color} />
+            <Feather name="image" size={size} color={color} />
           ),
         }}
       />

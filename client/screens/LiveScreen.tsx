@@ -31,8 +31,8 @@ import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
 import { ToolSection } from "@/components/ToolSection";
-import { SceneDescription } from "@/components/SceneDescription";
-import { StoryDisplay, ResponseLength } from "@/components/StoryDisplay";
+import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
+import { saveGalleryItem, GalleryItem } from "@/lib/gallery";
 import {
   TrackingModel,
   PerformanceStats,
@@ -77,10 +77,7 @@ export default function LiveScreen({ navigation }: any) {
   // Tool section states
   const [expandedSection, setExpandedSection] = useState<string>("describe");
   
-  // Scene description state
-  const [sceneDescription, setSceneDescription] = useState<string | null>(null);
-  const [isDescribing, setIsDescribing] = useState(false);
-  const [describeError, setDescribeError] = useState<string | null>(null);
+  // Settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   const pulseOpacity = useSharedValue(0.3);
@@ -206,73 +203,6 @@ export default function LiveScreen({ navigation }: any) {
     Haptics.selectionAsync();
   }, []);
 
-  const handleDescribeScene = useCallback(async () => {
-    setIsDescribing(true);
-    setDescribeError(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      // Check for API key
-      if (!appSettings?.moondreamApiKey) {
-        setDescribeError("Please add your Moondream API key in Settings to use AI scene description.");
-        setIsDescribing(false);
-        return;
-      }
-
-      // Capture frame from camera
-      if (!cameraRef.current) {
-        throw new Error("Camera not ready");
-      }
-
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.3,
-        skipProcessing: true,
-      });
-
-      if (!photo?.uri) {
-        throw new Error("Failed to capture image");
-      }
-
-      // Resize and compress the image to reduce payload size
-      const manipulated = await ImageManipulator.manipulateAsync(
-        photo.uri,
-        [{ resize: { width: 512 } }],
-        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-
-      if (!manipulated?.base64) {
-        throw new Error("Failed to process image");
-      }
-
-      // Send to Moondream API via our backend
-      const apiUrl = getApiUrl();
-      const response = await fetch(new URL("/api/describe-scene", apiUrl).toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: manipulated.base64,
-          apiKey: appSettings.moondreamApiKey,
-          prompt: "Describe this scene in rich detail. What objects, people, or activities do you see? Set the scene like a story narrator would.",
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze scene");
-      }
-
-      const data = await response.json();
-      setSceneDescription(data.description);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to analyze scene. Please try again.";
-      setDescribeError(message);
-    } finally {
-      setIsDescribing(false);
-    }
-  }, [appSettings]);
-
   const getPromptForLength = (length: ResponseLength): string => {
     switch (length) {
       case "short":
@@ -284,7 +214,7 @@ export default function LiveScreen({ navigation }: any) {
     }
   };
 
-  const handleStoryCaptureAndDescribe = useCallback(async (length: ResponseLength): Promise<string | null> => {
+  const handleStoryCaptureAndDescribe = useCallback(async (length: ResponseLength): Promise<CaptureResult | null> => {
     try {
       if (!appSettings?.moondreamApiKey) {
         return null;
@@ -332,11 +262,26 @@ export default function LiveScreen({ navigation }: any) {
       }
 
       const data = await response.json();
-      return data.description || null;
+      return {
+        description: data.description || "",
+        imageUri: manipulated.uri,
+      };
     } catch (error) {
       return null;
     }
   }, [appSettings]);
+
+  const handleSaveToGallery = useCallback(async (imageUri: string, description: string, length: ResponseLength) => {
+    const item: GalleryItem = {
+      id: Date.now().toString(),
+      imageUri,
+      description,
+      capturedAt: new Date().toISOString(),
+      length,
+    };
+    await saveGalleryItem(item);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
 
   if (!permission) {
     return (
@@ -510,21 +455,11 @@ export default function LiveScreen({ navigation }: any) {
           onToggle={() => toggleSection("describe")}
           badge="AI"
         >
-          <View style={styles.describeContainer}>
-            {/* Story narration display */}
-            <StoryDisplay
-              onCapture={handleStoryCaptureAndDescribe}
-              hasApiKey={Boolean(appSettings?.moondreamApiKey)}
-            />
-            
-            {/* Manual capture button */}
-            <SceneDescription
-              description={sceneDescription}
-              isLoading={isDescribing}
-              onCapture={handleDescribeScene}
-              error={describeError}
-            />
-          </View>
+          <StoryDisplay
+            onCapture={handleStoryCaptureAndDescribe}
+            hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+            onSaveToGallery={handleSaveToGallery}
+          />
         </ToolSection>
 
         {/* Tracking Models */}
