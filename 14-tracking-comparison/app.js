@@ -366,8 +366,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (detection) {
             drawDetection(detection);
             if (ptzController) {
-                ptzController.trackObject(detection);
+                const moved = ptzController.trackObject(detection);
                 ptzMovesValue.textContent = ptzController.getMoveCount();
+                if (moved) console.log('PTZ moved, count:', ptzController.getMoveCount());
+            } else {
+                console.log('No PTZ controller - enter IP and click Test');
             }
         }
 

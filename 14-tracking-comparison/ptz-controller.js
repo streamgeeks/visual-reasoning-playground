@@ -98,21 +98,25 @@ class PTZController {
         const offsetY = (detection.y * 100) - 50;
         const threshold = this.deadzone / 2;
 
+        console.log(`PTZ: x=${detection.x.toFixed(2)} y=${detection.y.toFixed(2)} offsetX=${offsetX.toFixed(1)} offsetY=${offsetY.toFixed(1)} threshold=${threshold}`);
+
         if (Math.abs(offsetX) <= threshold && Math.abs(offsetY) <= threshold) {
             if (this.isMoving) this.stop();
             return false;
         }
 
         this.lastMoveTime = now;
+        let cmd = '';
 
         if (Math.abs(offsetX) > Math.abs(offsetY)) {
-            if (offsetX > threshold) this.panRight();
-            else if (offsetX < -threshold) this.panLeft();
+            if (offsetX > threshold) { this.panRight(); cmd = 'panRight'; }
+            else if (offsetX < -threshold) { this.panLeft(); cmd = 'panLeft'; }
         } else {
-            if (offsetY > threshold) this.tiltDown();
-            else if (offsetY < -threshold) this.tiltUp();
+            if (offsetY > threshold) { this.tiltDown(); cmd = 'tiltDown'; }
+            else if (offsetY < -threshold) { this.tiltUp(); cmd = 'tiltUp'; }
         }
 
+        console.log(`PTZ: Sending ${cmd}`);
         this.moveCount++;
         setTimeout(() => this.stop(), 150);
         return true;
