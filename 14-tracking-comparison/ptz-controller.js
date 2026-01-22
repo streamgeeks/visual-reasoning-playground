@@ -8,6 +8,9 @@ class PTZController {
         this.deadzone = 10;
         this.speed = { pan: 5, tilt: 5, zoom: 5 };
         this.moveCount = 0;
+        this.lastCommandTime = 0;
+        this.commandCooldown = 150;
+        this.moveDuration = 200;
     }
 
     setAuth(useAuth, username = '', password = '') {
@@ -90,6 +93,11 @@ class PTZController {
             return false;
         }
 
+        const now = Date.now();
+        if (now - this.lastCommandTime < this.commandCooldown) {
+            return false;
+        }
+
         const objectX = detection.x * 100;
         const objectY = detection.y * 100;
         const targetX = 50;
@@ -100,26 +108,27 @@ class PTZController {
 
         let moved = false;
 
-        if (offsetX > halfDeadzone) {
-            await this.panRight();
+        if (Math.abs(offsetX) > halfDeadzone || Math.abs(offsetY) > halfDeadzone) {
+            if (Math.abs(offsetX) > Math.abs(offsetY)) {
+                if (offsetX > halfDeadzone) {
+                    await this.panRight();
+                } else if (offsetX < -halfDeadzone) {
+                    await this.panLeft();
+                }
+            } else {
+                if (offsetY > halfDeadzone) {
+                    await this.tiltDown();
+                } else if (offsetY < -halfDeadzone) {
+                    await this.tiltUp();
+                }
+            }
             moved = true;
-        } else if (offsetX < -halfDeadzone) {
-            await this.panLeft();
-            moved = true;
-        } else if (offsetY > halfDeadzone) {
-            await this.tiltDown();
-            moved = true;
-        } else if (offsetY < -halfDeadzone) {
-            await this.tiltUp();
-            moved = true;
-        }
-
-        if (!moved && this.isMoving) {
-            await this.stop();
-        }
-
-        if (moved) {
+            this.lastCommandTime = now;
             this.moveCount++;
+
+            setTimeout(() => this.stop(), this.moveDuration);
+        } else if (this.isMoving) {
+            await this.stop();
         }
 
         return moved;

@@ -304,6 +304,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         moondreamModeBtn.disabled = false;
 
         if (trackingLoop) {
+            cancelAnimationFrame(trackingLoop);
             clearTimeout(trackingLoop);
             trackingLoop = null;
         }
@@ -377,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         if (isTracking) {
             if (currentMode === 'mediapipe') {
-                requestAnimationFrame(runTrackingLoop);
+                trackingLoop = requestAnimationFrame(runTrackingLoop);
             } else {
                 trackingLoop = setTimeout(runTrackingLoop, 500);
             }
