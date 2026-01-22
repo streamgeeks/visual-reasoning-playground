@@ -43,6 +43,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     let trackingLoop = null;
     let detectionCount = 0;
     let latencyHistory = { mediapipe: [], moondream: [] };
+    let lastDetectionState = null;
+    let lastHistoryUpdate = 0;
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -166,6 +168,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         detectionsValue.textContent = '0';
         latencyValue.textContent = '--';
         fpsValue.textContent = '--';
+        lastDetectionState = null;
+        historyLog.innerHTML = '<div class="entry"><span>Mode switched - ready to track</span></div>';
 
         if (newMode === 'mediapipe') {
             updateStatus('MediaPipe mode - Local browser detection');
@@ -468,6 +472,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function addHistoryEntry(mode, latency, detected, error = null) {
+        const now = Date.now();
+        const stateChanged = detected !== lastDetectionState;
+        
+        if (!error && !stateChanged && now - lastHistoryUpdate < 500) {
+            return;
+        }
+        
+        lastHistoryUpdate = now;
+        lastDetectionState = detected;
+
         const entry = document.createElement('div');
         entry.className = 'entry';
 
