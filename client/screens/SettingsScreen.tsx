@@ -62,6 +62,8 @@ export default function SettingsScreen() {
     httpPort: "80",
     rtspPort: "554",
   });
+  const [pendingApiKey, setPendingApiKey] = useState("");
+  const [apiKeySaved, setApiKeySaved] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -80,6 +82,7 @@ export default function SettingsScreen() {
       setCurrentCameraIdState(cameraId);
       setSettings(loadedSettings);
       setUserProfile(profile);
+      setPendingApiKey(loadedSettings.moondreamApiKey);
     } catch (error) {
       console.error("Error loading settings:", error);
     }
@@ -138,11 +141,22 @@ export default function SettingsScreen() {
     Haptics.selectionAsync();
   }, [settings]);
 
-  const handleApiKeyChange = useCallback(async (value: string) => {
-    const newSettings = { ...settings, moondreamApiKey: value };
+  const handleApiKeyChange = useCallback((value: string) => {
+    setPendingApiKey(value);
+    setApiKeySaved(false);
+  }, []);
+
+  const handleSaveApiKey = useCallback(async () => {
+    const newSettings = { ...settings, moondreamApiKey: pendingApiKey };
     setSettings(newSettings);
-    await saveSettings({ moondreamApiKey: value });
-  }, [settings]);
+    await saveSettings({ moondreamApiKey: pendingApiKey });
+    setApiKeySaved(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
+    setTimeout(() => {
+      setApiKeySaved(false);
+    }, 2000);
+  }, [settings, pendingApiKey]);
 
   const handleSaveProfile = useCallback(async () => {
     await saveUserProfile(userProfile);
@@ -237,14 +251,59 @@ export default function SettingsScreen() {
           AI Integration
         </ThemedText>
 
-        <SettingsInput
-          icon="cpu"
-          label="Moondream API Key"
-          value={settings.moondreamApiKey}
-          placeholder="Enter your API key"
-          secureTextEntry
-          onChangeText={handleApiKeyChange}
-        />
+        <View style={[styles.apiKeyContainer, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.apiKeyHeader}>
+            <View style={[styles.apiKeyIcon, { backgroundColor: theme.primary + "20" }]}>
+              <Feather name="cpu" size={18} color={theme.primary} />
+            </View>
+            <Text style={[styles.apiKeyLabel, { color: theme.text }]}>Moondream API Key</Text>
+          </View>
+          <View style={styles.apiKeyInputRow}>
+            <TextInput
+              style={[
+                styles.apiKeyInput,
+                { backgroundColor: theme.backgroundSecondary, color: theme.text },
+              ]}
+              value={pendingApiKey}
+              onChangeText={handleApiKeyChange}
+              placeholder="Enter your API key"
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable
+              onPress={handleSaveApiKey}
+              disabled={pendingApiKey === settings.moondreamApiKey}
+              style={({ pressed }) => [
+                styles.saveButton,
+                {
+                  backgroundColor: apiKeySaved
+                    ? theme.success
+                    : pendingApiKey !== settings.moondreamApiKey
+                    ? theme.primary
+                    : theme.backgroundSecondary,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Feather
+                name={apiKeySaved ? "check" : "save"}
+                size={18}
+                color={
+                  apiKeySaved || pendingApiKey !== settings.moondreamApiKey
+                    ? "#FFFFFF"
+                    : theme.textSecondary
+                }
+              />
+            </Pressable>
+          </View>
+          {apiKeySaved ? (
+            <Text style={[styles.savedMessage, { color: theme.success }]}>
+              API key saved successfully
+            </Text>
+          ) : null}
+        </View>
 
         {/* About */}
         <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
@@ -556,5 +615,49 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: Typography.body.fontSize,
     fontWeight: "600",
+  },
+  apiKeyContainer: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  apiKeyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  apiKeyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  apiKeyLabel: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  apiKeyInputRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  apiKeyInput: {
+    flex: 1,
+    height: 44,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    fontSize: Typography.body.fontSize,
+  },
+  saveButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  savedMessage: {
+    fontSize: Typography.small.fontSize,
+    marginTop: Spacing.xs,
   },
 });

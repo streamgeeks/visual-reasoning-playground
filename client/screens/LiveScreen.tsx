@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import Animated, {
@@ -82,9 +83,11 @@ export default function LiveScreen({ navigation }: any) {
 
   const pulseOpacity = useSharedValue(0.3);
 
-  useEffect(() => {
-    loadCameraAndSettings();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadCameraAndSettings();
+    }, [])
+  );
 
   const loadCameraAndSettings = async () => {
     try {
