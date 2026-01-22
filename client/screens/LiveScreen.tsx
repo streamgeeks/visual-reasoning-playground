@@ -81,7 +81,6 @@ export default function LiveScreen({ navigation }: any) {
   const [isDescribing, setIsDescribing] = useState(false);
   const [describeError, setDescribeError] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-  const [storyModeActive, setStoryModeActive] = useState(false);
 
   const pulseOpacity = useSharedValue(0.3);
 
@@ -307,11 +306,6 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [appSettings]);
 
-  const toggleStoryMode = useCallback(() => {
-    setStoryModeActive((prev) => !prev);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, []);
-
   if (!permission) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -476,38 +470,29 @@ export default function LiveScreen({ navigation }: any) {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Story Mode - Primary Feature */}
-        <View style={[styles.storySection, { backgroundColor: theme.backgroundDefault }]}>
-          <View style={styles.storySectionHeader}>
-            <View style={[styles.storyIconContainer, { backgroundColor: theme.primary + "20" }]}>
-              <Feather name="book-open" size={18} color={theme.primary} />
-            </View>
-            <Text style={[styles.storySectionTitle, { color: theme.text }]}>Scene Narration</Text>
-            <View style={[styles.aiBadge, { backgroundColor: theme.primary }]}>
-              <Text style={styles.aiBadgeText}>AI</Text>
-            </View>
-          </View>
-          <StoryDisplay
-            isActive={storyModeActive}
-            onToggle={toggleStoryMode}
-            onCapture={handleStoryCaptureAndDescribe}
-            hasApiKey={Boolean(appSettings?.moondreamApiKey)}
-          />
-        </View>
-
-        {/* Manual Describe Scene */}
+        {/* Describe Scene - Unified AI Section */}
         <ToolSection
-          title="Single Capture"
-          icon="camera"
+          title="Describe Scene"
+          icon="eye"
           isExpanded={expandedSection === "describe"}
           onToggle={() => toggleSection("describe")}
+          badge="AI"
         >
-          <SceneDescription
-            description={sceneDescription}
-            isLoading={isDescribing}
-            onCapture={handleDescribeScene}
-            error={describeError}
-          />
+          <View style={styles.describeContainer}>
+            {/* Story narration display */}
+            <StoryDisplay
+              onCapture={handleStoryCaptureAndDescribe}
+              hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+            />
+            
+            {/* Manual capture button */}
+            <SceneDescription
+              description={sceneDescription}
+              isLoading={isDescribing}
+              onCapture={handleDescribeScene}
+              error={describeError}
+            />
+          </View>
         </ToolSection>
 
         {/* Tracking Models */}
@@ -695,37 +680,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.body.fontSize,
     fontWeight: "600",
   },
-  storySection: {
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  storySectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  storyIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: BorderRadius.sm,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  storySectionTitle: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
-    flex: 1,
-  },
-  aiBadge: {
-    paddingHorizontal: Spacing.xs,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.xs,
-  },
-  aiBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
+  describeContainer: {
+    gap: Spacing.md,
   },
 });
