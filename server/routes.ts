@@ -16,7 +16,7 @@ async function describeSceeneWithMoondream(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Moondream-Auth": `Key ${apiKey}`,
+      "X-Moondream-Auth": apiKey,
     },
     body: JSON.stringify({
       image_url: `data:image/jpeg;base64,${imageBase64}`,
