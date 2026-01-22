@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -28,8 +28,6 @@ import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
-import { Button } from "@/components/Button";
-import { ThemedText } from "@/components/ThemedText";
 import {
   TrackingModel,
   PerformanceStats,
@@ -51,8 +49,7 @@ const VIDEO_WIDTH = SCREEN_WIDTH;
 const VIDEO_HEIGHT = VIDEO_WIDTH / VIDEO_ASPECT_RATIO;
 
 export default function LiveScreen({ navigation }: any) {
-  const { theme, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -72,7 +69,6 @@ export default function LiveScreen({ navigation }: any) {
 
   const pulseOpacity = useSharedValue(0.3);
 
-  // Load camera and settings
   useEffect(() => {
     loadCameraAndSettings();
   }, []);
@@ -98,7 +94,6 @@ export default function LiveScreen({ navigation }: any) {
     }
   };
 
-  // Simulate tracking updates
   useEffect(() => {
     if (!isTracking) {
       setDetections([]);
@@ -114,7 +109,6 @@ export default function LiveScreen({ navigation }: any) {
     return () => clearInterval(interval);
   }, [isTracking, selectedModel]);
 
-  // Pulse animation for recording indicator
   useEffect(() => {
     pulseOpacity.value = withRepeat(
       withTiming(0.8, { duration: 800 }),
@@ -193,7 +187,6 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, []);
 
-  // Permission loading state
   if (!permission) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -201,15 +194,14 @@ export default function LiveScreen({ navigation }: any) {
           <View style={[styles.permissionIcon, { backgroundColor: theme.backgroundDefault }]}>
             <Feather name="video" size={48} color={theme.primary} />
           </View>
-          <ThemedText type="h4" style={styles.permissionTitle}>
+          <Text style={[styles.permissionTitle, { color: theme.text }]}>
             Loading Camera...
-          </ThemedText>
+          </Text>
         </View>
       </View>
     );
   }
 
-  // Permission denied state
   if (!permission.granted) {
     const canAskAgain = permission.canAskAgain;
 
@@ -219,12 +211,12 @@ export default function LiveScreen({ navigation }: any) {
           <View style={[styles.permissionIcon, { backgroundColor: theme.backgroundDefault }]}>
             <Feather name="video-off" size={48} color={theme.primary} />
           </View>
-          <ThemedText type="h4" style={styles.permissionTitle}>
+          <Text style={[styles.permissionTitle, { color: theme.text }]}>
             Camera Access Required
-          </ThemedText>
-          <ThemedText type="body" style={[styles.permissionText, { color: theme.textSecondary }]}>
+          </Text>
+          <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
             Visual Reasoning Playground needs camera access to display the live video feed and enable AI tracking.
-          </ThemedText>
+          </Text>
 
           {canAskAgain ? (
             <Pressable
@@ -239,9 +231,9 @@ export default function LiveScreen({ navigation }: any) {
             </Pressable>
           ) : (
             <>
-              <ThemedText type="small" style={[styles.permissionHint, { color: theme.textSecondary }]}>
+              <Text style={[styles.permissionHint, { color: theme.textSecondary }]}>
                 Camera permission was denied. Please enable it in Settings.
-              </ThemedText>
+              </Text>
               {Platform.OS !== "web" ? (
                 <Pressable
                   onPress={handleOpenSettings}
@@ -261,19 +253,20 @@ export default function LiveScreen({ navigation }: any) {
     );
   }
 
-  // Camera view with overlays
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {/* Camera area with padding for header */}
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
           <CameraView
             style={styles.camera}
             facing={cameraType}
             zoom={currentZoom / 100}
-          >
+          />
+
+          {/* Overlays positioned absolutely on top of camera */}
+          <View style={styles.overlayContainer} pointerEvents="box-none">
             {/* Center crosshair */}
-            <View style={styles.centerCrosshair}>
+            <View style={styles.centerCrosshair} pointerEvents="none">
               <View style={[styles.crosshairLineH, { backgroundColor: theme.primary }]} />
               <View style={[styles.crosshairLineV, { backgroundColor: theme.primary }]} />
               <View style={[styles.crosshairCenter, { borderColor: theme.primary }]} />
@@ -297,11 +290,11 @@ export default function LiveScreen({ navigation }: any) {
             ) : null}
 
             {/* Camera info overlay */}
-            <View style={styles.cameraInfoOverlay}>
-              <Text style={[styles.cameraInfoText, { color: "rgba(255,255,255,0.7)" }]}>
+            <View style={styles.cameraInfoOverlay} pointerEvents="none">
+              <Text style={styles.cameraInfoText}>
                 {camera ? camera.name : `Phone Camera (${cameraType})`}
               </Text>
-              <Text style={[styles.cameraInfoText, { color: "rgba(255,255,255,0.7)" }]}>
+              <Text style={styles.cameraInfoText}>
                 P:{ptzPosition.pan} T:{ptzPosition.tilt} Z:{currentZoom}
               </Text>
             </View>
@@ -330,7 +323,7 @@ export default function LiveScreen({ navigation }: any) {
             >
               <Feather name="refresh-cw" size={20} color="#FFFFFF" />
             </Pressable>
-          </CameraView>
+          </View>
         </View>
       </View>
 
@@ -341,7 +334,6 @@ export default function LiveScreen({ navigation }: any) {
           { paddingBottom: tabBarHeight + Spacing.lg },
         ]}
       >
-        {/* Model selector */}
         <View style={styles.modelSelectorContainer}>
           <ModelSelector
             selectedModel={selectedModel}
@@ -352,7 +344,6 @@ export default function LiveScreen({ navigation }: any) {
           />
         </View>
 
-        {/* PTZ Joystick */}
         {showControls ? (
           <Animated.View
             entering={FadeIn.duration(200)}
@@ -421,6 +412,9 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
   centerCrosshair: {
     position: "absolute",
     top: "50%",
@@ -481,6 +475,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cameraInfoText: {
+    color: "rgba(255,255,255,0.7)",
     fontSize: Typography.caption.fontSize,
     fontFamily: Platform.select({ ios: "ui-monospace", default: "monospace" }),
   },
@@ -539,16 +534,20 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   permissionTitle: {
+    fontSize: Typography.h4.fontSize,
+    fontWeight: Typography.h4.fontWeight,
     textAlign: "center",
     marginBottom: Spacing.md,
   },
   permissionText: {
+    fontSize: Typography.body.fontSize,
     textAlign: "center",
     lineHeight: 22,
     maxWidth: 300,
     marginBottom: Spacing.xl,
   },
   permissionHint: {
+    fontSize: Typography.small.fontSize,
     textAlign: "center",
     marginBottom: Spacing.lg,
     maxWidth: 280,
