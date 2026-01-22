@@ -6,7 +6,7 @@ import {
   FlatList,
   Pressable,
   Modal,
-  Dimensions,
+  ScrollView,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,32 +16,29 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
-import { GalleryItem, getGalleryItems, deleteGalleryItem } from "@/lib/gallery";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 3) / 2;
+import { Story, StoryCapture, getStories, deleteStory } from "@/lib/gallery";
 
 export function GalleryScreen() {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
-  const [items, setItems] = useState<GalleryItem[]>([]);
-  const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [selectedStory, setSelectedStory] = useState<Story | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      loadGallery();
+      loadStories();
     }, [])
   );
 
-  const loadGallery = async () => {
-    const galleryItems = await getGalleryItems();
-    setItems(galleryItems);
+  const loadStories = async () => {
+    const items = await getStories();
+    setStories(items);
   };
 
   const handleDelete = async (id: string) => {
-    await deleteGalleryItem(id);
-    setItems((prev) => prev.filter((item) => item.id !== id));
-    setSelectedItem(null);
+    await deleteStory(id);
+    setStories((prev) => prev.filter((story) => story.id !== id));
+    setSelectedStory(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -54,114 +51,164 @@ export function GalleryScreen() {
     });
   };
 
-  const renderItem = ({ item }: { item: GalleryItem }) => (
-    <Pressable
-      onPress={() => setSelectedItem(item)}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-      ]}
-    >
-      <Image
-        source={{ uri: item.imageUri }}
-        style={styles.cardImage}
-        contentFit="cover"
-      />
-      <View style={styles.cardContent}>
-        <Text
-          style={[styles.cardDescription, { color: theme.text }]}
-          numberOfLines={2}
-        >
-          {item.description}
-        </Text>
-        <Text style={[styles.cardDate, { color: theme.textSecondary }]}>
+  const formatDuration = (story: Story) => {
+    if (!story.endedAt) return "In progress";
+    const start = new Date(story.startedAt).getTime();
+    const end = new Date(story.endedAt).getTime();
+    const durationMs = end - start;
+    const minutes = Math.floor(durationMs / 60000);
+    if (minutes < 1) return "< 1 min";
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+  };
+
+  const renderStoryCard = ({ item }: { item: Story }) => {
+    const previewImage = item.captures.length > 0 ? item.captures[0].imageUri : null;
+    
+    return (
+      <Pressable
+        onPress={() => setSelectedStory(item)}
+        style={({ pressed }) => [
+          styles.storyCard,
+          { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+        ]}
+      >
+        <View style={styles.storyCardContent}>
+          {previewImage ? (
+            <Image
+              source={{ uri: previewImage }}
+              style={styles.storyPreview}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.storyPreviewEmpty, { backgroundColor: theme.backgroundRoot }]}>
+              <Feather name="image" size={24} color={theme.textSecondary} />
+            </View>
+          )}
+          <View style={styles.storyInfo}>
+            <Text style={[styles.storyTitle, { color: theme.text }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.storyMeta, { color: theme.textSecondary }]}>
+              {item.captures.length} captures
+            </Text>
+            <View style={styles.storyDetails}>
+              <View style={[styles.detailBadge, { backgroundColor: theme.primary + "20" }]}>
+                <Feather name="clock" size={10} color={theme.primary} />
+                <Text style={[styles.detailText, { color: theme.primary }]}>
+                  {formatDuration(item)}
+                </Text>
+              </View>
+              <Text style={[styles.storyDate, { color: theme.textSecondary }]}>
+                {formatDate(item.startedAt)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const renderCaptureInStory = ({ item, index }: { item: StoryCapture; index: number }) => (
+    <View style={styles.captureItem}>
+      <View style={styles.captureHeader}>
+        <View style={[styles.captureNumber, { backgroundColor: theme.primary }]}>
+          <Text style={styles.captureNumberText}>{index + 1}</Text>
+        </View>
+        <Text style={[styles.captureTime, { color: theme.textSecondary }]}>
           {formatDate(item.capturedAt)}
         </Text>
       </View>
-    </Pressable>
+      <Image
+        source={{ uri: item.imageUri }}
+        style={styles.captureImage}
+        contentFit="cover"
+      />
+      <Text style={[styles.captureDescription, { color: theme.text }]}>
+        {item.description}
+      </Text>
+    </View>
   );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {items.length === 0 ? (
+      {stories.length === 0 ? (
         <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl }]}>
           <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundDefault }]}>
-            <Feather name="image" size={48} color={theme.textSecondary} />
+            <Feather name="book-open" size={48} color={theme.textSecondary} />
           </View>
           <Text style={[styles.emptyTitle, { color: theme.text }]}>
-            No Captures Yet
+            No Stories Yet
           </Text>
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Scene descriptions will appear here when you capture them from the Live view
+            Enable Story Mode from the Live view to start recording your visual journey
           </Text>
         </View>
       ) : (
         <FlatList
-          data={items}
-          renderItem={renderItem}
+          data={stories}
+          renderItem={renderStoryCard}
           keyExtractor={(item) => item.id}
-          numColumns={2}
           contentContainerStyle={[
             styles.listContent,
             { paddingTop: headerHeight + Spacing.md },
           ]}
-          columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Detail Modal */}
+      {/* Story Detail Modal */}
       <Modal
-        visible={selectedItem !== null}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSelectedItem(null)}
+        visible={selectedStory !== null}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setSelectedStory(null)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setSelectedItem(null)}
-        >
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
-            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
-          >
-            {selectedItem ? (
-              <>
-                <Image
-                  source={{ uri: selectedItem.imageUri }}
-                  style={styles.modalImage}
-                  contentFit="cover"
-                />
-                <View style={styles.modalBody}>
-                  <Text style={[styles.modalDescription, { color: theme.text }]}>
-                    {selectedItem.description}
+        <View style={[styles.modalContainer, { backgroundColor: theme.backgroundRoot }]}>
+          {selectedStory ? (
+            <>
+              <View style={[styles.modalHeader, { backgroundColor: theme.backgroundDefault }]}>
+                <Pressable
+                  onPress={() => setSelectedStory(null)}
+                  style={styles.closeButton}
+                >
+                  <Feather name="x" size={24} color={theme.text} />
+                </Pressable>
+                <View style={styles.modalTitleSection}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>
+                    {selectedStory.title}
                   </Text>
-                  <View style={styles.modalMeta}>
-                    <View style={[styles.lengthBadge, { backgroundColor: theme.primary + "20" }]}>
-                      <Text style={[styles.lengthBadgeText, { color: theme.primary }]}>
-                        {selectedItem.length.charAt(0).toUpperCase() + selectedItem.length.slice(1)}
-                      </Text>
-                    </View>
-                    <Text style={[styles.modalDate, { color: theme.textSecondary }]}>
-                      {formatDate(selectedItem.capturedAt)}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => handleDelete(selectedItem.id)}
-                    style={({ pressed }) => [
-                      styles.deleteButton,
-                      { backgroundColor: theme.error, opacity: pressed ? 0.8 : 1 },
-                    ]}
-                  >
-                    <Feather name="trash-2" size={16} color="#FFFFFF" />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </Pressable>
+                  <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                    {selectedStory.captures.length} captures • {formatDuration(selectedStory)}
+                  </Text>
                 </View>
-              </>
-            ) : null}
-          </Animated.View>
-        </Pressable>
+                <Pressable
+                  onPress={() => handleDelete(selectedStory.id)}
+                  style={styles.deleteBtn}
+                >
+                  <Feather name="trash-2" size={20} color={theme.error} />
+                </Pressable>
+              </View>
+
+              {selectedStory.captures.length === 0 ? (
+                <View style={styles.emptyStory}>
+                  <Text style={[styles.emptyStoryText, { color: theme.textSecondary }]}>
+                    No captures in this story yet
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={selectedStory.captures}
+                  renderItem={renderCaptureInStory}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.capturesList}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
+            </>
+          ) : null}
+        </View>
       </Modal>
     </View>
   );
@@ -174,29 +221,60 @@ const styles = StyleSheet.create({
   listContent: {
     padding: Spacing.md,
     paddingBottom: 100,
-  },
-  row: {
     gap: Spacing.md,
   },
-  card: {
-    width: CARD_WIDTH,
+  storyCard: {
     borderRadius: BorderRadius.md,
     overflow: "hidden",
-    marginBottom: Spacing.md,
   },
-  cardImage: {
-    width: "100%",
-    height: CARD_WIDTH * 0.75,
+  storyCardContent: {
+    flexDirection: "row",
+    padding: Spacing.md,
+    gap: Spacing.md,
   },
-  cardContent: {
-    padding: Spacing.sm,
+  storyPreview: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
   },
-  cardDescription: {
+  storyPreviewEmpty: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storyInfo: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 4,
+  },
+  storyTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  storyMeta: {
     fontSize: Typography.small.fontSize,
-    lineHeight: 18,
-    marginBottom: Spacing.xs,
   },
-  cardDate: {
+  storyDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: 4,
+  },
+  detailBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+  },
+  detailText: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: "500",
+  },
+  storyDate: {
     fontSize: Typography.caption.fontSize,
   },
   emptyState: {
@@ -225,60 +303,75 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     maxWidth: 280,
   },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
-    justifyContent: "center",
+  },
+  modalHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    padding: Spacing.xl,
-  },
-  modalContent: {
-    width: "100%",
-    maxWidth: 400,
-    borderRadius: BorderRadius.lg,
-    overflow: "hidden",
-  },
-  modalImage: {
-    width: "100%",
-    height: 250,
-  },
-  modalBody: {
-    padding: Spacing.lg,
+    padding: Spacing.md,
+    paddingTop: 60,
     gap: Spacing.md,
   },
-  modalDescription: {
-    fontSize: Typography.body.fontSize,
-    lineHeight: 24,
+  closeButton: {
+    padding: Spacing.xs,
   },
-  modalMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  modalTitleSection: {
+    flex: 1,
   },
-  lengthBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.xs,
-  },
-  lengthBadgeText: {
-    fontSize: Typography.caption.fontSize,
+  modalTitle: {
+    fontSize: Typography.h4.fontSize,
     fontWeight: "600",
   },
-  modalDate: {
-    fontSize: Typography.caption.fontSize,
+  modalSubtitle: {
+    fontSize: Typography.small.fontSize,
+    marginTop: 2,
   },
-  deleteButton: {
+  deleteBtn: {
+    padding: Spacing.xs,
+  },
+  emptyStory: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyStoryText: {
+    fontSize: Typography.body.fontSize,
+  },
+  capturesList: {
+    padding: Spacing.md,
+    gap: Spacing.xl,
+  },
+  captureItem: {
+    gap: Spacing.sm,
+  },
+  captureHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.sm,
-    marginTop: Spacing.sm,
+    gap: Spacing.sm,
   },
-  deleteButtonText: {
+  captureNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  captureNumberText: {
     color: "#FFFFFF",
     fontSize: Typography.small.fontSize,
     fontWeight: "600",
+  },
+  captureTime: {
+    fontSize: Typography.small.fontSize,
+  },
+  captureImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: BorderRadius.md,
+  },
+  captureDescription: {
+    fontSize: Typography.body.fontSize,
+    lineHeight: 24,
   },
 });

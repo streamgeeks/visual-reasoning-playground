@@ -32,7 +32,12 @@ import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
 import { ToolSection } from "@/components/ToolSection";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
-import { saveGalleryItem, GalleryItem } from "@/lib/gallery";
+import {
+  StoryCapture,
+  startNewStory,
+  endActiveStory,
+  addCaptureToActiveStory,
+} from "@/lib/gallery";
 import {
   TrackingModel,
   PerformanceStats,
@@ -271,16 +276,26 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [appSettings]);
 
-  const handleSaveToGallery = useCallback(async (imageUri: string, description: string, length: ResponseLength) => {
-    const item: GalleryItem = {
+  const handleStoryModeStart = useCallback(async (intervalSeconds: number) => {
+    await startNewStory(intervalSeconds);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
+
+  const handleStoryModeEnd = useCallback(async () => {
+    await endActiveStory();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }, []);
+
+  const handleCaptureToStory = useCallback(async (imageUri: string, description: string, length: ResponseLength) => {
+    const capture: StoryCapture = {
       id: Date.now().toString(),
       imageUri,
       description,
       capturedAt: new Date().toISOString(),
       length,
     };
-    await saveGalleryItem(item);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await addCaptureToActiveStory(capture);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
   if (!permission) {
@@ -458,7 +473,9 @@ export default function LiveScreen({ navigation }: any) {
           <StoryDisplay
             onCapture={handleStoryCaptureAndDescribe}
             hasApiKey={Boolean(appSettings?.moondreamApiKey)}
-            onSaveToGallery={handleSaveToGallery}
+            onStoryModeStart={handleStoryModeStart}
+            onStoryModeEnd={handleStoryModeEnd}
+            onCaptureToStory={handleCaptureToStory}
           />
         </ToolSection>
 

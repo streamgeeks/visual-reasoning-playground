@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Text, Pressable, Switch } from "react-native";
+import { View, StyleSheet, Text, Pressable, Switch, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import Animated, {
-  FadeIn,
-} from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
@@ -18,7 +16,9 @@ export interface CaptureResult {
 interface StoryDisplayProps {
   onCapture: (length: ResponseLength) => Promise<CaptureResult | null>;
   hasApiKey: boolean;
-  onSaveToGallery?: (imageUri: string, description: string, length: ResponseLength) => void;
+  onStoryModeStart?: (intervalSeconds: number) => void;
+  onStoryModeEnd?: () => void;
+  onCaptureToStory?: (imageUri: string, description: string, length: ResponseLength) => void;
 }
 
 const LENGTH_OPTIONS: { key: ResponseLength; label: string }[] = [
@@ -27,25 +27,35 @@ const LENGTH_OPTIONS: { key: ResponseLength; label: string }[] = [
   { key: "long", label: "Detailed" },
 ];
 
+const INTERVAL_OPTIONS: { seconds: number; label: string }[] = [
+  { seconds: 20, label: "20s" },
+  { seconds: 30, label: "30s" },
+  { seconds: 60, label: "1m" },
+  { seconds: 120, label: "2m" },
+  { seconds: 300, label: "5m" },
+];
+
 const DISPLAY_DURATIONS: Record<ResponseLength, number> = {
   short: 12000,
   medium: 18000,
   long: 25000,
 };
 
-const HOLD_DURATION = 5000;
-
 export function StoryDisplay({
   onCapture,
   hasApiKey,
-  onSaveToGallery,
+  onStoryModeStart,
+  onStoryModeEnd,
+  onCaptureToStory,
 }: StoryDisplayProps) {
   const { theme } = useTheme();
   const [displayedWords, setDisplayedWords] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLength, setSelectedLength] = useState<ResponseLength>("short");
-  const [continuousMode, setContinuousMode] = useState(false);
+  const [storyMode, setStoryMode] = useState(false);
+  const [selectedInterval, setSelectedInterval] = useState(30);
+  const [captureCount, setCaptureCount] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const wordIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -62,8 +72,9 @@ export function StoryDisplay({
       const result = await onCapture(selectedLength);
       if (result) {
         animateWords(result.description);
-        if (onSaveToGallery) {
-          onSaveToGallery(result.imageUri, result.description, selectedLength);
+        if (storyMode && onCaptureToStory) {
+          onCaptureToStory(result.imageUri, result.description, selectedLength);
+          setCaptureCount((prev) => prev + 1);
         }
       } else {
         setError("Could not analyze scene");
@@ -73,7 +84,7 @@ export function StoryDisplay({
     } finally {
       setIsLoading(false);
     }
-  }, [hasApiKey, onCapture, selectedLength, onSaveToGallery]);
+  }, [hasApiKey, onCapture, selectedLength, storyMode, onCaptureToStory]);
 
   const animateWords = (text: string) => {
     const words = text.split(" ");
@@ -100,13 +111,12 @@ export function StoryDisplay({
   };
 
   useEffect(() => {
-    if (continuousMode && hasApiKey) {
+    if (storyMode && hasApiKey) {
       captureAndDescribe();
 
-      const totalDuration = DISPLAY_DURATIONS[selectedLength] + HOLD_DURATION;
       intervalRef.current = setInterval(() => {
         captureAndDescribe();
-      }, totalDuration);
+      }, selectedInterval * 1000);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -122,7 +132,7 @@ export function StoryDisplay({
         clearInterval(wordIntervalRef.current);
       }
     };
-  }, [continuousMode, hasApiKey, selectedLength]);
+  }, [storyMode, hasApiKey, selectedInterval]);
 
   const handleSingleCapture = () => {
     if (!isLoading) {
@@ -130,8 +140,18 @@ export function StoryDisplay({
     }
   };
 
-  const toggleContinuousMode = () => {
-    setContinuousMode((prev) => !prev);
+  const toggleStoryMode = () => {
+    if (!storyMode) {
+      setCaptureCount(0);
+      if (onStoryModeStart) {
+        onStoryModeStart(selectedInterval);
+      }
+    } else {
+      if (onStoryModeEnd) {
+        onStoryModeEnd();
+      }
+    }
+    setStoryMode((prev) => !prev);
   };
 
   if (!hasApiKey) {
@@ -146,51 +166,111 @@ export function StoryDisplay({
 
   return (
     <View style={styles.wrapper}>
-      {/* Controls row */}
-      <View style={styles.controlsRow}>
-        {/* Length selector */}
-        <View style={styles.lengthSelector}>
-          {LENGTH_OPTIONS.map((option) => (
-            <Pressable
-              key={option.key}
-              onPress={() => setSelectedLength(option.key)}
+      {/* Length selector */}
+      <View style={styles.lengthSelector}>
+        {LENGTH_OPTIONS.map((option) => (
+          <Pressable
+            key={option.key}
+            onPress={() => setSelectedLength(option.key)}
+            style={[
+              styles.lengthOption,
+              {
+                backgroundColor:
+                  selectedLength === option.key
+                    ? theme.primary
+                    : theme.backgroundDefault,
+              },
+            ]}
+          >
+            <Text
               style={[
-                styles.lengthOption,
+                styles.lengthOptionText,
                 {
-                  backgroundColor:
-                    selectedLength === option.key
-                      ? theme.primary
-                      : theme.backgroundDefault,
+                  color:
+                    selectedLength === option.key ? "#FFFFFF" : theme.textSecondary,
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.lengthOptionText,
-                  {
-                    color:
-                      selectedLength === option.key ? "#FFFFFF" : theme.textSecondary,
-                  },
-                ]}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-        {/* Continuous mode toggle */}
-        <View style={styles.toggleContainer}>
-          <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>
-            Loop
-          </Text>
+      {/* Story Mode controls */}
+      <View style={[styles.storyModeSection, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.storyModeHeader}>
+          <View style={styles.storyModeLabel}>
+            <Feather name="book-open" size={16} color={theme.primary} />
+            <Text style={[styles.storyModeTitle, { color: theme.text }]}>
+              Story Mode
+            </Text>
+          </View>
           <Switch
-            value={continuousMode}
-            onValueChange={toggleContinuousMode}
-            trackColor={{ false: theme.backgroundDefault, true: theme.primary }}
+            value={storyMode}
+            onValueChange={toggleStoryMode}
+            trackColor={{ false: theme.backgroundRoot, true: theme.primary }}
             thumbColor="#FFFFFF"
           />
         </View>
+
+        {/* Interval selector */}
+        <View style={styles.intervalSection}>
+          <Text style={[styles.intervalLabel, { color: theme.textSecondary }]}>
+            Capture every:
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.intervalOptions}
+          >
+            {INTERVAL_OPTIONS.map((option) => (
+              <Pressable
+                key={option.seconds}
+                onPress={() => setSelectedInterval(option.seconds)}
+                disabled={storyMode}
+                style={[
+                  styles.intervalOption,
+                  {
+                    backgroundColor:
+                      selectedInterval === option.seconds
+                        ? theme.primary
+                        : theme.backgroundRoot,
+                    opacity: storyMode ? 0.5 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.intervalOptionText,
+                    {
+                      color:
+                        selectedInterval === option.seconds
+                          ? "#FFFFFF"
+                          : theme.textSecondary,
+                    },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        {storyMode ? (
+          <View style={styles.storyStats}>
+            <View style={[styles.statBadge, { backgroundColor: theme.primary + "20" }]}>
+              <Feather name="camera" size={12} color={theme.primary} />
+              <Text style={[styles.statText, { color: theme.primary }]}>
+                {captureCount} captures
+              </Text>
+            </View>
+            <Text style={[styles.nextCapture, { color: theme.textSecondary }]}>
+              Next in {selectedInterval}s
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Story display area */}
@@ -224,7 +304,7 @@ export function StoryDisplay({
       </View>
 
       {/* Capture button */}
-      {!continuousMode ? (
+      {!storyMode ? (
         <Pressable
           onPress={handleSingleCapture}
           disabled={isLoading}
@@ -246,10 +326,10 @@ export function StoryDisplay({
           </Text>
         </Pressable>
       ) : (
-        <View style={[styles.liveIndicator, { backgroundColor: theme.error + "20" }]}>
-          <View style={[styles.liveDot, { backgroundColor: theme.error }]} />
-          <Text style={[styles.liveText, { color: theme.error }]}>
-            Continuous Mode Active
+        <View style={[styles.liveIndicator, { backgroundColor: theme.success + "20" }]}>
+          <View style={[styles.liveDot, { backgroundColor: theme.success }]} />
+          <Text style={[styles.liveText, { color: theme.success }]}>
+            Recording Story
           </Text>
         </View>
       )}
@@ -261,15 +341,9 @@ const styles = StyleSheet.create({
   wrapper: {
     gap: Spacing.md,
   },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
   lengthSelector: {
     flexDirection: "row",
     gap: Spacing.xs,
-    flex: 1,
   },
   lengthOption: {
     flex: 1,
@@ -282,14 +356,63 @@ const styles = StyleSheet.create({
     fontSize: Typography.small.fontSize,
     fontWeight: "600",
   },
-  toggleContainer: {
+  storyModeSection: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  storyModeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  storyModeLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  storyModeTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  intervalSection: {
+    gap: Spacing.sm,
+  },
+  intervalLabel: {
+    fontSize: Typography.small.fontSize,
+  },
+  intervalOptions: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+  },
+  intervalOption: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  intervalOptionText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+  },
+  storyStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
+    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.xs,
   },
-  toggleLabel: {
+  statText: {
     fontSize: Typography.small.fontSize,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  nextCapture: {
+    fontSize: Typography.small.fontSize,
   },
   container: {
     borderRadius: BorderRadius.lg,
