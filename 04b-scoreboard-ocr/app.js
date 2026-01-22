@@ -55,22 +55,23 @@ document.addEventListener('DOMContentLoaded', async function() {
         totalLatency: 0
     };
 
-    function setupVideoListeners() {
-        video.addEventListener('loadedmetadata', () => {
+    function resizeCanvas() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
             regionCanvas.width = video.videoWidth;
             regionCanvas.height = video.videoHeight;
             loadSavedRegions();
             drawAllRegions();
             updateStatus('Video ready - define OCR regions');
-        });
+            return true;
+        }
+        return false;
+    }
 
-        video.addEventListener('play', () => {
-            if (regionCanvas.width !== video.videoWidth) {
-                regionCanvas.width = video.videoWidth;
-                regionCanvas.height = video.videoHeight;
-                drawAllRegions();
-            }
-        });
+    function setupVideoListeners() {
+        video.addEventListener('loadedmetadata', resizeCanvas);
+        video.addEventListener('loadeddata', resizeCanvas);
+        video.addEventListener('play', resizeCanvas);
+        video.addEventListener('canplay', resizeCanvas);
     }
 
     async function initOCR() {
@@ -465,11 +466,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (window.VideoSourceAdapter) {
         VideoSourceAdapter.onSourceChange = (source) => {
             updateStatus(`Source: ${source === 'camera' ? 'Live Camera' : 'Sample Video'}`);
-            setTimeout(() => {
-                regionCanvas.width = video.videoWidth;
-                regionCanvas.height = video.videoHeight;
-                drawAllRegions();
-            }, 500);
+            setTimeout(resizeCanvas, 300);
         };
     }
+    
+    setTimeout(resizeCanvas, 1000);
 });

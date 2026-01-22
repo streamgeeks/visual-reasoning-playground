@@ -4,6 +4,7 @@ class OCREngine {
         this.isReady = false;
         this.isProcessing = false;
         this.onStatusChange = null;
+        this.minScale = 3;
     }
 
     async initialize() {
@@ -21,8 +22,9 @@ class OCREngine {
             });
 
             await this.worker.setParameters({
-                tessedit_char_whitelist: '0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -',
-                tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+                tessedit_char_whitelist: '0123456789:.-',
+                tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD,
+                preserve_interword_spaces: '0'
             });
 
             this.isReady = true;
@@ -40,6 +42,36 @@ class OCREngine {
         }
     }
 
+    preprocessImage(canvas, ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            const threshold = gray > 128 ? 255 : 0;
+            data[i] = threshold;
+            data[i + 1] = threshold;
+            data[i + 2] = threshold;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    preprocessImageInverted(canvas, ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            const threshold = gray > 128 ? 0 : 255;
+            data[i] = threshold;
+            data[i + 1] = threshold;
+            data[i + 2] = threshold;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+
     async recognizeRegion(video, region) {
         if (!this.isReady) {
             throw new Error('OCR engine not initialized');
@@ -52,9 +84,6 @@ class OCREngine {
         this.isProcessing = true;
 
         try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-
             const videoWidth = video.videoWidth;
             const videoHeight = video.videoHeight;
 
@@ -63,21 +92,31 @@ class OCREngine {
             const w = Math.round(region.width * videoWidth);
             const h = Math.round(region.height * videoHeight);
 
-            canvas.width = w;
-            canvas.height = h;
+            const scale = Math.max(this.minScale, Math.ceil(100 / h));
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = w * scale;
+            canvas.height = h * scale;
 
-            ctx.drawImage(video, x, y, w, h, 0, 0, w, h);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(video, x, y, w, h, 0, 0, canvas.width, canvas.height);
 
-            ctx.filter = 'contrast(1.5) brightness(1.1)';
-            ctx.drawImage(canvas, 0, 0);
-            ctx.filter = 'none';
+            this.preprocessImage(canvas, ctx);
 
-            const result = await this.worker.recognize(canvas);
+            let result = await this.worker.recognize(canvas);
+            
+            if (result.data.confidence < 50) {
+                ctx.drawImage(video, x, y, w, h, 0, 0, canvas.width, canvas.height);
+                this.preprocessImageInverted(canvas, ctx);
+                result = await this.worker.recognize(canvas);
+            }
             
             this.isProcessing = false;
             
             return {
-                text: result.data.text.trim(),
+                text: result.data.text.trim().replace(/\s+/g, ''),
                 confidence: result.data.confidence,
                 region: region.name
             };

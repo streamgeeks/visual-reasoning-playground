@@ -111,11 +111,16 @@
     }
 
     function getToolId() {
-        const path = window.location.pathname;
+        let path = window.location.pathname.replace(/\/index\.html$/i, '/');
         
-        const match = path.match(/\/(\d+-[^/]+)\/?/);
+        // Regex: /[digits][optional letter]-[name]/ e.g. /01-foo/ or /04b-bar/
+        const match = path.match(/\/(\d+[a-z]?-[^/]+)\/?/);
         if (match) {
-            return match[1].replace(/^\d+-/, '');
+            const folder = match[1];
+            if (/^\d+-/.test(folder)) {
+                return folder.replace(/^\d+-/, '');
+            }
+            return folder;
         }
         
         const folderMatch = path.match(/\/([^/]+)\/?$/);
