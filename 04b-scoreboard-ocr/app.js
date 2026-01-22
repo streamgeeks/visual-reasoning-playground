@@ -55,6 +55,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         totalLatency: 0
     };
 
+    function setupVideoListeners() {
+        video.addEventListener('loadedmetadata', () => {
+            regionCanvas.width = video.videoWidth;
+            regionCanvas.height = video.videoHeight;
+            loadSavedRegions();
+            drawAllRegions();
+            updateStatus('Video ready - define OCR regions');
+        });
+
+        video.addEventListener('play', () => {
+            if (regionCanvas.width !== video.videoWidth) {
+                regionCanvas.width = video.videoWidth;
+                regionCanvas.height = video.videoHeight;
+                drawAllRegions();
+            }
+        });
+    }
+
     async function initOCR() {
         ocrEngine = new OCREngine();
         ocrEngine.onStatusChange = (state, message) => {
@@ -425,8 +443,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     cameraSelect.addEventListener('change', () => {
         const deviceId = cameraSelect.value;
-        if (deviceId) {
-            startCamera(deviceId);
+        if (deviceId && window.VideoSourceAdapter) {
+            VideoSourceAdapter.switchToCamera();
         }
     });
 
@@ -441,6 +459,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     startExtractionBtn.addEventListener('click', startExtraction);
     stopExtractionBtn.addEventListener('click', stopExtraction);
 
+    setupVideoListeners();
     await initOCR();
-    await startCamera();
+    
+    if (window.VideoSourceAdapter) {
+        VideoSourceAdapter.onSourceChange = (source) => {
+            updateStatus(`Source: ${source === 'camera' ? 'Live Camera' : 'Sample Video'}`);
+            setTimeout(() => {
+                regionCanvas.width = video.videoWidth;
+                regionCanvas.height = video.videoHeight;
+                drawAllRegions();
+            }, 500);
+        };
+    }
 });

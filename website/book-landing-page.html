@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Reasoning AI for Broadcast and ProAV | By Paul Richards</title>
+    <meta name="description" content="Learn to build AI systems that understand your camera feeds. Track any object, automate production switches, and transform your broadcast workflow. No programming required.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #0f172a;
+            --accent: #06b6d4;
+            --text: #334155;
+            --text-light: #64748b;
+            --bg: #ffffff;
+            --bg-alt: #f8fafc;
+            --border: #e2e8f0;
+            --gradient: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            background: var(--bg);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 16px 0;
+        }
+
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--secondary);
+        }
+
+        .logo span {
+            color: var(--primary);
+        }
+
+        .nav-cta {
+            background: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .nav-cta:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 160px 0 100px;
+            background: linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
+        }
+
+        .hero .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: var(--secondary);
+            line-height: 1.1;
+            margin-bottom: 24px;
+        }
+
+        .hero-content h1 span {
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            margin-bottom: 32px;
+            line-height: 1.7;
+        }
+
+        .hero-ctas {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+            padding: 16px 32px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--secondary);
+            padding: 16px 32px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            border: 2px solid var(--border);
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            background: var(--bg-alt);
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat {
+            text-align: left;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--secondary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .hero-visual {
+            position: relative;
+        }
+
+        .book-mockup {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 12px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.15);
+        }
+
+        /* Problem Section */
+        .problem {
+            padding: 100px 0;
+            background: var(--secondary);
+            color: white;
+        }
+
+        .problem h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+        }
+
+        .problem-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 32px;
+        }
+
+        .problem-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 12px;
+            color: #f1f5f9;
+        }
+
+        .problem-card p {
+            color: #94a3b8;
+            line-height: 1.7;
+        }
+
+        /* Solution Section */
+        .solution {
+            padding: 100px 0;
+            background: var(--bg);
+        }
+
+        .solution h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            color: var(--secondary);
+            margin-bottom: 20px;
+        }
+
+        .solution-subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            color: var(--text-light);
+            max-width: 700px;
+            margin: 0 auto 60px;
+        }
+
+        .solution-demo {
+            background: var(--bg-alt);
+            border-radius: 20px;
+            padding: 48px;
+            border: 1px solid var(--border);
+        }
+
+        .demo-queries {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .demo-query {
+            background: white;
+            padding: 20px 24px;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 1rem;
+            color: var(--secondary);
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .demo-query::before {
+            content: '"';
+            color: var(--primary);
+            font-size: 1.5rem;
+            margin-right: 8px;
+        }
+
+        .demo-query::after {
+            content: '"';
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .solution-note {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+
+        .solution-note strong {
+            color: var(--primary);
+        }
+
+        /* Tools Section */
+        .tools {
+            padding: 100px 0;
+            background: var(--bg-alt);
+        }
+
+        .tools h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            color: var(--secondary);
+            margin-bottom: 20px;
+        }
+
+        .tools-subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            color: var(--text-light);
+            max-width: 600px;
+            margin: 0 auto 60px;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+        }
+
+        .tool-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+        }
+
+        .tool-number {
+            background: var(--gradient);
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+
+        .tool-card h3 {
+            font-size: 1.1rem;
+            color: var(--secondary);
+            margin-bottom: 10px;
+        }
+
+        .tool-card p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        /* What You Get Section */
+        .package {
+            padding: 100px 0;
+            background: var(--bg);
+        }
+
+        .package h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            color: var(--secondary);
+            margin-bottom: 60px;
+        }
+
+        .package-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+        }
+
+        .package-card {
+            background: var(--bg-alt);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .package-card.featured {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            transform: scale(1.05);
+        }
+
+        .package-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .package-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 16px;
+        }
+
+        .package-card.featured h3 {
+            color: white;
+        }
+
+        .package-card p {
+            color: var(--text-light);
+            margin-bottom: 24px;
+            line-height: 1.7;
+        }
+
+        .package-card.featured p {
+            color: #94a3b8;
+        }
+
+        .package-features {
+            text-align: left;
+            list-style: none;
+        }
+
+        .package-features li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .package-card.featured .package-features li {
+            border-color: rgba(255,255,255,0.1);
+            color: #e2e8f0;
+        }
+
+        .package-features li::before {
+            content: "✓";
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* Audience Section */
+        .audience {
+            padding: 100px 0;
+            background: var(--bg-alt);
+        }
+
+        .audience h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            color: var(--secondary);
+            margin-bottom: 60px;
+        }
+
+        .audience-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+        }
+
+        .audience-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            border: 1px solid var(--border);
+        }
+
+        .audience-card h3 {
+            font-size: 1.2rem;
+            color: var(--secondary);
+            margin-bottom: 12px;
+        }
+
+        .audience-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+
+        /* Author Section */
+        .author {
+            padding: 100px 0;
+            background: var(--bg);
+        }
+
+        .author .container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .author-photo {
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        }
+
+        .author-content h2 {
+            font-size: 2rem;
+            color: var(--secondary);
+            margin-bottom: 8px;
+        }
+
+        .author-title {
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 24px;
+        }
+
+        .author-bio {
+            color: var(--text);
+            line-height: 1.8;
+            margin-bottom: 24px;
+        }
+
+        .author-credentials {
+            display: flex;
+            gap: 32px;
+        }
+
+        .credential {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        /* FAQ Section */
+        .faq {
+            padding: 100px 0;
+            background: var(--bg-alt);
+        }
+
+        .faq h2 {
+            font-size: 2.5rem;
+            text-align: center;
+            color: var(--secondary);
+            margin-bottom: 60px;
+        }
+
+        .faq-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 32px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            border: 1px solid var(--border);
+        }
+
+        .faq-item h3 {
+            font-size: 1.1rem;
+            color: var(--secondary);
+            margin-bottom: 12px;
+        }
+
+        .faq-item p {
+            color: var(--text-light);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 120px 0;
+            background: var(--secondary);
+            text-align: center;
+        }
+
+        .cta h2 {
+            font-size: 3rem;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .cta p {
+            font-size: 1.25rem;
+            color: #94a3b8;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .cta .btn-primary {
+            padding: 20px 40px;
+            font-size: 1.2rem;
+        }
+
+        .cta .btn-secondary {
+            padding: 20px 40px;
+            font-size: 1.2rem;
+            background: transparent;
+            color: white;
+            border-color: rgba(255,255,255,0.3);
+        }
+
+        .cta .btn-secondary:hover {
+            border-color: white;
+            background: rgba(255,255,255,0.1);
+        }
+
+        /* Footer */
+        footer {
+            padding: 60px 0;
+            background: #0a0f1a;
+            color: #64748b;
+        }
+
+        footer .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 32px;
+        }
+
+        .footer-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .hero .container {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-ctas {
+                justify-content: center;
+            }
+
+            .hero-stats {
+                justify-content: center;
+            }
+
+            .hero-visual {
+                display: none;
+            }
+
+            .tools-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .package-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .package-card.featured {
+                transform: none;
+            }
+
+            .author .container {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .author-photo {
+                max-width: 250px;
+                margin: 0 auto;
+            }
+
+            .author-credentials {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .problem-grid,
+            .audience-grid,
+            .faq-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-queries {
+                grid-template-columns: 1fr;
+            }
+
+            .cta h2 {
+                font-size: 2rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            footer .container {
+                flex-direction: column;
+                gap: 24px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <div class="logo">Visual<span>Reasoning</span>.ai</div>
+            <a href="#get-started" class="nav-cta">Get the Book</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Automate What <span>You See</span></h1>
+                <p class="hero-subtitle">
+                    The first practical guide to Visual Reasoning AI for broadcast and ProAV professionals. 
+                    Build systems that understand your camera feeds, track any object, and automate your production—no programming experience required.
+                </p>
+                <div class="hero-ctas">
+                    <a href="#get-started" class="btn-primary">Get the Book <span>→</span></a>
+                    <a href="#tools" class="btn-secondary">Explore Free Tools</a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <div class="stat-number">21</div>
+                        <div class="stat-label">Chapters</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">8</div>
+                        <div class="stat-label">Ready-to-Use Tools</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">500</div>
+                        <div class="stat-label">Free API Calls</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <!-- Book mockup image would go here -->
+                <div style="background: var(--gradient); width: 100%; aspect-ratio: 3/4; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; text-align: center; padding: 40px;">
+                    Visual Reasoning AI<br><small style="font-weight: 400; opacity: 0.8;">for Broadcast & ProAV</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem">
+        <div class="container">
+            <h2>You're Doing Too Much Manually</h2>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <h3>Manual Camera Operation</h3>
+                    <p>Someone has to physically follow the presenter, track the speaker, or switch between shots. That's a person who could be doing something more valuable.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>Expensive Tracking Systems</h3>
+                    <p>Auto-tracking cameras exist, but they're expensive, proprietary, and can only track what they were programmed to track. Want to follow a horse, a product, or a specific person? Good luck.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>Disconnected Systems</h3>
+                    <p>Your cameras don't talk to your switcher. Your audio doesn't inform your video. Everything operates in silos, requiring you to be the glue holding it all together.</p>
+                </div>
+                <div class="problem-card">
+                    <h3>The AI Gap</h3>
+                    <p>You've heard AI is transforming every industry. But how do you actually use it? The tutorials are written for software engineers, not broadcast professionals.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section class="solution">
+        <div class="container">
+            <h2>Visual Reasoning Changes Everything</h2>
+            <p class="solution-subtitle">
+                What if your cameras could understand what they're seeing? Ask questions in plain English and get answers in real-time.
+            </p>
+            <div class="solution-demo">
+                <div class="demo-queries">
+                    <div class="demo-query">Is anyone at the podium?</div>
+                    <div class="demo-query">Track the person in the blue shirt</div>
+                    <div class="demo-query">How many people are in the room?</div>
+                    <div class="demo-query">Alert me when someone enters</div>
+                </div>
+            </div>
+            <p class="solution-note">
+                <strong>No retraining. No thousands of images. No waiting.</strong><br>
+                Just describe what you're looking for, and the AI finds it instantly.
+            </p>
+        </div>
+    </section>
+
+    <!-- Tools Section -->
+    <section class="tools" id="tools">
+        <div class="container">
+            <h2>The Visual Reasoning Playground</h2>
+            <p class="tools-subtitle">
+                Eight production-ready tools you can customize for your specific needs. All open source.
+            </p>
+            <div class="tools-grid">
+                <div class="tool-card">
+                    <div class="tool-number">1</div>
+                    <h3>Scene Describer</h3>
+                    <p>Point any camera at any scene. Get a natural language description of what's happening.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">2</div>
+                    <h3>Detection Box Drawer</h3>
+                    <p>Find and highlight any object you can describe. No training required.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">3</div>
+                    <h3>Auto-Track Any Object</h3>
+                    <p>Connect a PTZ camera and track anything by description. The camera follows automatically.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">4</div>
+                    <h3>Smart Counter</h3>
+                    <p>Count objects entering or leaving a space. People, cars, products—get data, not guesses.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">5</div>
+                    <h3>Scene Analyzer</h3>
+                    <p>Ask questions about what the camera sees and get intelligent, contextual answers.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">6</div>
+                    <h3>Zone Monitor</h3>
+                    <p>Draw boundaries on your camera view. Get alerts when specific objects enter or exit.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">7</div>
+                    <h3>AI Color Assistant</h3>
+                    <p>Show a reference image. Get exact instructions to match the look with your camera.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-number">8</div>
+                    <h3>Multimodal Fusion</h3>
+                    <p>Combine what the camera sees with what the mic hears. Context-aware automation.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- What You Get Section -->
+    <section class="package" id="get-started">
+        <div class="container">
+            <h2>Everything You Need to Get Started</h2>
+            <div class="package-grid">
+                <div class="package-card">
+                    <div class="package-icon">📖</div>
+                    <h3>The Complete Book</h3>
+                    <p>Comprehensive guide from first concepts to production deployment.</p>
+                    <ul class="package-features">
+                        <li>21 chapters + 4 appendices</li>
+                        <li>Print and digital formats</li>
+                        <li>Step-by-step instructions</li>
+                        <li>Real-world examples</li>
+                    </ul>
+                </div>
+                <div class="package-card featured">
+                    <div class="package-icon">🎓</div>
+                    <h3>Free Online Course</h3>
+                    <p>Video walkthroughs and hands-on exercises to see concepts in action.</p>
+                    <ul class="package-features">
+                        <li>Video tutorials for each chapter</li>
+                        <li>Hands-on projects</li>
+                        <li>Downloadable resources</li>
+                        <li>Community access</li>
+                    </ul>
+                </div>
+                <div class="package-card">
+                    <div class="package-icon">💻</div>
+                    <h3>Open Source Tools</h3>
+                    <p>Production-ready code you can fork, customize, and make your own.</p>
+                    <ul class="package-features">
+                        <li>All 8 Playground tools</li>
+                        <li>GitHub repository access</li>
+                        <li>500 free API calls</li>
+                        <li>Integration examples</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Audience Section -->
+    <section class="audience">
+        <div class="container">
+            <h2>Built for Broadcast & ProAV Professionals</h2>
+            <div class="audience-grid">
+                <div class="audience-card">
+                    <h3>ProAV Integrators</h3>
+                    <p>You know your customers' needs. Now you can build custom AI solutions without hiring developers. Differentiate your offerings with intelligent automation.</p>
+                </div>
+                <div class="audience-card">
+                    <h3>Broadcast Engineers</h3>
+                    <p>You understand the gear and the workflow. This book bridges the gap between your technical knowledge and AI capabilities.</p>
+                </div>
+                <div class="audience-card">
+                    <h3>Live Streamers</h3>
+                    <p>Level up your productions with automated camera work, intelligent switching, and systems that adapt to what's happening.</p>
+                </div>
+                <div class="audience-card">
+                    <h3>IT Professionals</h3>
+                    <p>Add visual intelligence to your systems. Monitor spaces, automate responses, and build smarter infrastructure.</p>
+                </div>
+                <div class="audience-card">
+                    <h3>Worship Tech Teams</h3>
+                    <p>Volunteer-friendly automation. Track your pastor, switch cameras based on who's speaking, and reduce technical burden.</p>
+                </div>
+                <div class="audience-card">
+                    <h3>Corporate AV Teams</h3>
+                    <p>Transform meeting rooms and event spaces with AI-powered production that works reliably without expert operators.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Author Section -->
+    <section class="author">
+        <div class="container">
+            <div class="author-photo-container">
+                <!-- Author photo would go here -->
+                <div style="width: 100%; aspect-ratio: 1; background: var(--bg-alt); border-radius: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-light);">
+                    [Author Photo]
+                </div>
+            </div>
+            <div class="author-content">
+                <h2>Paul Richards</h2>
+                <p class="author-title">Chief Streaming Officer at StreamGeeks | CRO at PTZOptics</p>
+                <p class="author-bio">
+                    Paul Richards has spent over two decades at the intersection of broadcast technology and innovation. He's authored more than 10 books on audio-visual and live streaming technology, including <em>The Unofficial Guide to NDI</em>, <em>The Unofficial Guide to vMix</em>, and <em>The Unofficial Guide to OBS</em>.
+                </p>
+                <p class="author-bio">
+                    When the visual reasoning breakthrough arrived, Paul knew it would transform the industry—and that someone needed to make it accessible to the professionals who would actually use it. This book is that bridge.
+                </p>
+                <div class="author-credentials">
+                    <div class="credential">📚 10+ Books Published</div>
+                    <div class="credential">🎬 20+ Years in Industry</div>
+                    <div class="credential">🌍 Global Speaker</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq">
+        <div class="container">
+            <h2>Frequently Asked Questions</h2>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <h3>Do I need programming experience?</h3>
+                    <p>No. The book uses AI coding tools like Cursor that let you build and modify code using plain English. If you can describe what you want, you can build it.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What equipment do I need?</h3>
+                    <p>A computer with a webcam is enough to start. For PTZ tracking, you'll need a PTZOptics camera or compatible PTZ camera. For production integration, vMix or OBS.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>How is this different from existing auto-tracking?</h3>
+                    <p>Traditional auto-tracking can only follow what it was programmed to follow. Visual reasoning can track anything you describe in words, with no retraining required.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What about privacy and security?</h3>
+                    <p>The book covers both cloud and local deployment options. For sensitive environments, you can run everything locally with no data leaving your network.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>Is the code really free?</h3>
+                    <p>Yes. The Visual Reasoning Playground is open source on GitHub. Use it, modify it, build on it—it's yours.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What if the technology changes?</h3>
+                    <p>The harness architecture is designed for exactly this. You can swap models as the technology evolves without rewriting your applications.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="container">
+            <h2>Ready to Make Your Cameras Smarter?</h2>
+            <p>
+                Visual reasoning is transforming broadcast and ProAV. Get the book, take the course, and start building AI-powered systems today.
+            </p>
+            <div class="cta-buttons">
+                <a href="#" class="btn-primary">Get the Book Now →</a>
+                <a href="#" class="btn-secondary">Start Free Course</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-brand">
+                © 2026 Paul Richards. All rights reserved.
+            </div>
+            <div class="footer-links">
+                <a href="https://visualreasoning.ai">VisualReasoning.ai</a>
+                <a href="https://streamgeeks.com">StreamGeeks</a>
+                <a href="https://ptzoptics.com">PTZOptics</a>
+                <a href="#">GitHub</a>
+                <a href="#">Privacy Policy</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
