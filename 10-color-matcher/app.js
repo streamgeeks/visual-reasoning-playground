@@ -101,6 +101,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         analyzeBtn.disabled = !(referenceImage && currentImage && window.apiKeyManager.hasMoondreamKey());
     }
 
+    const ANALYSIS_PROMPT = `Analyze this image's color and lighting. Return ONLY valid JSON in this exact format:
+{"temperature":"warm/neutral/cool","brightness":"dark/medium/bright","contrast":"low/medium/high","saturation":"low/medium/high","dominant_color":"color name","mood":"one or two words"}`;
+
+    const COMPARISON_PROMPT = `Compare these two image analyses and recommend camera adjustments.
+
+REFERENCE (target look): {REF}
+CURRENT (needs adjustment): {CURRENT}
+
+Return ONLY valid JSON in this exact format:
+{"temperature":{"action":"warmer/cooler/no change","amount":"slight/moderate/significant"},"brightness":{"action":"increase/decrease/no change","amount":"slight/moderate/significant"},"contrast":{"action":"increase/decrease/no change","amount":"slight/moderate/significant"},"saturation":{"action":"increase/decrease/no change","amount":"slight/moderate/significant"},"summary":"one sentence recommendation"}`;
+
+    function parseJSON(text) {
+        try {
+            const match = text.match(/\{[\s\S]*\}/);
+            if (match) {
+                return JSON.parse(match[0]);
+            }
+        } catch (e) {
+            console.warn('JSON parse failed:', e);
+        }
+        return null;
+    }
+
     async function analyzeAndCompare() {
         if (!referenceImage || !currentImage) return;
 
@@ -111,58 +134,35 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         analyzeBtn.disabled = true;
-        updateStatus('Analyzing images...');
+        updateStatus('Analyzing reference image...');
         window.reasoningConsole.logInfo('Starting color analysis...');
 
         const startTime = Date.now();
 
         try {
-            window.reasoningConsole.logInfo('Analyzing reference image style...');
-            const refAnalysis = await client.ask(referenceImage, `
-                Analyze this image's visual style. Describe:
-                1. Overall color temperature (warm/neutral/cool)
-                2. Saturation level (low/medium/high)
-                3. Contrast level (low/medium/high)
-                4. Brightness level (dark/medium/bright)
-                5. Any dominant colors
-                6. Overall mood/aesthetic
-            `);
+            const refResult = await client.ask(referenceImage, ANALYSIS_PROMPT);
             window.reasoningConsole.logApiCall('/ask (reference)', Date.now() - startTime);
-
+            const refAnalysis = parseJSON(refResult.answer);
+            
+            updateStatus('Analyzing current frame...');
             const currentStart = Date.now();
-            window.reasoningConsole.logInfo('Analyzing current image style...');
-            const currentAnalysis = await client.ask(currentImage, `
-                Analyze this image's visual style. Describe:
-                1. Overall color temperature (warm/neutral/cool)
-                2. Saturation level (low/medium/high)
-                3. Contrast level (low/medium/high)
-                4. Brightness level (dark/medium/bright)
-                5. Any dominant colors
-                6. Overall mood/aesthetic
-            `);
+            const currentResult = await client.ask(currentImage, ANALYSIS_PROMPT);
             window.reasoningConsole.logApiCall('/ask (current)', Date.now() - currentStart);
+            const currentAnalysis = parseJSON(currentResult.answer);
 
+            updateStatus('Generating recommendations...');
             const compareStart = Date.now();
-            window.reasoningConsole.logInfo('Generating adjustment recommendations...');
-            const comparison = await client.ask(referenceImage, `
-                Compare these two style descriptions and provide specific camera adjustments to make the second match the first:
-                
-                TARGET STYLE: ${refAnalysis.answer}
-                
-                CURRENT STYLE: ${currentAnalysis.answer}
-                
-                Provide specific recommendations like:
-                - Color temperature: increase/decrease by amount
-                - Saturation: increase/decrease by amount
-                - Brightness: increase/decrease by amount
-                - Contrast: increase/decrease by amount
-            `);
+            const prompt = COMPARISON_PROMPT
+                .replace('{REF}', JSON.stringify(refAnalysis || refResult.answer))
+                .replace('{CURRENT}', JSON.stringify(currentAnalysis || currentResult.answer));
+            const compareResult = await client.ask(referenceImage, prompt);
             window.reasoningConsole.logApiCall('/ask (comparison)', Date.now() - compareStart);
+            const recommendations = parseJSON(compareResult.answer);
 
             const elapsed = Date.now() - startTime;
             analysisTimeSpan.textContent = (elapsed / 1000).toFixed(1) + 's';
 
-            displayRecommendations(comparison.answer, refAnalysis.answer, currentAnalysis.answer);
+            displayRecommendations(recommendations, refAnalysis, currentAnalysis, compareResult.answer);
             updateStatus('Analysis complete');
             window.reasoningConsole.logDecision('Analysis complete', `Total time: ${elapsed}ms`);
 
@@ -174,106 +174,145 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    function displayRecommendations(comparison, refStyle, currentStyle) {
+    function displayRecommendations(recs, refAnalysis, currentAnalysis, rawResponse) {
         recommendationsDiv.classList.remove('hidden');
 
-        const recommendations = parseRecommendations(comparison);
-        
-        recommendationList.innerHTML = recommendations.map(rec => `
-            <div class="recommendation-item">
-                <div class="icon ${rec.iconClass}">${rec.icon}</div>
-                <div>
-                    <strong>${rec.setting}</strong>
-                    <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">${rec.action}</p>
-                </div>
-            </div>
-        `).join('');
+        if (recs && typeof recs === 'object') {
+            const adjustments = [
+                { key: 'temperature', label: 'Color Temperature', icon: '🌡️', color: '#E9C46A' },
+                { key: 'brightness', label: 'Brightness', icon: '☀️', color: '#F4A261' },
+                { key: 'contrast', label: 'Contrast', icon: '◐', color: '#2A9D8F' },
+                { key: 'saturation', label: 'Saturation', icon: '🎨', color: '#E76F51' }
+            ];
 
-        analysisText.innerHTML = `
-            <p><strong>Reference Style:</strong> ${refStyle}</p>
-            <hr style="border-color: var(--surface-light); margin: 10px 0;">
-            <p><strong>Current Style:</strong> ${currentStyle}</p>
-            <hr style="border-color: var(--surface-light); margin: 10px 0;">
-            <p><strong>Recommendations:</strong> ${comparison}</p>
-        `;
+            let cardsHtml = '';
+            let changeCount = 0;
 
-        const matchScore = calculateMatchScore(refStyle, currentStyle);
-        matchScoreSpan.textContent = matchScore + '%';
-        window.reasoningConsole.logInfo(`Match score calculated: ${matchScore}%`);
-    }
-
-    function parseRecommendations(text) {
-        const recommendations = [];
-        const lower = text.toLowerCase();
-
-        if (lower.includes('temperature') || lower.includes('warm') || lower.includes('cool')) {
-            recommendations.push({
-                setting: 'Color Temperature',
-                action: extractAction(text, ['temperature', 'warm', 'cool', 'white balance']),
-                icon: 'T',
-                iconClass: 'rec-color'
+            adjustments.forEach(adj => {
+                const rec = recs[adj.key];
+                if (rec && rec.action && rec.action !== 'no change') {
+                    changeCount++;
+                    const arrow = rec.action.includes('increase') || rec.action === 'warmer' ? '↑' : '↓';
+                    const amountClass = rec.amount === 'significant' ? 'high' : (rec.amount === 'moderate' ? 'medium' : 'low');
+                    
+                    cardsHtml += `
+                        <div class="rec-card">
+                            <div class="rec-icon" style="background: ${adj.color}">${adj.icon}</div>
+                            <div class="rec-content">
+                                <div class="rec-label">${adj.label}</div>
+                                <div class="rec-action">
+                                    <span class="rec-arrow ${rec.action.includes('increase') || rec.action === 'warmer' ? 'up' : 'down'}">${arrow}</span>
+                                    <span class="rec-text">${rec.action}</span>
+                                    <span class="rec-amount ${amountClass}">${rec.amount}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (rec) {
+                    cardsHtml += `
+                        <div class="rec-card no-change">
+                            <div class="rec-icon" style="background: ${adj.color}; opacity: 0.5">${adj.icon}</div>
+                            <div class="rec-content">
+                                <div class="rec-label">${adj.label}</div>
+                                <div class="rec-action">
+                                    <span class="rec-text" style="color: var(--success)">✓ Looks good</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
             });
-        }
 
-        if (lower.includes('brightness') || lower.includes('exposure') || lower.includes('bright') || lower.includes('dark')) {
-            recommendations.push({
-                setting: 'Brightness',
-                action: extractAction(text, ['brightness', 'exposure', 'brighter', 'darker']),
-                icon: 'B',
-                iconClass: 'rec-brightness'
-            });
-        }
+            recommendationList.innerHTML = cardsHtml;
 
-        if (lower.includes('contrast')) {
-            recommendations.push({
-                setting: 'Contrast',
-                action: extractAction(text, ['contrast']),
-                icon: 'C',
-                iconClass: 'rec-contrast'
-            });
-        }
+            const matchScore = changeCount === 0 ? 95 : Math.max(30, 90 - (changeCount * 15));
+            matchScoreSpan.textContent = matchScore + '%';
 
-        if (lower.includes('saturation') || lower.includes('vibran')) {
-            recommendations.push({
-                setting: 'Saturation',
-                action: extractAction(text, ['saturation', 'vibrance', 'vivid']),
-                icon: 'S',
-                iconClass: 'rec-saturation'
-            });
-        }
-
-        if (recommendations.length === 0) {
-            recommendations.push({
-                setting: 'General',
-                action: text.substring(0, 100) + '...',
-                icon: 'G',
-                iconClass: 'rec-color'
-            });
-        }
-
-        return recommendations;
-    }
-
-    function extractAction(text, keywords) {
-        const sentences = text.split(/[.!?]+/);
-        for (const sentence of sentences) {
-            const lower = sentence.toLowerCase();
-            if (keywords.some(k => lower.includes(k))) {
-                return sentence.trim();
+            let summaryHtml = '';
+            if (recs.summary) {
+                summaryHtml = `<div class="rec-summary"><strong>Summary:</strong> ${recs.summary}</div>`;
             }
+
+            let analysisHtml = '<div class="analysis-comparison">';
+            if (refAnalysis) {
+                analysisHtml += `
+                    <div class="analysis-col">
+                        <h4>Reference Style</h4>
+                        <div class="analysis-item"><span>Temperature:</span> <strong>${refAnalysis.temperature || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Brightness:</span> <strong>${refAnalysis.brightness || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Contrast:</span> <strong>${refAnalysis.contrast || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Saturation:</span> <strong>${refAnalysis.saturation || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Dominant:</span> <strong>${refAnalysis.dominant_color || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Mood:</span> <strong>${refAnalysis.mood || 'N/A'}</strong></div>
+                    </div>
+                `;
+            }
+            if (currentAnalysis) {
+                analysisHtml += `
+                    <div class="analysis-col">
+                        <h4>Current Frame</h4>
+                        <div class="analysis-item"><span>Temperature:</span> <strong>${currentAnalysis.temperature || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Brightness:</span> <strong>${currentAnalysis.brightness || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Contrast:</span> <strong>${currentAnalysis.contrast || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Saturation:</span> <strong>${currentAnalysis.saturation || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Dominant:</span> <strong>${currentAnalysis.dominant_color || 'N/A'}</strong></div>
+                        <div class="analysis-item"><span>Mood:</span> <strong>${currentAnalysis.mood || 'N/A'}</strong></div>
+                    </div>
+                `;
+            }
+            analysisHtml += '</div>';
+
+            analysisText.innerHTML = summaryHtml + analysisHtml;
+
+        } else {
+            recommendationList.innerHTML = `
+                <div class="rec-card">
+                    <div class="rec-content" style="width: 100%">
+                        <div class="rec-label">AI Recommendation</div>
+                        <div class="rec-text-block">${rawResponse}</div>
+                    </div>
+                </div>
+            `;
+            analysisText.innerHTML = '';
+            matchScoreSpan.textContent = '-';
         }
-        return 'Adjust as needed';
+
+        window.reasoningConsole.logInfo('Recommendations displayed');
     }
 
-    function calculateMatchScore(ref, current) {
-        const refWords = new Set(ref.toLowerCase().split(/\s+/));
-        const currentWords = new Set(current.toLowerCase().split(/\s+/));
-        let matches = 0;
-        refWords.forEach(word => {
-            if (currentWords.has(word) && word.length > 3) matches++;
+    presetItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const profileFile = item.dataset.profile;
+            const profileName = item.querySelector('span').textContent;
+            
+            presetItems.forEach(p => p.classList.remove('selected'));
+            item.classList.add('selected');
+            
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+                referenceImage = canvas.toDataURL('image/jpeg', 0.9);
+                
+                referencePreview.src = referenceImage;
+                referencePreview.classList.remove('hidden');
+                uploadArea.classList.add('hidden');
+                presetProfiles.classList.add('hidden');
+                
+                checkReadyState();
+                updateStatus(`Selected "${profileName}" - Capture current frame`);
+                window.reasoningConsole.logAction('Preset selected', profileName);
+            };
+            img.onerror = () => {
+                updateStatus('Failed to load preset image', true);
+                window.reasoningConsole.logError('Failed to load: ' + profileFile);
+            };
+            img.src = `../assets/color-profiles/${profileFile}`;
         });
-        return Math.min(95, Math.round((matches / Math.max(refWords.size, 1)) * 100) + 30);
-    }
+    });
 
     presetItems.forEach(item => {
         item.addEventListener('click', () => {
