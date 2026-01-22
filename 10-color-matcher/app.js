@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const statusBar = document.getElementById('status');
     const matchScoreSpan = document.getElementById('matchScore');
     const analysisTimeSpan = document.getElementById('analysisTime');
+    const presetProfiles = document.getElementById('presetProfiles');
+    const presetItems = document.querySelectorAll('.preset-item');
 
     let client = null;
     let referenceImage = null;
@@ -64,6 +66,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             referencePreview.src = referenceImage;
             referencePreview.classList.remove('hidden');
             uploadArea.classList.add('hidden');
+            presetProfiles.classList.add('hidden');
+            presetItems.forEach(p => p.classList.remove('selected'));
             checkReadyState();
             updateStatus('Reference uploaded - Capture current frame');
             window.reasoningConsole.logAction('Reference uploaded', file.name);
@@ -270,6 +274,40 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
         return Math.min(95, Math.round((matches / Math.max(refWords.size, 1)) * 100) + 30);
     }
+
+    presetItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const profileFile = item.dataset.profile;
+            const profileName = item.querySelector('span').textContent;
+            
+            presetItems.forEach(p => p.classList.remove('selected'));
+            item.classList.add('selected');
+            
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+                referenceImage = canvas.toDataURL('image/jpeg', 0.9);
+                
+                referencePreview.src = referenceImage;
+                referencePreview.classList.remove('hidden');
+                uploadArea.classList.add('hidden');
+                presetProfiles.classList.add('hidden');
+                
+                checkReadyState();
+                updateStatus(`Selected "${profileName}" - Capture current frame`);
+                window.reasoningConsole.logAction('Preset selected', profileName);
+            };
+            img.onerror = () => {
+                updateStatus('Failed to load preset image', true);
+                window.reasoningConsole.logError('Failed to load: ' + profileFile);
+            };
+            img.src = `../assets/color-profiles/${profileFile}`;
+        });
+    });
 
     uploadArea.addEventListener('click', () => referenceInput.click());
     referenceInput.addEventListener('change', (e) => {

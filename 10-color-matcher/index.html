@@ -45,6 +45,61 @@
             padding: 0;
             border: none;
         }
+        .preset-profiles {
+            margin-bottom: 15px;
+        }
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .preset-item {
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 6px;
+            overflow: hidden;
+            transition: all 0.2s;
+            background: var(--background);
+        }
+        .preset-item:hover {
+            border-color: var(--primary);
+            transform: scale(1.02);
+        }
+        .preset-item.selected {
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 2px rgba(42, 157, 143, 0.3);
+        }
+        .preset-item img {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            display: block;
+        }
+        .preset-item span {
+            display: block;
+            text-align: center;
+            font-size: 0.75rem;
+            padding: 6px 4px;
+            color: var(--text-muted);
+            background: var(--surface);
+        }
+        .preset-divider {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+        .preset-divider::before,
+        .preset-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--surface-light);
+        }
+        .preset-divider span {
+            padding: 0 12px;
+        }
         .recommendations {
             background: var(--surface);
             border-radius: 8px;
@@ -96,6 +151,37 @@
                 <div class="comparison-grid">
                     <div class="comparison-panel">
                         <h3>Reference (Target Style)</h3>
+                        <div class="preset-profiles" id="presetProfiles">
+                            <div class="preset-grid">
+                                <div class="preset-item" data-profile="news-corporate-studio-bright.jpg">
+                                    <img src="../assets/color-profiles/news-corporate-studio-bright.jpg" alt="News Corporate">
+                                    <span>News/Corporate</span>
+                                </div>
+                                <div class="preset-item" data-profile="podcast-blue-cool.jpg">
+                                    <img src="../assets/color-profiles/podcast-blue-cool.jpg" alt="Podcast Blue">
+                                    <span>Podcast Cool</span>
+                                </div>
+                                <div class="preset-item" data-profile="sports-broadcast-light.jpg">
+                                    <img src="../assets/color-profiles/sports-broadcast-light.jpg" alt="Sports Broadcast">
+                                    <span>Sports</span>
+                                </div>
+                                <div class="preset-item" data-profile="talk-show-late-night.jpg">
+                                    <img src="../assets/color-profiles/talk-show-late-night.jpg" alt="Talk Show">
+                                    <span>Late Night</span>
+                                </div>
+                                <div class="preset-item" data-profile="outdoors-bright-daylight.jpg">
+                                    <img src="../assets/color-profiles/outdoors-bright-daylight.jpg" alt="Outdoors">
+                                    <span>Outdoors</span>
+                                </div>
+                                <div class="preset-item" data-profile="cinematic-live-performance.jpg">
+                                    <img src="../assets/color-profiles/cinematic-live-performance.jpg" alt="Cinematic">
+                                    <span>Cinematic</span>
+                                </div>
+                            </div>
+                            <div class="preset-divider">
+                                <span>or upload your own</span>
+                            </div>
+                        </div>
                         <div class="upload-area" id="uploadArea">
                             <input type="file" id="referenceInput" accept="image/*" style="display: none">
                             <p>Click to upload reference image</p>
