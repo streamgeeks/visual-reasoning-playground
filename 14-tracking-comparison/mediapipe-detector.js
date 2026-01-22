@@ -5,7 +5,8 @@ class MediaPipeDetector {
         this.currentMode = 'face';
         this.lastDetection = null;
         this.isReady = false;
-        this.onDetection = null;
+        this.pendingResolve = null;
+        this.detectStartTime = 0;
     }
 
     async initFaceDetection() {
@@ -34,7 +35,7 @@ class MediaPipeDetector {
         });
 
         this.pose.setOptions({
-            modelComplexity: 1,
+            modelComplexity: 0,
             smoothLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
@@ -59,6 +60,8 @@ class MediaPipeDetector {
     }
 
     handleFaceResults(results) {
+        const latency = performance.now() - this.detectStartTime;
+
         if (results.detections && results.detections.length > 0) {
             const detection = results.detections[0];
             const bbox = detection.boundingBox;
@@ -79,12 +82,15 @@ class MediaPipeDetector {
             this.lastDetection = null;
         }
 
-        if (this.onDetection) {
-            this.onDetection(this.lastDetection);
+        if (this.pendingResolve) {
+            this.pendingResolve({ detection: this.lastDetection, latency });
+            this.pendingResolve = null;
         }
     }
 
     handlePoseResults(results) {
+        const latency = performance.now() - this.detectStartTime;
+
         if (results.poseLandmarks && results.poseLandmarks.length > 0) {
             const landmarks = results.poseLandmarks;
 
@@ -126,30 +132,34 @@ class MediaPipeDetector {
             this.lastDetection = null;
         }
 
-        if (this.onDetection) {
-            this.onDetection(this.lastDetection);
+        if (this.pendingResolve) {
+            this.pendingResolve({ detection: this.lastDetection, latency });
+            this.pendingResolve = null;
         }
     }
 
-    async detect(videoElement) {
+    detect(videoElement) {
         if (!this.isReady) {
-            throw new Error('MediaPipe not initialized. Call setMode() first.');
+            return Promise.reject(new Error('MediaPipe not initialized. Call setMode() first.'));
         }
 
-        const startTime = performance.now();
+        return new Promise((resolve) => {
+            this.pendingResolve = resolve;
+            this.detectStartTime = performance.now();
 
-        if (this.currentMode === 'face' && this.faceDetection) {
-            await this.faceDetection.send({ image: videoElement });
-        } else if (this.currentMode === 'pose' && this.pose) {
-            await this.pose.send({ image: videoElement });
-        }
+            if (this.currentMode === 'face' && this.faceDetection) {
+                this.faceDetection.send({ image: videoElement });
+            } else if (this.currentMode === 'pose' && this.pose) {
+                this.pose.send({ image: videoElement });
+            }
 
-        const latency = performance.now() - startTime;
-
-        return {
-            detection: this.lastDetection,
-            latency: latency
-        };
+            setTimeout(() => {
+                if (this.pendingResolve) {
+                    this.pendingResolve({ detection: null, latency: performance.now() - this.detectStartTime });
+                    this.pendingResolve = null;
+                }
+            }, 5000);
+        });
     }
 
     getLastDetection() {

@@ -355,9 +355,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             addHistoryEntry(currentMode, 0, false, error.message);
         }
 
-        const delay = currentMode === 'mediapipe' ? 33 : 500;
         if (isTracking) {
-            trackingLoop = setTimeout(runTrackingLoop, delay);
+            if (currentMode === 'mediapipe') {
+                requestAnimationFrame(runTrackingLoop);
+            } else {
+                trackingLoop = setTimeout(runTrackingLoop, 500);
+            }
         }
     }
 
