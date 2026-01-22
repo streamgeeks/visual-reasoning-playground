@@ -200,12 +200,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
         saveSettings();
+        console.log('Creating PTZ controller for IP:', ip);
         ptzController = new PTZController(ip, {
             useAuth: useAuthCheckbox.checked,
             username: authUsernameInput.value,
             password: authPasswordInput.value
         });
         ptzController.setDeadzone(parseInt(deadzoneSlider.value));
+        console.log('PTZ controller created, sending stop command...');
         ptzController.stop();
         connectionStatus.textContent = 'Connected';
         connectionStatus.classList.remove('disconnected');
@@ -230,7 +232,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.querySelectorAll('[data-ptz]').forEach(btn => {
         const cmd = btn.dataset.ptz;
         btn.addEventListener('mousedown', () => {
-            if (!ptzController) return;
+            console.log('PTZ button pressed:', cmd, 'controller:', !!ptzController);
+            if (!ptzController) {
+                console.log('No PTZ controller! Click Test first.');
+                return;
+            }
             if (cmd === 'up') ptzController.tiltUp();
             else if (cmd === 'down') ptzController.tiltDown();
             else if (cmd === 'left') ptzController.panLeft();

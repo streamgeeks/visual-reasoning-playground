@@ -31,16 +31,23 @@ class PTZController {
     }
 
     sendCommand(command) {
-        if (!this.cameraIP) return;
+        if (!this.cameraIP) {
+            console.log('PTZ: No camera IP set');
+            return;
+        }
         
         const url = `http://${this.cameraIP}/cgi-bin/ptzctrl.cgi?${command}`;
+        console.log('PTZ: Sending to', url);
+        
         const opts = { method: 'GET', mode: 'no-cors' };
 
         if (this.useAuth && this.username) {
             opts.headers = { 'Authorization': 'Basic ' + btoa(this.username + ':' + this.password) };
         }
 
-        fetch(url, opts).catch(() => {});
+        fetch(url, opts)
+            .then(() => console.log('PTZ: Command sent'))
+            .catch(err => console.error('PTZ: Fetch error', err));
     }
 
     stop() {
