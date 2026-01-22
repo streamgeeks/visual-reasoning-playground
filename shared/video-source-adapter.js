@@ -14,6 +14,7 @@
         'text-reader': '../assets/sample-videos/text-reader-demo.mp4',
         'scoreboard-extractor': '../assets/sample-videos/scoreboard-demo.mp4',
         'scoreboard-ocr': '../assets/sample-videos/scoreboard-demo.mp4',
+        '04b-scoreboard-ocr': '../assets/sample-videos/scoreboard-demo.mp4',
         'zone-monitor': '../assets/sample-videos/motion-detector-demo.mp4',
         'smart-counter': '../assets/sample-videos/smart-counter-demo.mp4',
         'scene-analyzer': '../assets/sample-videos/scene-describer-demo.mp4',
