@@ -53,11 +53,13 @@ class OBSClient {
                         await this._handleHello(message.d, password);
                     } else if (message.op === 2) {
                         this.connected = true;
-                        if (this.onStatusChange) this.onStatusChange(true);
                         await this._loadScenes();
+                        if (this.onStatusChange) this.onStatusChange(true);
                         if (window.reasoningConsole) {
-                            window.reasoningConsole.logInfo('OBS authenticated successfully');
+                            window.reasoningConsole.logInfo(`OBS authenticated successfully. Found ${this.scenes.length} scene(s)`);
                         }
+                        resolve();
+                    }
                         resolve();
                     } else if (message.op === 7) {
                         this._handleResponse(message.d);
@@ -157,11 +159,22 @@ class OBSClient {
     async _loadScenes() {
         try {
             const response = await this._sendRequest('GetSceneList');
-            this.scenes = response.scenes.map(s => s.sceneName);
-            this.currentScene = response.currentProgramSceneName;
-            if (this.onSceneChange) this.onSceneChange(this.currentScene);
+            if (response && response.scenes) {
+                this.scenes = response.scenes.map(s => s.sceneName);
+                this.currentScene = response.currentProgramSceneName;
+                if (this.onSceneChange) this.onSceneChange(this.currentScene);
+                if (window.reasoningConsole) {
+                    window.reasoningConsole.logInfo(`Loaded ${this.scenes.length} scenes: ${this.scenes.join(', ')}`);
+                }
+            } else {
+                if (window.reasoningConsole) {
+                    window.reasoningConsole.logError('GetSceneList returned unexpected format');
+                }
+            }
         } catch (error) {
-            console.error('Failed to load scenes:', error);
+            if (window.reasoningConsole) {
+                window.reasoningConsole.logError('Failed to load scenes: ' + error.message);
+            }
         }
     }
 
