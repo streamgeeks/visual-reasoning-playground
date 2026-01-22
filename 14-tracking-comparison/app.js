@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         startCamera(cameraSelect.value);
     });
 
-    testConnectionBtn.addEventListener('click', () => {
+    testConnectionBtn.addEventListener('click', async () => {
         const ip = cameraIPInput.value.trim();
         if (!ip) {
             updateStatus('Enter camera IP first', true);
@@ -201,18 +201,31 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         saveSettings();
         console.log('Creating PTZ controller for IP:', ip);
+        
         ptzController = new PTZController(ip, {
             useAuth: useAuthCheckbox.checked,
             username: authUsernameInput.value,
             password: authPasswordInput.value
         });
         ptzController.setDeadzone(parseInt(deadzoneSlider.value));
-        console.log('PTZ controller created, sending stop command...');
-        ptzController.stop();
-        connectionStatus.textContent = 'Connected';
-        connectionStatus.classList.remove('disconnected');
-        connectionStatus.classList.add('connected');
-        updateStatus('PTZ connected');
+        
+        connectionStatus.textContent = 'Testing...';
+        testConnectionBtn.disabled = true;
+        
+        try {
+            await ptzController.stop();
+            connectionStatus.textContent = 'Connected';
+            connectionStatus.classList.remove('disconnected');
+            connectionStatus.classList.add('connected');
+            updateStatus('PTZ connected');
+        } catch (e) {
+            connectionStatus.textContent = 'Failed';
+            connectionStatus.classList.remove('connected');
+            connectionStatus.classList.add('disconnected');
+            updateStatus('PTZ connection failed', true);
+        } finally {
+            testConnectionBtn.disabled = false;
+        }
     });
 
     useAuthCheckbox.addEventListener('change', () => {
@@ -229,26 +242,47 @@ document.addEventListener('DOMContentLoaded', async function() {
     startBtn.addEventListener('click', startTracking);
     stopBtn.addEventListener('click', stopTracking);
 
-    document.querySelectorAll('[data-ptz]').forEach(btn => {
-        const cmd = btn.dataset.ptz;
-        btn.addEventListener('mousedown', () => {
-            console.log('PTZ button pressed:', cmd, 'controller:', !!ptzController);
-            if (!ptzController) {
-                console.log('No PTZ controller! Click Test first.');
-                return;
+    async function handleManualPTZ(command) {
+        if (!ptzController) {
+            console.log('No PTZ controller! Click Test first.');
+            updateStatus('Connect PTZ camera first', true);
+            return;
+        }
+        console.log('PTZ manual:', command);
+        
+        try {
+            switch (command) {
+                case 'up':
+                    await ptzController.tiltUp();
+                    await ptzController.delay(200);
+                    await ptzController.stop();
+                    break;
+                case 'down':
+                    await ptzController.tiltDown();
+                    await ptzController.delay(200);
+                    await ptzController.stop();
+                    break;
+                case 'left':
+                    await ptzController.panLeft();
+                    await ptzController.delay(200);
+                    await ptzController.stop();
+                    break;
+                case 'right':
+                    await ptzController.panRight();
+                    await ptzController.delay(200);
+                    await ptzController.stop();
+                    break;
+                case 'stop':
+                    await ptzController.stop();
+                    break;
             }
-            if (cmd === 'up') ptzController.tiltUp();
-            else if (cmd === 'down') ptzController.tiltDown();
-            else if (cmd === 'left') ptzController.panLeft();
-            else if (cmd === 'right') ptzController.panRight();
-            else if (cmd === 'stop') ptzController.stop();
-        });
-        btn.addEventListener('mouseup', () => {
-            if (ptzController && cmd !== 'stop') ptzController.stop();
-        });
-        btn.addEventListener('mouseleave', () => {
-            if (ptzController && cmd !== 'stop') ptzController.stop();
-        });
+        } catch (e) {
+            console.error('PTZ error:', e);
+        }
+    }
+
+    document.querySelectorAll('[data-ptz]').forEach(btn => {
+        btn.addEventListener('click', () => handleManualPTZ(btn.dataset.ptz));
     });
 
     async function startTracking() {
