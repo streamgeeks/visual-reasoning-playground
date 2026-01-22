@@ -31,6 +31,7 @@ import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
 import { ToolSection } from "@/components/ToolSection";
 import { SceneDescription } from "@/components/SceneDescription";
+import { StoryDisplay } from "@/components/StoryDisplay";
 import {
   TrackingModel,
   PerformanceStats,
@@ -80,6 +81,7 @@ export default function LiveScreen({ navigation }: any) {
   const [isDescribing, setIsDescribing] = useState(false);
   const [describeError, setDescribeError] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [storyModeActive, setStoryModeActive] = useState(false);
 
   const pulseOpacity = useSharedValue(0.3);
 
@@ -261,6 +263,55 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [appSettings]);
 
+  const handleStoryCaptureAndDescribe = useCallback(async (): Promise<string | null> => {
+    try {
+      if (!appSettings?.moondreamApiKey) {
+        return null;
+      }
+
+      if (!cameraRef.current) {
+        return null;
+      }
+
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.5,
+        skipProcessing: true,
+      });
+
+      if (!photo?.base64) {
+        return null;
+      }
+
+      const apiUrl = getApiUrl();
+      const response = await fetch(new URL("/api/describe-scene", apiUrl).toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: photo.base64,
+          apiKey: appSettings.moondreamApiKey,
+          prompt: "Describe this scene like a narrator telling a story. Be poetic and evocative. Focus on the atmosphere, mood, and interesting details.",
+        }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      return data.description || null;
+    } catch (error) {
+      return null;
+    }
+  }, [appSettings]);
+
+  const toggleStoryMode = useCallback(() => {
+    setStoryModeActive((prev) => !prev);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
   if (!permission) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
@@ -425,13 +476,31 @@ export default function LiveScreen({ navigation }: any) {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Describe Scene - Primary Tool */}
+        {/* Story Mode - Primary Feature */}
+        <View style={[styles.storySection, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.storySectionHeader}>
+            <View style={[styles.storyIconContainer, { backgroundColor: theme.primary + "20" }]}>
+              <Feather name="book-open" size={18} color={theme.primary} />
+            </View>
+            <Text style={[styles.storySectionTitle, { color: theme.text }]}>Scene Narration</Text>
+            <View style={[styles.aiBadge, { backgroundColor: theme.primary }]}>
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          </View>
+          <StoryDisplay
+            isActive={storyModeActive}
+            onToggle={toggleStoryMode}
+            onCapture={handleStoryCaptureAndDescribe}
+            hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+          />
+        </View>
+
+        {/* Manual Describe Scene */}
         <ToolSection
-          title="Describe Scene"
-          icon="eye"
+          title="Single Capture"
+          icon="camera"
           isExpanded={expandedSection === "describe"}
           onToggle={() => toggleSection("describe")}
-          badge="AI"
         >
           <SceneDescription
             description={sceneDescription}
@@ -625,5 +694,38 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: Typography.body.fontSize,
     fontWeight: "600",
+  },
+  storySection: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  storySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  storyIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storySectionTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+    flex: 1,
+  },
+  aiBadge: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  aiBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
   },
 });
