@@ -11,3 +11,5 @@ export function useTheme() {
     isDark,
   };
 }
+
+export type Theme = typeof Colors.light;

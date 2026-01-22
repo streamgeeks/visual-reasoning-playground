@@ -1,25 +1,25 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import ProfileScreen from "@/screens/ProfileScreen";
+import ReplayScreen from "@/screens/ReplayScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
-export type ProfileStackParamList = {
-  Profile: undefined;
+export type ReplayStackParamList = {
+  Replay: undefined;
 };
 
-const Stack = createNativeStackNavigator<ProfileStackParamList>();
+const Stack = createNativeStackNavigator<ReplayStackParamList>();
 
-export default function ProfileStackNavigator() {
+export default function ReplayStackNavigator() {
   const screenOptions = useScreenOptions();
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
-        name="Profile"
-        component={ProfileScreen}
+        name="Replay"
+        component={ReplayScreen}
         options={{
-          title: "Profile",
+          headerTitle: "Instant Replay",
         }}
       />
     </Stack.Navigator>

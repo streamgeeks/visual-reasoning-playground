@@ -3,13 +3,18 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet } from "react-native";
-import HomeStackNavigator from "@/navigation/HomeStackNavigator";
-import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
+
+import LiveStackNavigator from "@/navigation/LiveStackNavigator";
+import PresetsStackNavigator from "@/navigation/PresetsStackNavigator";
+import ReplayStackNavigator from "@/navigation/ReplayStackNavigator";
+import SettingsStackNavigator from "@/navigation/SettingsStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 
 export type MainTabParamList = {
-  HomeTab: undefined;
-  ProfileTab: undefined;
+  LiveTab: undefined;
+  PresetsTab: undefined;
+  ReplayTab: undefined;
+  SettingsTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -19,7 +24,7 @@ export default function MainTabNavigator() {
 
   return (
     <Tab.Navigator
-      initialRouteName="HomeTab"
+      initialRouteName="LiveTab"
       screenOptions={{
         tabBarActiveTintColor: theme.tabIconSelected,
         tabBarInactiveTintColor: theme.tabIconDefault,
@@ -44,22 +49,42 @@ export default function MainTabNavigator() {
       }}
     >
       <Tab.Screen
-        name="HomeTab"
-        component={HomeStackNavigator}
+        name="LiveTab"
+        component={LiveStackNavigator}
         options={{
-          title: "Home",
+          title: "Live",
           tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
+            <Feather name="video" size={size} color={color} />
           ),
         }}
       />
       <Tab.Screen
-        name="ProfileTab"
-        component={ProfileStackNavigator}
+        name="PresetsTab"
+        component={PresetsStackNavigator}
         options={{
-          title: "Profile",
+          title: "Presets",
           tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={size} color={color} />
+            <Feather name="bookmark" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ReplayTab"
+        component={ReplayStackNavigator}
+        options={{
+          title: "Replay",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="rotate-ccw" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="SettingsTab"
+        component={SettingsStackNavigator}
+        options={{
+          title: "Settings",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="settings" size={size} color={color} />
           ),
         }}
       />

@@ -58,12 +58,16 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       ) : null}
 
       <View style={styles.content}>
-        <ThemedText type="h1" style={styles.title}>
-          Something went wrong
+        <View style={[styles.iconContainer, { backgroundColor: theme.backgroundDefault }]}>
+          <Feather name="video-off" size={48} color={theme.primary} />
+        </View>
+
+        <ThemedText type="h2" style={styles.title}>
+          Signal Lost
         </ThemedText>
 
         <ThemedText type="body" style={styles.message}>
-          Please reload the app to continue.
+          Visual Reasoning Playground encountered an issue. Please restart to reconnect.
         </ThemedText>
 
         <Pressable
@@ -71,17 +75,18 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           style={({ pressed }) => [
             styles.button,
             {
-              backgroundColor: theme.link,
+              backgroundColor: theme.primary,
               opacity: pressed ? 0.9 : 1,
               transform: [{ scale: pressed ? 0.98 : 1 }],
             },
           ]}
         >
+          <Feather name="refresh-cw" size={20} color="#FFFFFF" style={{ marginRight: Spacing.sm }} />
           <ThemedText
             type="body"
-            style={[styles.buttonText, { color: theme.buttonText }]}
+            style={[styles.buttonText, { color: "#FFFFFF" }]}
           >
-            Try Again
+            Reconnect
           </ThemedText>
         </Pressable>
       </View>
@@ -96,7 +101,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           <View style={styles.modalOverlay}>
             <ThemedView style={styles.modalContainer}>
               <View style={styles.modalHeader}>
-                <ThemedText type="h2" style={styles.modalTitle}>
+                <ThemedText type="h3" style={styles.modalTitle}>
                   Error Details
                 </ThemedText>
                 <Pressable
@@ -159,6 +164,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 600,
   },
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
   title: {
     textAlign: "center",
     lineHeight: 40,
@@ -167,6 +180,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     opacity: 0.7,
     lineHeight: 24,
+    maxWidth: 280,
   },
   topButton: {
     position: "absolute",
@@ -185,6 +199,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing["2xl"],
     minWidth: 200,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -193,6 +210,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginTop: Spacing.md,
   },
   buttonText: {
     fontWeight: "600",
