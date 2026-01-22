@@ -1,0 +1,179 @@
+Visual Reasoning Playground - iOS AppHigh-Level OverviewVisual Reasoning Playground is a native iOS application that transforms PTZOptics professional cameras into AI-powered tracking systems. It bridges consumer mobile experience with professional broadcast equipment, allowing users to control PTZ cameras with their iPhone while leveraging computer vision models for automatic object tracking.Core Value Proposition
+Zero-friction entry: Works with phone camera immediately
+Progressive enhancement: Unlocks PTZ camera control when available
+Educational focus: Teaches Visual Reasoning concepts through hands-on experimentation
+Professional-grade stats: Real-time performance metrics for ProAV engineers
+100% free: No subscriptions, open models, transparent AI
+Technical ArchitectureTechnology Stack
+
+Platform: Native iOS (Swift/SwiftUI)
+Minimum iOS: 16.0
+Computer Vision: CoreML + Vision framework
+Streaming: RTSP (AVFoundation/FFmpeg)
+AI Integration: Moondream API (user-provided key)
+Camera Protocol: PTZOptics HTTP API
+Key Components1. Camera Control Layer
+
+PTZ joystick controls (pan/tilt/zoom)
+RTSP live preview with <300ms latency
+Smart preset system (unlimited storage)
+Camera authentication (Keychain secure storage)
+2. Visual Reasoning Engine
+
+Local YOLOv8 inference (CoreML)
+Multiple tracking models: Person, Ball, Face, Multi-Object
+Real-time detection boxes overlay
+Scene description via Moondream API
+3. Performance Monitoring
+
+FPS, inference time, latency tracking
+Confidence scores and object counts
+Stream bitrate and dropped frames
+Stats overlay (toggleable)
+4. Replay Buffer System
+
+Circular buffer (configurable 10-60 seconds)
+1080p @ 4Mbps H.264 encoding
+One-tap save to Photos
+Memory-efficient frame management
+Data FlowRTSP Stream → Video Decoder → CVPixelBuffer
+                                    ↓
+                              CoreML Model
+                                    ↓
+                            Detection Results
+                                    ↓
+                    ┌───────────────┼───────────────┐
+                    ↓               ↓               ↓
+            UI Overlay      PTZ Commands    Performance StatsFeature BreakdownMVP Features (Implemented)
+✅ Camera discovery and authentication
+✅ RTSP streaming with hardware decode
+✅ PTZ joystick control
+✅ Model switching (4 tracking models)
+✅ Real-time object detection/tracking
+✅ Performance stats dashboard
+✅ Smart preset templates
+✅ Replay buffer (30s circular)
+✅ Moondream scene descriptionsPhase 2 (Future)
+
+Multi-camera grid view
+Voice commands ("track person", "zoom in")
+Gesture recognition (wave to recenter)
+Custom model import (.mlmodel files)
+Visual Reasoning educational tutorials
+Social sharing (presets, clips)
+File StructureVisualReasoningPlayground/
+├── App/
+│   ├── VisualReasoningPlaygroundApp.swift (Entry point)
+│   └── ContentView.swift (Root view)
+│
+├── Views/ (8 SwiftUI views)
+│   ├── CameraDiscoveryView.swift (Onboarding)
+│   ├── MainCameraView.swift (Primary interface)
+│   ├── PTZControlsView.swift (Joystick)
+│   ├── StatsOverlayView.swift (Performance HUD)
+│   ├── ModelSelectorView.swift (AI model picker)
+│   ├── PresetManagerView.swift (Camera presets)
+│   ├── ReplayBufferView.swift (Instant replay)
+│   └── SettingsView.swift (Configuration)
+│
+├── Services/ (6 business logic classes)
+│   ├── PTZCameraService.swift (Camera HTTP API)
+│   ├── RTSPStreamService.swift (Video streaming)
+│   ├── TrackingService.swift (CoreML inference)
+│   ├── MoondreamService.swift (AI scene description)
+│   ├── ReplayBufferService.swift (Video buffering)
+│   └── PerformanceMonitor.swift (Stats tracking)
+│
+├── Models/ (4 data structures)
+│   ├── CameraProfile.swift (Camera config)
+│   ├── PTZPreset.swift (Preset data)
+│   ├── DetectionResult.swift (AI output)
+│   └── PerformanceStats.swift (Metrics)
+│
+├── Utilities/
+│   ├── KeychainHelper.swift (Secure password storage)
+│   └── Extensions.swift (Helper functions)
+│
+└── Resources/
+    ├── Info.plist (App permissions)
+    └── Models/ (CoreML files - user adds)
+        ├── yolov8n-person.mlmodel
+        ├── yolov8n-ball.mlmodel
+        ├── yolov8n-face.mlmodel
+        └── yolov8n-coco.mlmodelKey Design PatternsArchitecture: MVVM + Services
+
+Views: SwiftUI declarative UI
+ViewModels: @StateObject and @EnvironmentObject
+Services: Singleton business logic (.shared)
+Models: Pure data structures (Codable)
+State Management
+
+@Published properties for reactive updates
+Combine framework for async operations
+UserDefaults for preferences
+Keychain for sensitive data
+Concurrency
+
+Main thread: UI updates
+Background queues: Video processing, inference
+DispatchQueue for thread coordination
+async/await where applicable
+Performance TargetsMetricTargetNotesRTSP Latency<300msGlass-to-glass delayInference FPS>20 FPSOn iPhone 12+Model Load Time<2sFirst-time loadMemory Usage<500MBWith 30s bufferBattery ImpactLowHardware decodeUser Journey
+Onboarding: Add camera via IP + credentials
+Connection: RTSP stream appears automatically
+Discovery: Browse 4 tracking models in dropdown
+Tracking: Tap "Track" → camera follows objects
+Control: Manual PTZ via joystick override
+Presets: Save positions or use smart templates
+Replay: Instant replay last 30 seconds
+Stats: Toggle performance overlay for nerds
+DependenciesRequired
+
+iOS 16.0+
+Xcode 15+
+Swift 5.9+
+Optional (for RTSP)
+
+MobileVLCKit (CocoaPods)
+OR FFmpeg static library
+Models
+
+YOLOv8n CoreML (converted from Ultralytics)
+User must add .mlmodel files to project
+Testing StrategyDevelopment Mode
+
+Mock camera service (no network needed)
+Simulated RTSP frames (test pixel buffers)
+Debug stats overlay always enabled
+Production Mode
+
+Real PTZOptics cameras on LAN
+Actual RTSP streams
+Performance monitoring in release builds
+Deployment NotesApp Store Requirements
+
+Camera permission (NSCameraUsageDescription)
+Photo Library access (NSPhotoLibraryAddUsageDescription)
+Local network access (NSLocalNetworkUsageDescription)
+Privacy manifest for API usage
+Code Signing
+
+Development: Personal Team
+Production: Apple Developer Program ($99/yr)
+Marketing Position
+
+Primary: Educational tool for Visual Reasoning
+Secondary: Professional PTZ camera control
+Tertiary: Free alternative to expensive tracking systems
+Success MetricsTechnical
+
+App launches without crashes
+RTSP connects in <3 seconds
+Tracking runs at 20+ FPS
+No memory leaks over 1-hour session
+User
+
+PTZOptics customers discover app
+ProAV engineers use stats for tuning
+Educators adopt for STEM courses
+Community shares preset configurations
