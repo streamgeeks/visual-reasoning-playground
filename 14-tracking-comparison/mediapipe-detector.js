@@ -1,166 +1,259 @@
+/**
+ * MediaPipe Detector
+ * Wraps MediaPipe Face Detection and Pose for PTZ tracking
+ * 
+ * Uses callback-based API for optimal performance (not Promise-based)
+ */
+
 class MediaPipeDetector {
     constructor() {
-        this.faceDetection = null;
-        this.pose = null;
-        this.currentMode = 'face';
+        this.mode = 'face'; // 'face' or 'pose'
+        this.faceDetector = null;
+        this.poseDetector = null;
+        this.isInitialized = false;
+        this.isProcessing = false;
+        this.resultCallback = null;
         this.lastDetection = null;
-        this.lastLatency = 0;
-        this.isReady = false;
-        this.isProcessing = false;
-        this.detectStartTime = 0;
-        this.onResultCallback = null;
-    }
-
-    async initFaceDetection() {
-        if (this.faceDetection) return;
-
-        this.faceDetection = new FaceDetection({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
-        });
-
-        this.faceDetection.setOptions({
-            model: 'short',
-            minDetectionConfidence: 0.5
-        });
-
-        this.faceDetection.onResults((results) => this.handleFaceResults(results));
-        await this.faceDetection.initialize();
-    }
-
-    async initPose() {
-        if (this.pose) return;
-
-        this.pose = new Pose({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-        });
-
-        this.pose.setOptions({
-            modelComplexity: 0,
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        this.pose.onResults((results) => this.handlePoseResults(results));
-        await this.pose.initialize();
-    }
-
-    async setMode(mode) {
-        this.currentMode = mode;
-        this.isReady = false;
         
-        if (mode === 'face') {
-            await this.initFaceDetection();
-        } else if (mode === 'pose') {
-            await this.initPose();
+        // Performance metrics
+        this.frameCount = 0;
+        this.totalLatency = 0;
+    }
+
+    /**
+     * Initialize the detectors
+     * Must be called before use
+     */
+    async initialize() {
+        if (this.isInitialized) return;
+
+        try {
+            // Initialize Face Detection
+            this.faceDetector = new FaceDetection({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
+                }
+            });
+
+            this.faceDetector.setOptions({
+                model: 'short',
+                minDetectionConfidence: 0.5
+            });
+
+            this.faceDetector.onResults((results) => {
+                this.handleFaceResults(results);
+            });
+
+            // Initialize Pose Detection
+            this.poseDetector = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+
+            this.poseDetector.setOptions({
+                modelComplexity: 0, // 0 = Lite (fastest)
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            this.poseDetector.onResults((results) => {
+                this.handlePoseResults(results);
+            });
+
+            this.isInitialized = true;
+            console.log('MediaPipe detectors initialized');
+            
+        } catch (error) {
+            console.error('Failed to initialize MediaPipe:', error);
+            throw error;
         }
-        
-        this.isReady = true;
-        return true;
     }
 
+    /**
+     * Set detection mode
+     * @param {'face'|'pose'} mode 
+     */
+    setMode(mode) {
+        if (mode !== 'face' && mode !== 'pose') {
+            throw new Error('Mode must be "face" or "pose"');
+        }
+        this.mode = mode;
+        console.log(`MediaPipe mode set to: ${mode}`);
+    }
+
+    /**
+     * Set callback for detection results
+     * @param {Function} callback - Called with detection result object
+     */
+    onResult(callback) {
+        this.resultCallback = callback;
+    }
+
+    /**
+     * Send a video frame for processing
+     * Results come via the callback set with onResult()
+     * @param {HTMLVideoElement} video 
+     */
+    async sendFrame(video) {
+        if (!this.isInitialized) {
+            throw new Error('Detector not initialized. Call initialize() first.');
+        }
+
+        if (this.isProcessing) {
+            // Skip frame if still processing previous
+            return;
+        }
+
+        this.isProcessing = true;
+        this.frameStartTime = performance.now();
+
+        try {
+            if (this.mode === 'face') {
+                await this.faceDetector.send({ image: video });
+            } else {
+                await this.poseDetector.send({ image: video });
+            }
+        } catch (error) {
+            this.isProcessing = false;
+            console.error('MediaPipe processing error:', error);
+        }
+    }
+
+    /**
+     * Handle face detection results
+     */
     handleFaceResults(results) {
-        this.lastLatency = performance.now() - this.detectStartTime;
+        const latency = performance.now() - this.frameStartTime;
         this.isProcessing = false;
+        this.frameCount++;
+        this.totalLatency += latency;
+
+        let detection = null;
 
         if (results.detections && results.detections.length > 0) {
-            const detection = results.detections[0];
-            const bbox = detection.boundingBox;
+            // Take first (most confident) face
+            const face = results.detections[0];
+            const box = face.boundingBox;
 
-            this.lastDetection = {
-                x: bbox.xCenter,
-                y: bbox.yCenter,
-                width: bbox.width,
-                height: bbox.height,
-                x_min: bbox.xCenter - bbox.width / 2,
-                y_min: bbox.yCenter - bbox.height / 2,
-                x_max: bbox.xCenter + bbox.width / 2,
-                y_max: bbox.yCenter + bbox.height / 2,
-                confidence: detection.score ? detection.score[0] : 0.9,
-                type: 'face'
+            // MediaPipe returns pixel coordinates relative to image
+            // We need to normalize to 0-1 range
+            detection = {
+                found: true,
+                x_min: box.xCenter - box.width / 2,
+                y_min: box.yCenter - box.height / 2,
+                x_max: box.xCenter + box.width / 2,
+                y_max: box.yCenter + box.height / 2,
+                // Center point (normalized 0-1)
+                x: box.xCenter,
+                y: box.yCenter,
+                width: box.width,
+                height: box.height,
+                confidence: face.score ? face.score[0] : 0.9,
+                label: 'face',
+                latency: latency
             };
         } else {
-            this.lastDetection = null;
+            detection = {
+                found: false,
+                latency: latency
+            };
         }
 
-        if (this.onResultCallback) {
-            this.onResultCallback(this.lastDetection, this.lastLatency);
+        this.lastDetection = detection;
+        
+        if (this.resultCallback) {
+            this.resultCallback(detection);
         }
     }
 
+    /**
+     * Handle pose detection results
+     */
     handlePoseResults(results) {
-        this.lastLatency = performance.now() - this.detectStartTime;
+        const latency = performance.now() - this.frameStartTime;
         this.isProcessing = false;
+        this.frameCount++;
+        this.totalLatency += latency;
+
+        let detection = null;
 
         if (results.poseLandmarks && results.poseLandmarks.length > 0) {
             const landmarks = results.poseLandmarks;
-            let minX = 1, maxX = 0, minY = 1, maxY = 0;
-
-            for (let i = 0; i <= 16; i++) {
-                if (landmarks[i]) {
-                    minX = Math.min(minX, landmarks[i].x);
-                    maxX = Math.max(maxX, landmarks[i].x);
-                    minY = Math.min(minY, landmarks[i].y);
-                    maxY = Math.max(maxY, landmarks[i].y);
-                }
+            
+            // Calculate bounding box from landmarks
+            let minX = 1, minY = 1, maxX = 0, maxY = 0;
+            
+            for (const lm of landmarks) {
+                if (lm.x < minX) minX = lm.x;
+                if (lm.y < minY) minY = lm.y;
+                if (lm.x > maxX) maxX = lm.x;
+                if (lm.y > maxY) maxY = lm.y;
             }
 
-            const padding = 0.05;
-            minX = Math.max(0, minX - padding);
-            maxX = Math.min(1, maxX + padding);
-            minY = Math.max(0, minY - padding);
-            maxY = Math.min(1, maxY + padding);
-
-            this.lastDetection = {
-                x: landmarks[0].x,
-                y: landmarks[0].y,
-                width: maxX - minX,
-                height: maxY - minY,
+            // Get nose position (landmark 0) as center point for tracking
+            const nose = landmarks[0];
+            
+            detection = {
+                found: true,
                 x_min: minX,
                 y_min: minY,
                 x_max: maxX,
                 y_max: maxY,
+                // Use nose as center for PTZ tracking (more stable than box center)
+                x: nose.x,
+                y: nose.y,
+                width: maxX - minX,
+                height: maxY - minY,
                 confidence: 0.9,
-                type: 'pose'
+                label: 'pose',
+                latency: latency,
+                landmarks: landmarks
             };
         } else {
-            this.lastDetection = null;
+            detection = {
+                found: false,
+                latency: latency
+            };
         }
 
-        if (this.onResultCallback) {
-            this.onResultCallback(this.lastDetection, this.lastLatency);
-        }
-    }
-
-    sendFrame(videoElement) {
-        if (!this.isReady || this.isProcessing) return false;
-
-        this.isProcessing = true;
-        this.detectStartTime = performance.now();
-
-        try {
-            if (this.currentMode === 'face' && this.faceDetection) {
-                this.faceDetection.send({ image: videoElement });
-            } else if (this.currentMode === 'pose' && this.pose) {
-                this.pose.send({ image: videoElement });
-            }
-            return true;
-        } catch (e) {
-            this.isProcessing = false;
-            console.error('MediaPipe send error:', e);
-            return false;
+        this.lastDetection = detection;
+        
+        if (this.resultCallback) {
+            this.resultCallback(detection);
         }
     }
 
-    onResult(callback) {
-        this.onResultCallback = callback;
+    /**
+     * Get average latency
+     */
+    getAverageLatency() {
+        if (this.frameCount === 0) return 0;
+        return this.totalLatency / this.frameCount;
     }
 
-    getLastDetection() {
-        return this.lastDetection;
+    /**
+     * Reset metrics
+     */
+    resetMetrics() {
+        this.frameCount = 0;
+        this.totalLatency = 0;
     }
 
-    getLastLatency() {
-        return this.lastLatency;
+    /**
+     * Clean up resources
+     */
+    close() {
+        if (this.faceDetector) {
+            this.faceDetector.close();
+        }
+        if (this.poseDetector) {
+            this.poseDetector.close();
+        }
+        this.isInitialized = false;
     }
 }
+
+// Export to window
+window.MediaPipeDetector = MediaPipeDetector;

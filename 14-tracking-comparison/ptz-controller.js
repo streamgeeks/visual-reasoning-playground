@@ -3,16 +3,12 @@ class PTZController {
         this.cameraIP = cameraIP;
         this.isMoving = false;
         this.speed = { pan: 8, tilt: 8 };
-        this.moveDuration = 200;
+        this.moveDuration = 500; // ms before stop command
         
+        // Authentication settings
         this.useAuth = options.useAuth || false;
         this.username = options.username || '';
         this.password = options.password || '';
-        
-        this.deadzone = 10;
-        this.moveCount = 0;
-        this.lastMoveTime = 0;
-        this.moveCooldown = 300;
     }
 
     setCameraIP(ip) {
@@ -25,10 +21,6 @@ class PTZController {
         this.password = password;
     }
 
-    setDeadzone(value) {
-        this.deadzone = value;
-    }
-
     async sendCommand(command) {
         if (!this.cameraIP) {
             throw new Error('Camera IP not set');
@@ -36,24 +28,33 @@ class PTZController {
         
         try {
             const url = `http://${this.cameraIP}/cgi-bin/ptzctrl.cgi?${command}`;
-            console.log('PTZ Command:', url);
+            if (window.reasoningConsole) {
+                window.reasoningConsole.logInfo(`PTZ Command: ${command}`);
+            }
             
+            // Build fetch options
             const fetchOptions = { 
                 method: 'GET', 
                 mode: 'no-cors'
             };
             
+            // Add Basic Auth header if authentication is enabled
             if (this.useAuth && this.username) {
                 const credentials = btoa(`${this.username}:${this.password}`);
                 fetchOptions.headers = {
                     'Authorization': `Basic ${credentials}`
                 };
+                if (window.reasoningConsole) {
+                    window.reasoningConsole.logInfo('Using HTTP Basic Authentication');
+                }
             }
             
             await fetch(url, fetchOptions);
             return true;
         } catch (error) {
-            console.error('PTZ Error:', error.message);
+            if (window.reasoningConsole) {
+                window.reasoningConsole.logError(`PTZ Error: ${error.message}`);
+            }
             throw error;
         }
     }
@@ -91,63 +92,68 @@ class PTZController {
         return this.sendCommand('ptzcmd&zoomout&5');
     }
 
+    async zoomStop() {
+        return this.sendCommand('ptzcmd&zoomstop');
+    }
+
+    async setZoomPosition(position) {
+        return this.sendCommand(`ptzctrl&abszoom&${position}`);
+    }
+
     async home() {
         return this.sendCommand('ptzcmd&home');
     }
 
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    async gotoPreset(preset) {
+        return this.sendCommand(`ptzcmd&posset&${preset}`);
     }
 
-    async trackObject(detection) {
-        if (!detection) {
-            if (this.isMoving) await this.stop();
-            return false;
+    async moveToCenter(objectX, objectY, frameWidth, frameHeight, onProgress) {
+        const centerX = 0.5;
+        const centerY = 0.5;
+        const deadzone = 0.05;
+        
+        const offsetX = objectX - centerX;
+        const offsetY = objectY - centerY;
+        
+        if (onProgress) {
+            onProgress(`Object at (${(objectX * 100).toFixed(0)}%, ${(objectY * 100).toFixed(0)}%)`);
         }
 
-        const now = Date.now();
-        if (now - this.lastMoveTime < this.moveCooldown) {
-            return false;
+        if (Math.abs(offsetX) < deadzone && Math.abs(offsetY) < deadzone) {
+            if (onProgress) onProgress('Object centered!');
+            return true;
         }
 
-        const offsetX = (detection.x * 100) - 50;
-        const offsetY = (detection.y * 100) - 50;
-        const threshold = this.deadzone / 2;
-
-        if (Math.abs(offsetX) <= threshold && Math.abs(offsetY) <= threshold) {
-            if (this.isMoving) await this.stop();
-            return false;
-        }
-
-        this.lastMoveTime = now;
-
-        if (Math.abs(offsetX) > Math.abs(offsetY)) {
-            if (offsetX > threshold) {
+        if (Math.abs(offsetX) > deadzone) {
+            if (offsetX > 0) {
+                if (onProgress) onProgress('Panning right...');
                 await this.panRight();
-            } else if (offsetX < -threshold) {
+            } else {
+                if (onProgress) onProgress('Panning left...');
                 await this.panLeft();
             }
-        } else {
-            if (offsetY > threshold) {
-                await this.tiltDown();
-            } else if (offsetY < -threshold) {
-                await this.tiltUp();
-            }
+            await this.delay(this.moveDuration);
+            await this.stop();
         }
 
-        await this.delay(this.moveDuration);
-        await this.stop();
-        
-        this.moveCount++;
-        return true;
+        if (Math.abs(offsetY) > deadzone) {
+            if (offsetY > 0) {
+                if (onProgress) onProgress('Tilting down...');
+                await this.tiltDown();
+            } else {
+                if (onProgress) onProgress('Tilting up...');
+                await this.tiltUp();
+            }
+            await this.delay(this.moveDuration);
+            await this.stop();
+        }
+
+        return false;
     }
 
-    getMoveCount() {
-        return this.moveCount;
-    }
-
-    resetMoveCount() {
-        this.moveCount = 0;
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
