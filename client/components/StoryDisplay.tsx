@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Text } from "react-native";
+import { View, StyleSheet, Text, Pressable } from "react-native";
 import Animated, {
   FadeIn,
 } from "react-native-reanimated";
@@ -7,12 +7,25 @@ import Animated, {
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
+export type ResponseLength = "short" | "medium" | "long";
+
 interface StoryDisplayProps {
-  onCapture: () => Promise<string | null>;
+  onCapture: (length: ResponseLength) => Promise<string | null>;
   hasApiKey: boolean;
 }
 
-const DISPLAY_DURATION = 15000;
+const LENGTH_OPTIONS: { key: ResponseLength; label: string }[] = [
+  { key: "short", label: "Brief" },
+  { key: "medium", label: "Normal" },
+  { key: "long", label: "Detailed" },
+];
+
+const DISPLAY_DURATIONS: Record<ResponseLength, number> = {
+  short: 12000,
+  medium: 18000,
+  long: 25000,
+};
+
 const HOLD_DURATION = 5000;
 
 export function StoryDisplay({
@@ -23,6 +36,7 @@ export function StoryDisplay({
   const [displayedWords, setDisplayedWords] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedLength, setSelectedLength] = useState<ResponseLength>("short");
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const wordIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isActiveRef = useRef(false);
@@ -37,7 +51,7 @@ export function StoryDisplay({
     setError(null);
 
     try {
-      const description = await onCapture();
+      const description = await onCapture(selectedLength);
       if (description) {
         animateWords(description);
       } else {
@@ -48,11 +62,12 @@ export function StoryDisplay({
     } finally {
       setIsLoading(false);
     }
-  }, [hasApiKey, onCapture]);
+  }, [hasApiKey, onCapture, selectedLength]);
 
   const animateWords = (text: string) => {
     const words = text.split(" ");
-    const wordDelay = DISPLAY_DURATION / words.length;
+    const displayDuration = DISPLAY_DURATIONS[selectedLength];
+    const wordDelay = Math.max(displayDuration / words.length, 300);
     let wordIndex = 0;
 
     if (wordIntervalRef.current) {
@@ -78,9 +93,10 @@ export function StoryDisplay({
       isActiveRef.current = true;
       captureAndDescribe();
 
+      const totalDuration = DISPLAY_DURATIONS[selectedLength] + HOLD_DURATION;
       intervalRef.current = setInterval(() => {
         captureAndDescribe();
-      }, DISPLAY_DURATION + HOLD_DURATION);
+      }, totalDuration);
     }
 
     return () => {
@@ -91,7 +107,19 @@ export function StoryDisplay({
         clearInterval(wordIntervalRef.current);
       }
     };
-  }, [hasApiKey, captureAndDescribe]);
+  }, [hasApiKey, captureAndDescribe, selectedLength]);
+
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    if (hasApiKey && isActiveRef.current) {
+      const totalDuration = DISPLAY_DURATIONS[selectedLength] + HOLD_DURATION;
+      intervalRef.current = setInterval(() => {
+        captureAndDescribe();
+      }, totalDuration);
+    }
+  }, [selectedLength, hasApiKey, captureAndDescribe]);
 
   if (!hasApiKey) {
     return (
@@ -104,39 +132,104 @@ export function StoryDisplay({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {isLoading && displayedWords.length === 0 ? (
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Analyzing scene...
-        </Text>
-      ) : error && displayedWords.length === 0 ? (
-        <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
-      ) : (
-        <Text style={[styles.storyText, { color: "#FFFFFF" }]}>
-          {displayedWords.map((word, index) => (
-            <Animated.Text
-              key={`${word}-${index}`}
-              entering={FadeIn.duration(200)}
-              style={styles.word}
+    <View style={styles.wrapper}>
+      {/* Length selector */}
+      <View style={styles.lengthSelector}>
+        {LENGTH_OPTIONS.map((option) => (
+          <Pressable
+            key={option.key}
+            onPress={() => setSelectedLength(option.key)}
+            style={[
+              styles.lengthOption,
+              {
+                backgroundColor:
+                  selectedLength === option.key
+                    ? theme.primary
+                    : theme.backgroundDefault,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.lengthOptionText,
+                {
+                  color:
+                    selectedLength === option.key ? "#FFFFFF" : theme.textSecondary,
+                },
+              ]}
             >
-              {word}{" "}
-            </Animated.Text>
-          ))}
-        </Text>
-      )}
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Story display area */}
+      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+        {isLoading && displayedWords.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+              Observing scene...
+            </Text>
+          </View>
+        ) : error && displayedWords.length === 0 ? (
+          <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+        ) : (
+          <Text style={styles.storyText}>
+            {displayedWords.map((word, index) => (
+              <Animated.Text
+                key={`${word}-${index}`}
+                entering={FadeIn.duration(400)}
+                style={[styles.word, { color: "#FFFFFF" }]}
+              >
+                {word}{" "}
+              </Animated.Text>
+            ))}
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    gap: Spacing.md,
+  },
+  lengthSelector: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+  },
+  lengthOption: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  lengthOptionText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+  },
   container: {
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
-    minHeight: 80,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    minHeight: 140,
     justifyContent: "center",
   },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+  },
+  loadingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   placeholderText: {
-    fontSize: Typography.small.fontSize,
+    fontSize: Typography.body.fontSize,
     textAlign: "center",
     fontStyle: "italic",
   },
@@ -145,15 +238,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   errorText: {
-    fontSize: Typography.small.fontSize,
+    fontSize: Typography.body.fontSize,
     textAlign: "center",
   },
   storyText: {
-    fontSize: Typography.body.fontSize,
-    lineHeight: 26,
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   word: {
-    fontSize: Typography.body.fontSize,
-    lineHeight: 26,
+    fontSize: 22,
+    lineHeight: 34,
+    fontWeight: "300",
+    letterSpacing: 0.3,
   },
 });

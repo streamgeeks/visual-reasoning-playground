@@ -32,7 +32,7 @@ import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
 import { ToolSection } from "@/components/ToolSection";
 import { SceneDescription } from "@/components/SceneDescription";
-import { StoryDisplay } from "@/components/StoryDisplay";
+import { StoryDisplay, ResponseLength } from "@/components/StoryDisplay";
 import {
   TrackingModel,
   PerformanceStats,
@@ -273,7 +273,18 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [appSettings]);
 
-  const handleStoryCaptureAndDescribe = useCallback(async (): Promise<string | null> => {
+  const getPromptForLength = (length: ResponseLength): string => {
+    switch (length) {
+      case "short":
+        return "Describe this scene in one brief, poetic sentence. Be evocative but concise.";
+      case "medium":
+        return "Describe this scene in 2-3 sentences like a narrator. Focus on the mood and key details.";
+      case "long":
+        return "Describe this scene in detail like a narrator telling a story. Be poetic and evocative. Focus on the atmosphere, mood, and interesting details.";
+    }
+  };
+
+  const handleStoryCaptureAndDescribe = useCallback(async (length: ResponseLength): Promise<string | null> => {
     try {
       if (!appSettings?.moondreamApiKey) {
         return null;
@@ -312,7 +323,7 @@ export default function LiveScreen({ navigation }: any) {
         body: JSON.stringify({
           image: manipulated.base64,
           apiKey: appSettings.moondreamApiKey,
-          prompt: "Describe this scene like a narrator telling a story. Be poetic and evocative. Focus on the atmosphere, mood, and interesting details.",
+          prompt: getPromptForLength(length),
         }),
       });
 
