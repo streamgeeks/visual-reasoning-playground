@@ -23,6 +23,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import * as ImageManipulator from "expo-image-manipulator";
 
 import { useTheme } from "@/hooks/useTheme";
 import { StatsOverlay } from "@/components/StatsOverlay";
@@ -224,13 +225,23 @@ export default function LiveScreen({ navigation }: any) {
       }
 
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.7,
+        quality: 0.3,
         skipProcessing: true,
       });
 
-      if (!photo?.base64) {
+      if (!photo?.uri) {
         throw new Error("Failed to capture image");
+      }
+
+      // Resize and compress the image to reduce payload size
+      const manipulated = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 512 } }],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      if (!manipulated?.base64) {
+        throw new Error("Failed to process image");
       }
 
       // Send to Moondream API via our backend
@@ -241,7 +252,7 @@ export default function LiveScreen({ navigation }: any) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image: photo.base64,
+          image: manipulated.base64,
           apiKey: appSettings.moondreamApiKey,
           prompt: "Describe this scene in rich detail. What objects, people, or activities do you see? Set the scene like a story narrator would.",
         }),
@@ -273,12 +284,22 @@ export default function LiveScreen({ navigation }: any) {
       }
 
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.5,
+        quality: 0.3,
         skipProcessing: true,
       });
 
-      if (!photo?.base64) {
+      if (!photo?.uri) {
+        return null;
+      }
+
+      // Resize and compress the image to reduce payload size
+      const manipulated = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 512 } }],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      if (!manipulated?.base64) {
         return null;
       }
 
@@ -289,7 +310,7 @@ export default function LiveScreen({ navigation }: any) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image: photo.base64,
+          image: manipulated.base64,
           apiKey: appSettings.moondreamApiKey,
           prompt: "Describe this scene like a narrator telling a story. Be poetic and evocative. Focus on the atmosphere, mood, and interesting details.",
         }),

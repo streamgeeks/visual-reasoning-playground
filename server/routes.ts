@@ -10,10 +10,13 @@ interface DescribeSceneRequest {
 async function describeSceeneWithMoondream(
   imageBase64: string,
   apiKey: string,
-  prompt: string = "Describe this scene in detail."
+  prompt: string = "Describe this scene in detail. What do you see?"
 ): Promise<string> {
-  // Use the caption endpoint for scene description
-  const response = await fetch("https://api.moondream.ai/v1/caption", {
+  // Log image size for debugging
+  console.log(`Image base64 length: ${imageBase64.length} characters`);
+  
+  // Use the query endpoint for scene description
+  const response = await fetch("https://api.moondream.ai/v1/query", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -21,18 +24,21 @@ async function describeSceeneWithMoondream(
     },
     body: JSON.stringify({
       image_url: `data:image/jpeg;base64,${imageBase64}`,
-      length: "normal",
+      question: prompt,
       stream: false,
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`Moondream response status: ${response.status}`);
+    console.error(`Moondream response body: ${errorText}`);
     throw new Error(`Moondream API error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  return data.caption || data.answer || data.result || "Unable to describe the scene.";
+  console.log("Moondream response:", JSON.stringify(data).slice(0, 200));
+  return data.answer || data.caption || data.result || "Unable to describe the scene.";
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
