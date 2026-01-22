@@ -8,9 +8,8 @@ class PTZController {
         this.deadzone = 10;
         this.speed = { pan: 5, tilt: 5, zoom: 5 };
         this.moveCount = 0;
-        this.lastCommandTime = 0;
-        this.commandCooldown = 150;
-        this.moveDuration = 200;
+        this.lastMoveTime = 0;
+        this.moveCooldown = 200;
     }
 
     setAuth(useAuth, username = '', password = '') {
@@ -31,107 +30,92 @@ class PTZController {
         this.speed = { ...this.speed, ...speed };
     }
 
-    async sendCommand(command) {
-        try {
-            const url = `http://${this.cameraIP}/cgi-bin/ptzctrl.cgi?${command}`;
-            const fetchOptions = { method: 'GET', mode: 'no-cors' };
+    sendCommand(command) {
+        if (!this.cameraIP) return;
+        
+        const url = `http://${this.cameraIP}/cgi-bin/ptzctrl.cgi?${command}`;
+        const opts = { method: 'GET', mode: 'no-cors' };
 
-            if (this.useAuth && this.username) {
-                const credentials = btoa(`${this.username}:${this.password}`);
-                fetchOptions.headers = { 'Authorization': `Basic ${credentials}` };
-            }
-
-            await fetch(url, fetchOptions);
-        } catch (error) {
-            console.error('PTZ command error:', error);
+        if (this.useAuth && this.username) {
+            opts.headers = { 'Authorization': 'Basic ' + btoa(this.username + ':' + this.password) };
         }
+
+        fetch(url, opts).catch(() => {});
     }
 
-    async stop() {
+    stop() {
         this.isMoving = false;
-        return this.sendCommand('ptzcmd&ptzstop');
+        this.sendCommand('ptzcmd&ptzstop');
     }
 
-    async panRight() {
+    panRight() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&right&${this.speed.pan}&${this.speed.pan}`);
+        this.sendCommand(`ptzcmd&right&${this.speed.pan}&${this.speed.pan}`);
     }
 
-    async panLeft() {
+    panLeft() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&left&${this.speed.pan}&${this.speed.pan}`);
+        this.sendCommand(`ptzcmd&left&${this.speed.pan}&${this.speed.pan}`);
     }
 
-    async tiltDown() {
+    tiltDown() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&down&${this.speed.tilt}&${this.speed.tilt}`);
+        this.sendCommand(`ptzcmd&down&${this.speed.tilt}&${this.speed.tilt}`);
     }
 
-    async tiltUp() {
+    tiltUp() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&up&${this.speed.tilt}&${this.speed.tilt}`);
+        this.sendCommand(`ptzcmd&up&${this.speed.tilt}&${this.speed.tilt}`);
     }
 
-    async zoomIn() {
+    zoomIn() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&zoomin&${this.speed.zoom}`);
+        this.sendCommand(`ptzcmd&zoomin&${this.speed.zoom}`);
     }
 
-    async zoomOut() {
+    zoomOut() {
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&zoomout&${this.speed.zoom}`);
+        this.sendCommand(`ptzcmd&zoomout&${this.speed.zoom}`);
     }
 
-    async home() {
+    home() {
         this.isMoving = false;
-        return this.sendCommand('ptzcmd&home');
+        this.sendCommand('ptzcmd&home');
     }
 
-    async trackObject(detection) {
+    trackObject(detection) {
         if (!detection) {
-            if (this.isMoving) await this.stop();
+            if (this.isMoving) this.stop();
             return false;
         }
 
         const now = Date.now();
-        if (now - this.lastCommandTime < this.commandCooldown) {
+        if (now - this.lastMoveTime < this.moveCooldown) {
             return false;
         }
 
-        const objectX = detection.x * 100;
-        const objectY = detection.y * 100;
-        const targetX = 50;
-        const targetY = 50;
-        const offsetX = objectX - targetX;
-        const offsetY = objectY - targetY;
-        const halfDeadzone = this.deadzone / 2;
+        const offsetX = (detection.x * 100) - 50;
+        const offsetY = (detection.y * 100) - 50;
+        const threshold = this.deadzone / 2;
 
-        let moved = false;
-
-        if (Math.abs(offsetX) > halfDeadzone || Math.abs(offsetY) > halfDeadzone) {
-            if (Math.abs(offsetX) > Math.abs(offsetY)) {
-                if (offsetX > halfDeadzone) {
-                    await this.panRight();
-                } else if (offsetX < -halfDeadzone) {
-                    await this.panLeft();
-                }
-            } else {
-                if (offsetY > halfDeadzone) {
-                    await this.tiltDown();
-                } else if (offsetY < -halfDeadzone) {
-                    await this.tiltUp();
-                }
-            }
-            moved = true;
-            this.lastCommandTime = now;
-            this.moveCount++;
-
-            setTimeout(() => this.stop(), this.moveDuration);
-        } else if (this.isMoving) {
-            await this.stop();
+        if (Math.abs(offsetX) <= threshold && Math.abs(offsetY) <= threshold) {
+            if (this.isMoving) this.stop();
+            return false;
         }
 
-        return moved;
+        this.lastMoveTime = now;
+
+        if (Math.abs(offsetX) > Math.abs(offsetY)) {
+            if (offsetX > threshold) this.panRight();
+            else if (offsetX < -threshold) this.panLeft();
+        } else {
+            if (offsetY > threshold) this.tiltDown();
+            else if (offsetY < -threshold) this.tiltUp();
+        }
+
+        this.moveCount++;
+        setTimeout(() => this.stop(), 150);
+        return true;
     }
 
     getMoveCount() {

@@ -40,11 +40,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     let mediapipeDetector = null;
     let ptzController = null;
     let isTracking = false;
-    let trackingLoop = null;
+    let trackingInterval = null;
     let detectionCount = 0;
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
     let latencyHistory = { mediapipe: [], moondream: [] };
-    let lastDetectionState = null;
-    let lastHistoryUpdate = 0;
+    let lastLogTime = 0;
+    let lastLogState = null;
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -63,6 +65,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     mediapipeDetector = new MediaPipeDetector();
+    
+    mediapipeDetector.onResult((detection, latency) => {
+        if (!isTracking || currentMode !== 'mediapipe') return;
+        handleDetectionResult(detection, latency);
+    });
 
     loadSavedSettings();
     await enumerateCameras();
@@ -72,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
             cameraSelect.innerHTML = '';
 
             if (videoDevices.length === 0) {
@@ -87,10 +93,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 cameraSelect.appendChild(option);
             });
 
-            const savedCamera = localStorage.getItem('comparison_camera');
-            if (savedCamera) cameraSelect.value = savedCamera;
-        } catch (error) {
-            console.error('Failed to enumerate cameras:', error);
+            const saved = localStorage.getItem('comparison_camera');
+            if (saved) cameraSelect.value = saved;
+        } catch (e) {
+            console.error('Camera enumeration failed:', e);
         }
     }
 
@@ -100,41 +106,36 @@ document.addEventListener('DOMContentLoaded', async function() {
                 video: { width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: false
             };
-
-            if (deviceId) {
-                constraints.video.deviceId = { exact: deviceId };
-            }
+            if (deviceId) constraints.video.deviceId = { exact: deviceId };
 
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
-
-            await new Promise(resolve => { video.onloadedmetadata = resolve; });
-
+            await new Promise(r => video.onloadedmetadata = r);
+            
             overlay.width = video.videoWidth;
             overlay.height = video.videoHeight;
-
             updateStatus('Camera ready');
-        } catch (error) {
-            updateStatus('Camera error: ' + error.message, true);
+        } catch (e) {
+            updateStatus('Camera error: ' + e.message, true);
         }
     }
 
     function loadSavedSettings() {
-        const savedIP = localStorage.getItem('comparison_ptz_ip');
-        if (savedIP) cameraIPInput.value = savedIP;
+        const ip = localStorage.getItem('comparison_ptz_ip');
+        if (ip) cameraIPInput.value = ip;
 
-        const savedTarget = localStorage.getItem('comparison_target');
-        if (savedTarget) targetObjectInput.value = savedTarget;
+        const target = localStorage.getItem('comparison_target');
+        if (target) targetObjectInput.value = target;
 
-        const savedDeadzone = localStorage.getItem('comparison_deadzone');
-        if (savedDeadzone) {
-            deadzoneSlider.value = savedDeadzone;
-            deadzoneValueSpan.textContent = savedDeadzone;
+        const dz = localStorage.getItem('comparison_deadzone');
+        if (dz) {
+            deadzoneSlider.value = dz;
+            deadzoneValueSpan.textContent = dz;
         }
 
-        const savedAuth = localStorage.getItem('comparison_use_auth') === 'true';
-        useAuthCheckbox.checked = savedAuth;
-        authFields.classList.toggle('visible', savedAuth);
+        const auth = localStorage.getItem('comparison_use_auth') === 'true';
+        useAuthCheckbox.checked = auth;
+        authFields.classList.toggle('visible', auth);
         authUsernameInput.value = localStorage.getItem('comparison_auth_user') || '';
         authPasswordInput.value = localStorage.getItem('comparison_auth_pass') || '';
     }
@@ -148,45 +149,42 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('comparison_auth_pass', authPasswordInput.value);
     }
 
-    async function switchMode(newMode) {
-        if (isTracking) {
-            await stopTracking();
-        }
+    function switchMode(newMode) {
+        if (isTracking) stopTracking();
 
         currentMode = newMode;
-
         mediapipeModeBtn.classList.toggle('active', newMode === 'mediapipe');
         moondreamModeBtn.classList.toggle('active', newMode === 'moondream');
-
         mediapipeInfo.classList.toggle('hidden', newMode !== 'mediapipe');
         moondreamInfo.classList.toggle('hidden', newMode !== 'moondream');
         mediapipeOptions.classList.toggle('hidden', newMode !== 'mediapipe');
         moondreamOptions.classList.toggle('hidden', newMode !== 'moondream');
 
-        clearOverlay();
+        resetStats();
+        updateStatus(newMode === 'mediapipe' ? 'MediaPipe mode - Local detection' : 'Moondream mode - Cloud VLM');
+    }
+
+    function resetStats() {
         detectionCount = 0;
+        frameCount = 0;
         detectionsValue.textContent = '0';
         latencyValue.textContent = '--';
         fpsValue.textContent = '--';
-        lastDetectionState = null;
-        historyLog.innerHTML = '<div class="entry"><span>Mode switched - ready to track</span></div>';
-
-        if (newMode === 'mediapipe') {
-            updateStatus('MediaPipe mode - Local browser detection');
-        } else {
-            updateStatus('Moondream mode - Cloud VLM detection');
-        }
+        ptzMovesValue.textContent = '0';
+        lastLogState = null;
+        historyLog.innerHTML = '<div class="entry"><span>Ready to track</span></div>';
+        clearOverlay();
     }
 
     mediapipeModeBtn.addEventListener('click', () => switchMode('mediapipe'));
     moondreamModeBtn.addEventListener('click', () => switchMode('moondream'));
 
     document.querySelectorAll('.mp-type').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', () => {
             document.querySelectorAll('.mp-type').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             mediapipeType = btn.dataset.type;
-            updateStatus(`MediaPipe ${mediapipeType} detection selected`);
+            updateStatus(`MediaPipe ${mediapipeType} selected`);
         });
     });
 
@@ -201,21 +199,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateStatus('Enter camera IP first', true);
             return;
         }
-
         saveSettings();
-
         ptzController = new PTZController(ip, {
             useAuth: useAuthCheckbox.checked,
             username: authUsernameInput.value,
             password: authPasswordInput.value
         });
         ptzController.setDeadzone(parseInt(deadzoneSlider.value));
-
         ptzController.stop();
         connectionStatus.textContent = 'Connected';
         connectionStatus.classList.remove('disconnected');
         connectionStatus.classList.add('connected');
-        updateStatus('PTZ camera connected');
+        updateStatus('PTZ connected');
     });
 
     useAuthCheckbox.addEventListener('change', () => {
@@ -234,28 +229,33 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     document.querySelectorAll('[data-ptz]').forEach(btn => {
         const cmd = btn.dataset.ptz;
-        btn.addEventListener('mousedown', async () => {
+        btn.addEventListener('mousedown', () => {
             if (!ptzController) return;
-            switch(cmd) {
-                case 'up': await ptzController.tiltUp(); break;
-                case 'down': await ptzController.tiltDown(); break;
-                case 'left': await ptzController.panLeft(); break;
-                case 'right': await ptzController.panRight(); break;
-                case 'stop': await ptzController.stop(); break;
-            }
+            if (cmd === 'up') ptzController.tiltUp();
+            else if (cmd === 'down') ptzController.tiltDown();
+            else if (cmd === 'left') ptzController.panLeft();
+            else if (cmd === 'right') ptzController.panRight();
+            else if (cmd === 'stop') ptzController.stop();
         });
-        btn.addEventListener('mouseup', async () => {
-            if (ptzController && cmd !== 'stop') await ptzController.stop();
+        btn.addEventListener('mouseup', () => {
+            if (ptzController && cmd !== 'stop') ptzController.stop();
         });
-        btn.addEventListener('mouseleave', async () => {
-            if (ptzController && cmd !== 'stop') await ptzController.stop();
+        btn.addEventListener('mouseleave', () => {
+            if (ptzController && cmd !== 'stop') ptzController.stop();
         });
     });
 
     async function startTracking() {
+        saveSettings();
+
         if (currentMode === 'mediapipe') {
-            updateStatus(`Initializing MediaPipe ${mediapipeType} detection...`);
-            await mediapipeDetector.setMode(mediapipeType);
+            updateStatus(`Initializing MediaPipe ${mediapipeType}...`);
+            try {
+                await mediapipeDetector.setMode(mediapipeType);
+            } catch (e) {
+                updateStatus('MediaPipe init failed: ' + e.message, true);
+                return;
+            }
         } else {
             if (!moondreamClient) {
                 updateStatus('Configure Moondream API key first', true);
@@ -263,132 +263,122 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
             if (!targetObjectInput.value.trim()) {
-                updateStatus('Enter target object description', true);
+                updateStatus('Enter target object', true);
                 return;
             }
         }
 
-        if (!ptzController) {
-            const ip = cameraIPInput.value.trim();
-            if (ip) {
-                ptzController = new PTZController(ip, {
-                    useAuth: useAuthCheckbox.checked,
-                    username: authUsernameInput.value,
-                    password: authPasswordInput.value
-                });
-                ptzController.setDeadzone(parseInt(deadzoneSlider.value));
-            }
+        if (!ptzController && cameraIPInput.value.trim()) {
+            ptzController = new PTZController(cameraIPInput.value.trim(), {
+                useAuth: useAuthCheckbox.checked,
+                username: authUsernameInput.value,
+                password: authPasswordInput.value
+            });
+            ptzController.setDeadzone(parseInt(deadzoneSlider.value));
         }
 
-        saveSettings();
         isTracking = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
         mediapipeModeBtn.disabled = true;
         moondreamModeBtn.disabled = true;
-        detectionCount = 0;
+        
+        resetStats();
         if (ptzController) ptzController.resetMoveCount();
+        
+        updateStatus(`Tracking: ${currentMode === 'mediapipe' ? 'MediaPipe ' + mediapipeType : 'Moondream'}`);
 
-        historyLog.innerHTML = '';
-        updateStatus(`Tracking started - ${currentMode === 'mediapipe' ? 'MediaPipe ' + mediapipeType : 'Moondream VLM'}`);
-
-        runTrackingLoop();
+        if (currentMode === 'mediapipe') {
+            trackingInterval = setInterval(runMediaPipeFrame, 50);
+        } else {
+            runMoondreamLoop();
+        }
     }
 
-    async function stopTracking() {
+    function stopTracking() {
         isTracking = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
         mediapipeModeBtn.disabled = false;
         moondreamModeBtn.disabled = false;
 
-        if (trackingLoop) {
-            cancelAnimationFrame(trackingLoop);
-            clearTimeout(trackingLoop);
-            trackingLoop = null;
+        if (trackingInterval) {
+            clearInterval(trackingInterval);
+            trackingInterval = null;
         }
 
-        if (ptzController) await ptzController.stop();
-
+        if (ptzController) ptzController.stop();
         clearOverlay();
         updateStatus('Tracking stopped');
     }
 
-    async function runTrackingLoop() {
+    function runMediaPipeFrame() {
         if (!isTracking) return;
+        mediapipeDetector.sendFrame(video);
+    }
+
+    async function runMoondreamLoop() {
+        if (!isTracking || currentMode !== 'moondream') return;
 
         try {
+            const startTime = performance.now();
+            const imageData = moondreamClient.captureFrame(video);
+            const result = await moondreamClient.detect(imageData, targetObjectInput.value);
+            const latency = performance.now() - startTime;
+
             let detection = null;
-            let latency = 0;
-
-            if (currentMode === 'mediapipe') {
-                const result = await mediapipeDetector.detect(video);
-                detection = result.detection;
-                latency = result.latency;
-                updateLatencyStats('mediapipe', latency);
-            } else {
-                const startTime = performance.now();
-                const imageData = moondreamClient.captureFrame(video);
-                const result = await moondreamClient.detect(imageData, targetObjectInput.value);
-                latency = performance.now() - startTime;
-
-                if (result.objects && result.objects.length > 0) {
-                    const obj = result.objects[0];
-                    detection = {
-                        x: obj.x,
-                        y: obj.y,
-                        width: obj.width,
-                        height: obj.height,
-                        x_min: obj.x_min,
-                        y_min: obj.y_min,
-                        x_max: obj.x_max,
-                        y_max: obj.y_max,
-                        type: 'moondream'
-                    };
-                }
-                updateLatencyStats('moondream', latency);
+            if (result.objects && result.objects.length > 0) {
+                const obj = result.objects[0];
+                detection = {
+                    x: obj.x,
+                    y: obj.y,
+                    width: obj.width,
+                    height: obj.height,
+                    x_min: obj.x_min,
+                    y_min: obj.y_min,
+                    x_max: obj.x_max,
+                    y_max: obj.y_max,
+                    type: 'moondream'
+                };
             }
 
-            detectionCount++;
-            detectionsValue.textContent = detectionCount;
-            latencyValue.textContent = Math.round(latency);
-
-            clearOverlay();
-
-            if (detection) {
-                drawDetection(detection);
-
-                if (ptzController) {
-                    await ptzController.trackObject(detection);
-                    ptzMovesValue.textContent = ptzController.getMoveCount();
-                }
-
-                addHistoryEntry(currentMode, latency, true);
-            } else {
-                addHistoryEntry(currentMode, latency, false);
-            }
-
-            updateFPS(latency);
-
-        } catch (error) {
-            console.error('Tracking error:', error);
-            addHistoryEntry(currentMode, 0, false, error.message);
+            handleDetectionResult(detection, latency);
+        } catch (e) {
+            console.error('Moondream error:', e);
+            logEntry(0, false, e.message);
         }
 
-        if (isTracking) {
-            if (currentMode === 'mediapipe') {
-                trackingLoop = requestAnimationFrame(runTrackingLoop);
-            } else {
-                trackingLoop = setTimeout(runTrackingLoop, 500);
-            }
+        if (isTracking && currentMode === 'moondream') {
+            setTimeout(runMoondreamLoop, 100);
         }
     }
 
-    function drawDetection(detection) {
-        const x = detection.x_min * overlay.width;
-        const y = detection.y_min * overlay.height;
-        const w = (detection.x_max - detection.x_min) * overlay.width;
-        const h = (detection.y_max - detection.y_min) * overlay.height;
+    function handleDetectionResult(detection, latency) {
+        detectionCount++;
+        detectionsValue.textContent = detectionCount;
+        latencyValue.textContent = Math.round(latency);
+
+        updateLatencyStats(currentMode, latency);
+        updateFPS();
+
+        clearOverlay();
+
+        if (detection) {
+            drawDetection(detection);
+            if (ptzController) {
+                ptzController.trackObject(detection);
+                ptzMovesValue.textContent = ptzController.getMoveCount();
+            }
+        }
+
+        logEntry(latency, !!detection);
+    }
+
+    function drawDetection(det) {
+        const x = det.x_min * overlay.width;
+        const y = det.y_min * overlay.height;
+        const w = (det.x_max - det.x_min) * overlay.width;
+        const h = (det.y_max - det.y_min) * overlay.height;
 
         const color = currentMode === 'mediapipe' ? '#2A9D8F' : '#E9C46A';
 
@@ -399,17 +389,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         ctx.fillStyle = color + '33';
         ctx.fillRect(x, y, w, h);
 
-        const label = currentMode === 'mediapipe' ? `MediaPipe ${mediapipeType}` : targetObjectInput.value;
+        const label = currentMode === 'mediapipe' ? `${mediapipeType}` : targetObjectInput.value;
         ctx.fillStyle = color;
-        ctx.fillRect(x, y - 22, label.length * 8 + 16, 22);
-        ctx.fillStyle = 'white';
+        ctx.fillRect(x, y - 20, ctx.measureText(label).width + 12, 20);
+        ctx.fillStyle = '#fff';
         ctx.font = '12px sans-serif';
-        ctx.fillText(label, x + 8, y - 6);
+        ctx.fillText(label, x + 6, y - 5);
 
-        const centerX = detection.x * overlay.width;
-        const centerY = detection.y * overlay.height;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+        ctx.arc(det.x * overlay.width, det.y * overlay.height, 5, 0, Math.PI * 2);
         ctx.fillStyle = '#E63946';
         ctx.fill();
     }
@@ -417,87 +405,73 @@ document.addEventListener('DOMContentLoaded', async function() {
     function clearOverlay() {
         ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-        const centerX = overlay.width / 2;
-        const centerY = overlay.height / 2;
-        const deadzone = parseInt(deadzoneSlider.value) / 100;
-        const halfW = deadzone * overlay.width;
-        const halfH = deadzone * overlay.height;
+        const cx = overlay.width / 2;
+        const cy = overlay.height / 2;
+        const dz = parseInt(deadzoneSlider.value) / 100;
+        const hw = dz * overlay.width;
+        const hh = dz * overlay.height;
 
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
-        ctx.strokeRect(centerX - halfW, centerY - halfH, halfW * 2, halfH * 2);
+        ctx.strokeRect(cx - hw, cy - hh, hw * 2, hh * 2);
         ctx.setLineDash([]);
     }
 
     function updateLatencyStats(mode, latency) {
         latencyHistory[mode].push(latency);
-        if (latencyHistory[mode].length > 20) {
-            latencyHistory[mode].shift();
-        }
+        if (latencyHistory[mode].length > 20) latencyHistory[mode].shift();
 
-        const avgLatency = arr => arr.length ? arr.reduce((a, b) => a + b) / arr.length : 0;
+        const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
 
         if (mode === 'mediapipe') {
-            const avg = avgLatency(latencyHistory.mediapipe);
-            mpLatencyText.textContent = `~${Math.round(avg)}ms`;
-            const pct = Math.min(100, (avg / 500) * 100);
-            mpLatencyBar.style.width = `${pct}%`;
-            mpLatencyBar.className = 'fill ' + (avg < 50 ? 'fast' : avg < 150 ? 'medium' : 'slow');
+            const a = avg(latencyHistory.mediapipe);
+            mpLatencyText.textContent = `~${Math.round(a)}ms`;
+            mpLatencyBar.style.width = Math.min(100, (a / 500) * 100) + '%';
+            mpLatencyBar.className = 'fill ' + (a < 50 ? 'fast' : a < 150 ? 'medium' : 'slow');
         } else {
-            const avg = avgLatency(latencyHistory.moondream);
-            mdLatencyText.textContent = `~${Math.round(avg)}ms`;
-            const pct = Math.min(100, (avg / 500) * 100);
-            mdLatencyBar.style.width = `${pct}%`;
-            mdLatencyBar.className = 'fill ' + (avg < 100 ? 'fast' : avg < 300 ? 'medium' : 'slow');
+            const a = avg(latencyHistory.moondream);
+            mdLatencyText.textContent = `~${Math.round(a)}ms`;
+            mdLatencyBar.style.width = Math.min(100, (a / 500) * 100) + '%';
+            mdLatencyBar.className = 'fill ' + (a < 100 ? 'fast' : a < 300 ? 'medium' : 'slow');
         }
     }
 
-    let frameCount = 0;
-    let lastFpsUpdate = performance.now();
-
-    function updateFPS(latency) {
+    function updateFPS() {
         frameCount++;
         const now = performance.now();
-        if (now - lastFpsUpdate >= 1000) {
+        if (now - lastFpsTime >= 1000) {
             fpsValue.textContent = frameCount.toFixed(1);
             frameCount = 0;
-            lastFpsUpdate = now;
+            lastFpsTime = now;
         }
     }
 
-    function addHistoryEntry(mode, latency, detected, error = null) {
+    function logEntry(latency, detected, error = null) {
         const now = Date.now();
-        const stateChanged = detected !== lastDetectionState;
+        if (!error && detected === lastLogState && now - lastLogTime < 500) return;
         
-        if (!error && !stateChanged && now - lastHistoryUpdate < 500) {
-            return;
-        }
-        
-        lastHistoryUpdate = now;
-        lastDetectionState = detected;
+        lastLogTime = now;
+        lastLogState = detected;
 
         const entry = document.createElement('div');
         entry.className = 'entry';
-
         const time = new Date().toLocaleTimeString();
-        const modeClass = mode === 'mediapipe' ? 'mediapipe' : 'moondream';
+        const mode = currentMode === 'mediapipe' ? 'MP' : 'MD';
+        const cls = currentMode === 'mediapipe' ? 'mediapipe' : 'moondream';
 
         if (error) {
-            entry.innerHTML = `<span class="time">${time}</span><span style="color:var(--error)">Error: ${error}</span>`;
+            entry.innerHTML = `<span class="time">${time}</span><span style="color:var(--error)">${error}</span>`;
         } else {
-            entry.innerHTML = `<span class="time">${time}</span><span class="${modeClass}">${mode === 'mediapipe' ? 'MP' : 'MD'}: ${Math.round(latency)}ms ${detected ? '✓' : '✗'}</span>`;
+            entry.innerHTML = `<span class="time">${time}</span><span class="${cls}">${mode}: ${Math.round(latency)}ms ${detected ? '✓' : '✗'}</span>`;
         }
 
         historyLog.insertBefore(entry, historyLog.firstChild);
-
-        while (historyLog.children.length > 50) {
-            historyLog.removeChild(historyLog.lastChild);
-        }
+        while (historyLog.children.length > 30) historyLog.removeChild(historyLog.lastChild);
     }
 
-    function updateStatus(message, isError = false) {
-        statusBar.textContent = message;
+    function updateStatus(msg, isError = false) {
+        statusBar.textContent = msg;
         statusBar.className = 'status-bar' + (isError ? ' error' : '');
     }
 });
