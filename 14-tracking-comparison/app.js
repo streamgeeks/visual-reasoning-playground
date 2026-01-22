@@ -289,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateStatus(`Tracking: ${currentMode === 'mediapipe' ? 'MediaPipe ' + mediapipeType : 'Moondream'}`);
 
         if (currentMode === 'mediapipe') {
-            trackingInterval = setInterval(runMediaPipeFrame, 50);
+            trackingInterval = setInterval(runMediaPipeFrame, 150);
         } else {
             runMoondreamLoop();
         }
