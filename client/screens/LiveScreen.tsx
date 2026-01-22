@@ -9,7 +9,6 @@ import {
   Linking,
   ScrollView,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
@@ -43,8 +42,10 @@ import {
   getCameraProfiles,
   getCurrentCameraId,
   getSettings,
+  AppSettings,
 } from "@/lib/storage";
-import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
+import { getApiUrl } from "@/lib/query-client";
+import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const VIDEO_ASPECT_RATIO = 16 / 9;
@@ -77,6 +78,7 @@ export default function LiveScreen({ navigation }: any) {
   const [sceneDescription, setSceneDescription] = useState<string | null>(null);
   const [isDescribing, setIsDescribing] = useState(false);
   const [describeError, setDescribeError] = useState<string | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   const pulseOpacity = useSharedValue(0.3);
 
@@ -100,6 +102,7 @@ export default function LiveScreen({ navigation }: any) {
       }
 
       setShowStats(settings.showStatsByDefault);
+      setAppSettings(settings);
     } catch (error) {
       console.error("Error loading camera:", error);
     }
@@ -204,27 +207,56 @@ export default function LiveScreen({ navigation }: any) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      // For now, simulate Moondream API call
-      // TODO: Integrate actual Moondream API
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      
-      // Simulated response - will be replaced with actual API
-      const mockDescriptions = [
-        "The scene shows a well-lit indoor environment. In the foreground, there appears to be a desk or table surface with various objects. The lighting suggests natural daylight coming from a window, casting soft shadows across the scene. The overall atmosphere feels calm and organized, typical of a home office or study space.",
-        "I observe what appears to be a living space with modern furnishings. The camera captures a wide angle view showing multiple areas of the room. There's good natural lighting, and the composition suggests this is a comfortable residential setting with attention to interior design.",
-        "The frame captures an interesting perspective of the current environment. Various textures and colors are visible, creating a dynamic visual composition. The lighting conditions are favorable, allowing for clear visibility of details within the scene.",
-      ];
-      
-      const randomDescription =
-        mockDescriptions[Math.floor(Math.random() * mockDescriptions.length)];
-      
-      setSceneDescription(randomDescription);
+      // Check for API key
+      if (!appSettings?.moondreamApiKey) {
+        setDescribeError("Please add your Moondream API key in Settings to use AI scene description.");
+        setIsDescribing(false);
+        return;
+      }
+
+      // Capture frame from camera
+      if (!cameraRef.current) {
+        throw new Error("Camera not ready");
+      }
+
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.7,
+        skipProcessing: true,
+      });
+
+      if (!photo?.base64) {
+        throw new Error("Failed to capture image");
+      }
+
+      // Send to Moondream API via our backend
+      const apiUrl = getApiUrl();
+      const response = await fetch(new URL("/api/describe-scene", apiUrl).toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: photo.base64,
+          apiKey: appSettings.moondreamApiKey,
+          prompt: "Describe this scene in rich detail. What objects, people, or activities do you see? Set the scene like a story narrator would.",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to analyze scene");
+      }
+
+      const data = await response.json();
+      setSceneDescription(data.description);
     } catch (error) {
-      setDescribeError("Failed to analyze scene. Please try again.");
+      const message = error instanceof Error ? error.message : "Failed to analyze scene. Please try again.";
+      setDescribeError(message);
     } finally {
       setIsDescribing(false);
     }
-  }, []);
+  }, [appSettings]);
 
   if (!permission) {
     return (
