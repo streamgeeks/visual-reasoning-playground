@@ -59,8 +59,6 @@ class OBSClient {
                             window.reasoningConsole.logInfo(`OBS authenticated successfully. Found ${this.scenes.length} scene(s)`);
                         }
                         resolve();
-                    }
-                        resolve();
                     } else if (message.op === 7) {
                         this._handleResponse(message.d);
                     } else if (message.op === 5) {
