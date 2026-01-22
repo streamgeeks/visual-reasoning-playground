@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   Dimensions,
   Platform,
   Linking,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -28,6 +29,8 @@ import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
+import { ToolSection } from "@/components/ToolSection";
+import { SceneDescription } from "@/components/SceneDescription";
 import {
   TrackingModel,
   PerformanceStats,
@@ -52,6 +55,7 @@ export default function LiveScreen({ navigation }: any) {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const cameraRef = useRef<CameraView>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>("back");
@@ -59,13 +63,20 @@ export default function LiveScreen({ navigation }: any) {
   const [selectedModel, setSelectedModel] = useState<TrackingModel>("person");
   const [isTracking, setIsTracking] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [showControls, setShowControls] = useState(true);
   const [stats, setStats] = useState<PerformanceStats>(() =>
     generateMockStats("person", false)
   );
   const [detections, setDetections] = useState<DetectionBox[]>([]);
   const [currentZoom, setCurrentZoom] = useState(0);
   const [ptzPosition, setPtzPosition] = useState({ pan: 0, tilt: 0 });
+
+  // Tool section states
+  const [expandedSection, setExpandedSection] = useState<string>("describe");
+  
+  // Scene description state
+  const [sceneDescription, setSceneDescription] = useState<string | null>(null);
+  const [isDescribing, setIsDescribing] = useState(false);
+  const [describeError, setDescribeError] = useState<string | null>(null);
 
   const pulseOpacity = useSharedValue(0.3);
 
@@ -167,11 +178,6 @@ export default function LiveScreen({ navigation }: any) {
     Haptics.selectionAsync();
   }, []);
 
-  const toggleControls = useCallback(() => {
-    setShowControls((prev) => !prev);
-    Haptics.selectionAsync();
-  }, []);
-
   const toggleCameraType = useCallback(() => {
     setCameraType((prev) => (prev === "back" ? "front" : "back"));
     Haptics.selectionAsync();
@@ -184,6 +190,39 @@ export default function LiveScreen({ navigation }: any) {
       } catch (error) {
         console.error("Could not open settings:", error);
       }
+    }
+  }, []);
+
+  const toggleSection = useCallback((section: string) => {
+    setExpandedSection((prev) => (prev === section ? "" : section));
+    Haptics.selectionAsync();
+  }, []);
+
+  const handleDescribeScene = useCallback(async () => {
+    setIsDescribing(true);
+    setDescribeError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      // For now, simulate Moondream API call
+      // TODO: Integrate actual Moondream API
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      
+      // Simulated response - will be replaced with actual API
+      const mockDescriptions = [
+        "The scene shows a well-lit indoor environment. In the foreground, there appears to be a desk or table surface with various objects. The lighting suggests natural daylight coming from a window, casting soft shadows across the scene. The overall atmosphere feels calm and organized, typical of a home office or study space.",
+        "I observe what appears to be a living space with modern furnishings. The camera captures a wide angle view showing multiple areas of the room. There's good natural lighting, and the composition suggests this is a comfortable residential setting with attention to interior design.",
+        "The frame captures an interesting perspective of the current environment. Various textures and colors are visible, creating a dynamic visual composition. The lighting conditions are favorable, allowing for clear visibility of details within the scene.",
+      ];
+      
+      const randomDescription =
+        mockDescriptions[Math.floor(Math.random() * mockDescriptions.length)];
+      
+      setSceneDescription(randomDescription);
+    } catch (error) {
+      setDescribeError("Failed to analyze scene. Please try again.");
+    } finally {
+      setIsDescribing(false);
     }
   }, []);
 
@@ -215,7 +254,7 @@ export default function LiveScreen({ navigation }: any) {
             Camera Access Required
           </Text>
           <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
-            Visual Reasoning Playground needs camera access to display the live video feed and enable AI tracking.
+            Visual Reasoning Playground needs camera access to display the live video feed and enable AI analysis.
           </Text>
 
           {canAskAgain ? (
@@ -255,15 +294,16 @@ export default function LiveScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      {/* Video Area */}
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
           <CameraView
+            ref={cameraRef}
             style={styles.camera}
             facing={cameraType}
             zoom={currentZoom / 100}
           />
 
-          {/* Overlays positioned absolutely on top of camera */}
           <View style={styles.overlayContainer} pointerEvents="box-none">
             {/* Center crosshair */}
             <View style={styles.centerCrosshair} pointerEvents="none">
@@ -272,7 +312,7 @@ export default function LiveScreen({ navigation }: any) {
               <View style={[styles.crosshairCenter, { borderColor: theme.primary }]} />
             </View>
 
-            {/* Recording/Tracking indicator */}
+            {/* Tracking indicator */}
             {isTracking ? (
               <Animated.View style={[styles.recordingIndicator, pulseStyle]}>
                 <View style={[styles.recordingDot, { backgroundColor: theme.error }]} />
@@ -280,7 +320,7 @@ export default function LiveScreen({ navigation }: any) {
               </Animated.View>
             ) : null}
 
-            {/* Detection boxes overlay */}
+            {/* Detection boxes */}
             {isTracking ? (
               <DetectionOverlay
                 detections={detections}
@@ -289,7 +329,7 @@ export default function LiveScreen({ navigation }: any) {
               />
             ) : null}
 
-            {/* Camera info overlay */}
+            {/* Camera info */}
             <View style={styles.cameraInfoOverlay} pointerEvents="none">
               <Text style={styles.cameraInfoText}>
                 {camera ? camera.name : `Phone Camera (${cameraType})`}
@@ -313,28 +353,66 @@ export default function LiveScreen({ navigation }: any) {
               </Animated.View>
             ) : null}
 
-            {/* Camera flip button */}
-            <Pressable
-              onPress={toggleCameraType}
-              style={({ pressed }) => [
-                styles.flipButton,
-                { backgroundColor: "rgba(0,0,0,0.5)", opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <Feather name="refresh-cw" size={20} color="#FFFFFF" />
-            </Pressable>
+            {/* Video controls */}
+            <View style={styles.videoControls}>
+              <Pressable
+                onPress={toggleStats}
+                style={({ pressed }) => [
+                  styles.videoButton,
+                  {
+                    backgroundColor: showStats ? theme.primary : "rgba(0,0,0,0.5)",
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Feather name="activity" size={18} color="#FFFFFF" />
+              </Pressable>
+              <Pressable
+                onPress={toggleCameraType}
+                style={({ pressed }) => [
+                  styles.videoButton,
+                  { backgroundColor: "rgba(0,0,0,0.5)", opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="refresh-cw" size={18} color="#FFFFFF" />
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
 
-      {/* Controls area */}
-      <View
-        style={[
-          styles.controlsArea,
-          { paddingBottom: tabBarHeight + Spacing.lg },
+      {/* Tools Area */}
+      <ScrollView
+        style={styles.toolsArea}
+        contentContainerStyle={[
+          styles.toolsContent,
+          { paddingBottom: tabBarHeight + Spacing.xl },
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.modelSelectorContainer}>
+        {/* Describe Scene - Primary Tool */}
+        <ToolSection
+          title="Describe Scene"
+          icon="eye"
+          isExpanded={expandedSection === "describe"}
+          onToggle={() => toggleSection("describe")}
+          badge="AI"
+        >
+          <SceneDescription
+            description={sceneDescription}
+            isLoading={isDescribing}
+            onCapture={handleDescribeScene}
+            error={describeError}
+          />
+        </ToolSection>
+
+        {/* Tracking Models */}
+        <ToolSection
+          title="Object Tracking"
+          icon="target"
+          isExpanded={expandedSection === "tracking"}
+          onToggle={() => toggleSection("tracking")}
+        >
           <ModelSelector
             selectedModel={selectedModel}
             isTracking={isTracking}
@@ -342,60 +420,23 @@ export default function LiveScreen({ navigation }: any) {
             onToggleTracking={handleToggleTracking}
             onShowInfo={handleShowModelInfo}
           />
-        </View>
+        </ToolSection>
 
-        {showControls ? (
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
-            style={styles.joystickContainer}
-          >
-            <PTZJoystick
-              onMove={handlePTZMove}
-              onZoom={handleZoom}
-              onQuickAction={handleQuickAction}
-              currentZoom={currentZoom}
-            />
-          </Animated.View>
-        ) : null}
-      </View>
-
-      {/* Toggle buttons */}
-      <View style={[styles.toggleButtons, { top: headerHeight + VIDEO_HEIGHT + Spacing.sm }]}>
-        <Pressable
-          onPress={toggleStats}
-          style={({ pressed }) => [
-            styles.toggleButton,
-            {
-              backgroundColor: showStats ? theme.primary : theme.backgroundDefault,
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
+        {/* PTZ Controls */}
+        <ToolSection
+          title="Camera Controls"
+          icon="move"
+          isExpanded={expandedSection === "ptz"}
+          onToggle={() => toggleSection("ptz")}
         >
-          <Feather
-            name="activity"
-            size={18}
-            color={showStats ? "#FFFFFF" : theme.textSecondary}
+          <PTZJoystick
+            onMove={handlePTZMove}
+            onZoom={handleZoom}
+            onQuickAction={handleQuickAction}
+            currentZoom={currentZoom}
           />
-        </Pressable>
-
-        <Pressable
-          onPress={toggleControls}
-          style={({ pressed }) => [
-            styles.toggleButton,
-            {
-              backgroundColor: showControls ? theme.primary : theme.backgroundDefault,
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
-        >
-          <Feather
-            name="move"
-            size={18}
-            color={showControls ? "#FFFFFF" : theme.textSecondary}
-          />
-        </Pressable>
-      </View>
+        </ToolSection>
+      </ScrollView>
     </View>
   );
 }
@@ -484,40 +525,25 @@ const styles = StyleSheet.create({
     top: Spacing.md,
     right: Spacing.md,
   },
-  flipButton: {
+  videoControls: {
     position: "absolute",
     bottom: Spacing.md,
     right: Spacing.md,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  controlsArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-  },
-  modelSelectorContainer: {
-    marginBottom: Spacing.lg,
-  },
-  joystickContainer: {
-    alignItems: "center",
-  },
-  toggleButtons: {
-    position: "absolute",
-    right: Spacing.md,
     flexDirection: "row",
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
-  toggleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.sm,
+  videoButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    ...Shadows.small,
+  },
+  toolsArea: {
+    flex: 1,
+  },
+  toolsContent: {
+    padding: Spacing.md,
   },
   permissionContainer: {
     flex: 1,
