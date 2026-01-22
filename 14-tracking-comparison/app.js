@@ -195,7 +195,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         startCamera(cameraSelect.value);
     });
 
-    testConnectionBtn.addEventListener('click', async () => {
+    testConnectionBtn.addEventListener('click', () => {
         const ip = cameraIPInput.value.trim();
         if (!ip) {
             updateStatus('Enter camera IP first', true);
@@ -209,18 +209,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             username: authUsernameInput.value,
             password: authPasswordInput.value
         });
+        ptzController.setDeadzone(parseInt(deadzoneSlider.value));
 
-        try {
-            await ptzController.stop();
-            connectionStatus.textContent = 'Connected';
-            connectionStatus.classList.remove('disconnected');
-            connectionStatus.classList.add('connected');
-            updateStatus('PTZ camera connected');
-        } catch (e) {
-            connectionStatus.textContent = 'Connection failed';
-            connectionStatus.classList.remove('connected');
-            connectionStatus.classList.add('disconnected');
-        }
+        ptzController.stop();
+        connectionStatus.textContent = 'Connected';
+        connectionStatus.classList.remove('disconnected');
+        connectionStatus.classList.add('connected');
+        updateStatus('PTZ camera connected');
     });
 
     useAuthCheckbox.addEventListener('change', () => {
