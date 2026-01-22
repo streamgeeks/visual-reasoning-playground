@@ -206,11 +206,11 @@ export default function LiveScreen({ navigation }: any) {
   const getPromptForLength = (length: ResponseLength): string => {
     switch (length) {
       case "short":
-        return "Describe this scene in one brief, poetic sentence. Be evocative but concise.";
+        return "Describe what you see in one sentence. Be literal and specific about objects, people, and actions.";
       case "medium":
-        return "Describe this scene in 2-3 sentences like a narrator. Focus on the mood and key details.";
+        return "Describe what you see in 2-3 sentences. List the objects, people, colors, and actions visible in the image.";
       case "long":
-        return "Describe this scene in detail like a narrator telling a story. Be poetic and evocative. Focus on the atmosphere, mood, and interesting details.";
+        return "Describe everything you see in detail. List all objects, people, text, colors, positions, and actions. Be thorough and literal.";
     }
   };
 
