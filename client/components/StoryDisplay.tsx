@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Text, Pressable, Switch, ScrollView } from "react-native";
+import { View, StyleSheet, Text, Pressable, Switch } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Animated, { FadeIn } from "react-native-reanimated";
 
@@ -158,7 +158,7 @@ export function StoryDisplay({
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
-          Add Moondream API key in Settings to enable scene narration
+          Add Moondream API key in Settings
         </Text>
       </View>
     );
@@ -166,120 +166,123 @@ export function StoryDisplay({
 
   return (
     <View style={styles.wrapper}>
-      {/* Length selector */}
-      <View style={styles.lengthSelector}>
-        {LENGTH_OPTIONS.map((option) => (
-          <Pressable
-            key={option.key}
-            onPress={() => setSelectedLength(option.key)}
-            style={[
-              styles.lengthOption,
-              {
-                backgroundColor:
-                  selectedLength === option.key
-                    ? theme.primary
-                    : theme.backgroundDefault,
-              },
-            ]}
-          >
-            <Text
+      {/* Compact controls row */}
+      <View style={styles.controlsRow}>
+        {/* Length selector - inline */}
+        <View style={styles.lengthSelector}>
+          {LENGTH_OPTIONS.map((option) => (
+            <Pressable
+              key={option.key}
+              onPress={() => setSelectedLength(option.key)}
               style={[
-                styles.lengthOptionText,
+                styles.lengthOption,
                 {
-                  color:
-                    selectedLength === option.key ? "#FFFFFF" : theme.textSecondary,
+                  backgroundColor:
+                    selectedLength === option.key
+                      ? theme.primary
+                      : theme.backgroundDefault,
                 },
               ]}
             >
-              {option.label}
-            </Text>
+              <Text
+                style={[
+                  styles.lengthOptionText,
+                  {
+                    color:
+                      selectedLength === option.key ? "#FFFFFF" : theme.textSecondary,
+                  },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Capture button inline */}
+        {!storyMode ? (
+          <Pressable
+            onPress={handleSingleCapture}
+            disabled={isLoading}
+            style={[
+              styles.captureBtn,
+              { backgroundColor: isLoading ? theme.backgroundDefault : theme.primary },
+            ]}
+          >
+            <Feather name={isLoading ? "loader" : "camera"} size={16} color="#FFFFFF" />
           </Pressable>
-        ))}
+        ) : null}
       </View>
 
-      {/* Story Mode controls */}
-      <View style={[styles.storyModeSection, { backgroundColor: theme.backgroundDefault }]}>
-        <View style={styles.storyModeHeader}>
-          <View style={styles.storyModeLabel}>
-            <Feather name="book-open" size={16} color={theme.primary} />
-            <Text style={[styles.storyModeTitle, { color: theme.text }]}>
-              Story Mode
-            </Text>
-          </View>
+      {/* Story Mode - compact */}
+      <View style={[styles.storyRow, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.storyLeft}>
+          <Feather name="book-open" size={14} color={theme.primary} />
+          <Text style={[styles.storyLabel, { color: theme.text }]}>Story</Text>
           <Switch
             value={storyMode}
             onValueChange={toggleStoryMode}
             trackColor={{ false: theme.backgroundRoot, true: theme.primary }}
             thumbColor="#FFFFFF"
+            style={styles.switch}
           />
         </View>
-
-        {/* Interval selector */}
-        <View style={styles.intervalSection}>
-          <Text style={[styles.intervalLabel, { color: theme.textSecondary }]}>
-            Capture every:
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.intervalOptions}
-          >
-            {INTERVAL_OPTIONS.map((option) => (
-              <Pressable
-                key={option.seconds}
-                onPress={() => setSelectedInterval(option.seconds)}
-                disabled={storyMode}
+        
+        <View style={styles.intervalRow}>
+          {INTERVAL_OPTIONS.map((option) => (
+            <Pressable
+              key={option.seconds}
+              onPress={() => setSelectedInterval(option.seconds)}
+              disabled={storyMode}
+              style={[
+                styles.intervalChip,
+                {
+                  backgroundColor:
+                    selectedInterval === option.seconds
+                      ? theme.primary
+                      : theme.backgroundRoot,
+                  opacity: storyMode ? 0.5 : 1,
+                },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.intervalOption,
+                  styles.intervalText,
                   {
-                    backgroundColor:
+                    color:
                       selectedInterval === option.seconds
-                        ? theme.primary
-                        : theme.backgroundRoot,
-                    opacity: storyMode ? 0.5 : 1,
+                        ? "#FFFFFF"
+                        : theme.textSecondary,
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.intervalOptionText,
-                    {
-                      color:
-                        selectedInterval === option.seconds
-                          ? "#FFFFFF"
-                          : theme.textSecondary,
-                    },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        {storyMode ? (
-          <View style={styles.storyStats}>
-            <View style={[styles.statBadge, { backgroundColor: theme.primary + "20" }]}>
-              <Feather name="camera" size={12} color={theme.primary} />
-              <Text style={[styles.statText, { color: theme.primary }]}>
-                {captureCount} captures
+                {option.label}
               </Text>
-            </View>
-            <Text style={[styles.nextCapture, { color: theme.textSecondary }]}>
-              Next in {selectedInterval}s
-            </Text>
-          </View>
-        ) : null}
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      {/* Story display area */}
+      {/* Recording indicator */}
+      {storyMode ? (
+        <View style={[styles.recordingRow, { backgroundColor: theme.success + "15" }]}>
+          <View style={[styles.recordDot, { backgroundColor: theme.success }]} />
+          <Text style={[styles.recordText, { color: theme.success }]}>
+            Recording
+          </Text>
+          <Text style={[styles.captureCountText, { color: theme.success }]}>
+            {captureCount} captures
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Description display - compact */}
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         {isLoading && displayedWords.length === 0 ? (
           <View style={styles.loadingContainer}>
             <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-              Observing scene...
+              Observing...
             </Text>
           </View>
         ) : error && displayedWords.length === 0 ? (
@@ -298,149 +301,127 @@ export function StoryDisplay({
           </Text>
         ) : (
           <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
-            Tap the button below to describe the scene
+            Tap camera to describe
           </Text>
         )}
       </View>
-
-      {/* Capture button */}
-      {!storyMode ? (
-        <Pressable
-          onPress={handleSingleCapture}
-          disabled={isLoading}
-          style={({ pressed }) => [
-            styles.captureButton,
-            {
-              backgroundColor: isLoading ? theme.backgroundDefault : theme.primary,
-              opacity: pressed ? 0.8 : 1,
-            },
-          ]}
-        >
-          <Feather
-            name={isLoading ? "loader" : "camera"}
-            size={20}
-            color="#FFFFFF"
-          />
-          <Text style={styles.captureButtonText}>
-            {isLoading ? "Analyzing..." : "Describe Scene"}
-          </Text>
-        </Pressable>
-      ) : (
-        <View style={[styles.liveIndicator, { backgroundColor: theme.success + "20" }]}>
-          <View style={[styles.liveDot, { backgroundColor: theme.success }]} />
-          <Text style={[styles.liveText, { color: theme.success }]}>
-            Recording Story
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
   },
   lengthSelector: {
+    flex: 1,
     flexDirection: "row",
-    gap: Spacing.xs,
+    gap: 4,
   },
   lengthOption: {
     flex: 1,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.xs,
     alignItems: "center",
   },
   lengthOptionText: {
-    fontSize: Typography.small.fontSize,
+    fontSize: 11,
     fontWeight: "600",
   },
-  storyModeSection: {
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    gap: Spacing.md,
+  captureBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  storyModeHeader: {
+  storyRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  storyModeLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  storyModeTitle: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
-  },
-  intervalSection: {
-    gap: Spacing.sm,
-  },
-  intervalLabel: {
-    fontSize: Typography.small.fontSize,
-  },
-  intervalOptions: {
-    flexDirection: "row",
-    gap: Spacing.xs,
-  },
-  intervalOption: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.sm,
-  },
-  intervalOptionText: {
-    fontSize: Typography.small.fontSize,
-    fontWeight: "500",
-  },
-  storyStats: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  statBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    paddingVertical: 4,
+    paddingVertical: 8,
     paddingHorizontal: Spacing.sm,
+  },
+  storyLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  storyLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  switch: {
+    transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
+  },
+  intervalRow: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  intervalChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: BorderRadius.xs,
   },
-  statText: {
-    fontSize: Typography.small.fontSize,
+  intervalText: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  recordingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  recordDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  recordText: {
+    fontSize: 12,
     fontWeight: "600",
   },
-  nextCapture: {
-    fontSize: Typography.small.fontSize,
+  captureCountText: {
+    fontSize: 12,
+    marginLeft: "auto",
   },
   container: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
-    minHeight: 140,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    minHeight: 100,
     justifyContent: "center",
   },
   loadingContainer: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   placeholderText: {
-    fontSize: Typography.body.fontSize,
+    fontSize: 13,
     textAlign: "center",
     fontStyle: "italic",
   },
   loadingText: {
-    fontSize: Typography.body.fontSize,
+    fontSize: 13,
     textAlign: "center",
   },
   errorText: {
-    fontSize: Typography.body.fontSize,
+    fontSize: 13,
     textAlign: "center",
   },
   storyText: {
@@ -448,41 +429,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   word: {
-    fontSize: 22,
-    lineHeight: 34,
+    fontSize: 18,
+    lineHeight: 28,
     fontWeight: "300",
-    letterSpacing: 0.3,
-  },
-  captureButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.md,
-  },
-  captureButtonText: {
-    color: "#FFFFFF",
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
-  },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.md,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  liveText: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
   },
 });

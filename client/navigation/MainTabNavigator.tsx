@@ -1,8 +1,8 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import { Platform, StyleSheet } from "react-native";
+
+
 
 import LiveStackNavigator from "@/navigation/LiveStackNavigator";
 import GalleryStackNavigator from "@/navigation/GalleryStackNavigator";
@@ -26,25 +26,21 @@ export default function MainTabNavigator() {
     <Tab.Navigator
       initialRouteName="LiveTab"
       screenOptions={{
-        tabBarActiveTintColor: theme.tabIconSelected,
-        tabBarInactiveTintColor: theme.tabIconDefault,
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textSecondary,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: Platform.select({
-            ios: "transparent",
-            android: theme.backgroundRoot,
-          }),
-          borderTopWidth: 0,
+          backgroundColor: "#0A0E14",
+          borderTopWidth: 1,
+          borderTopColor: "#1A1F29",
           elevation: 0,
+          height: 56,
+          paddingBottom: 4,
         },
-        tabBarBackground: () =>
-          Platform.OS === "ios" ? (
-            <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : null,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "500",
+        },
         headerShown: false,
       }}
     >
