@@ -62,69 +62,84 @@ export function ModelSelector({
   useEffect(() => {
     return () => {
       if (frameIntervalRef.current) {
-        clearInterval(frameIntervalRef.current);
+        if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
+          (frameIntervalRef.current as any).stop();
+        } else {
+          clearInterval(frameIntervalRef.current);
+        }
       }
     };
   }, []);
 
   const startFrameCapture = useCallback((cam: CameraProfile) => {
     if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
+      if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
+        (frameIntervalRef.current as any).stop();
+      } else {
+        clearInterval(frameIntervalRef.current);
+      }
     }
     
     frameCountRef.current = 0;
     fpsStartTimeRef.current = Date.now();
     fpsCountRef.current = 0;
     
-    let isCapturing = false;
+    let isRunning = true;
     let consecutiveFailures = 0;
     
-    const captureFrame = async () => {
-      if (isCapturing) return;
-      isCapturing = true;
-      
-      try {
-        const startTime = Date.now();
-        const frame = await fetchCameraFrame(cam);
-        const captureTime = Date.now() - startTime;
-        
-        if (frame) {
-          consecutiveFailures = 0;
-          frameCountRef.current++;
-          fpsCountRef.current++;
-          setPreviewFrame(frame);
-          onFrameUpdate?.(frame);
+    // Continuous loop - immediately start next request after current finishes
+    const captureLoop = async () => {
+      while (isRunning) {
+        try {
+          const frame = await fetchCameraFrame(cam);
           
-          const elapsed = (Date.now() - fpsStartTimeRef.current) / 1000;
-          if (elapsed >= 1) {
-            const fps = Math.round(fpsCountRef.current / elapsed);
-            setCameraStatus({
-              connected: true,
-              fps,
-              frameCount: frameCountRef.current,
-            });
-            fpsStartTimeRef.current = Date.now();
-            fpsCountRef.current = 0;
+          if (frame) {
+            consecutiveFailures = 0;
+            frameCountRef.current++;
+            fpsCountRef.current++;
+            setPreviewFrame(frame);
+            onFrameUpdate?.(frame);
+            
+            const elapsed = (Date.now() - fpsStartTimeRef.current) / 1000;
+            if (elapsed >= 1) {
+              const fps = Math.round(fpsCountRef.current / elapsed);
+              setCameraStatus({
+                connected: true,
+                fps,
+                frameCount: frameCountRef.current,
+              });
+              fpsStartTimeRef.current = Date.now();
+              fpsCountRef.current = 0;
+            }
+          } else {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 5) {
+              setCameraConnected(false);
+              onCameraConnected?.(false);
+              setConnectionError("Lost connection to camera");
+              isRunning = false;
+              break;
+            }
+            // Brief pause on failure before retry
+            await new Promise(r => setTimeout(r, 100));
           }
-        } else {
+        } catch (error) {
           consecutiveFailures++;
           if (consecutiveFailures >= 5) {
-            setCameraConnected(false);
-            onCameraConnected?.(false);
-            setConnectionError("Lost connection to camera");
-            if (frameIntervalRef.current) {
-              clearInterval(frameIntervalRef.current);
-              frameIntervalRef.current = null;
-            }
+            isRunning = false;
+            break;
           }
+          await new Promise(r => setTimeout(r, 100));
         }
-      } finally {
-        isCapturing = false;
       }
     };
     
-    captureFrame();
-    frameIntervalRef.current = setInterval(captureFrame, 100);
+    captureLoop();
+    
+    // Store cleanup function
+    frameIntervalRef.current = {
+      stop: () => { isRunning = false; }
+    } as any;
   }, [onCameraConnected, onFrameUpdate]);
 
   const handleConnect = useCallback(async () => {
@@ -168,7 +183,11 @@ export function ModelSelector({
 
   const handleDisconnect = useCallback(async () => {
     if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
+      if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
+        (frameIntervalRef.current as any).stop();
+      } else {
+        clearInterval(frameIntervalRef.current);
+      }
       frameIntervalRef.current = null;
     }
     

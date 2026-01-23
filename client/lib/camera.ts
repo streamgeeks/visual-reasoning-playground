@@ -30,11 +30,34 @@ interface SnapshotConfig {
 function getSnapshotConfigs(camera: CameraProfile): SnapshotConfig[] {
   const base = `http://${camera.ipAddress}:${camera.httpPort}`;
   const configs: SnapshotConfig[] = [];
+  const keepAlive: Record<string, string> = { "Connection": "keep-alive" };
+  const authHeaders: Record<string, string> = camera.username && camera.password ? {
+    "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
+    "Connection": "keep-alive",
+  } : keepAlive;
+  
+  // Try low-resolution endpoints first (faster)
+  // PTZOptics low-res snapshot (if supported)
+  configs.push({
+    url: `${base}/cgi-bin/snapshot.cgi?resolution=2`,
+    headers: authHeaders,
+    name: "Low-res snapshot",
+  });
+  
+  // Standard snapshot with quality parameter
+  if (camera.username && camera.password) {
+    configs.push({
+      url: `${base}/cgi-bin/snapshot.cgi?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}&quality=50`,
+      headers: { "Connection": "keep-alive" },
+      name: "Query params auth (low quality)",
+    });
+  }
   
   // Method 1: Query parameters (PTZOptics style)
   if (camera.username && camera.password) {
     configs.push({
       url: `${base}/cgi-bin/snapshot.cgi?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`,
+      headers: { "Connection": "keep-alive" },
       name: "Query params auth",
     });
   }
@@ -43,9 +66,7 @@ function getSnapshotConfigs(camera: CameraProfile): SnapshotConfig[] {
   if (camera.username && camera.password) {
     configs.push({
       url: `${base}/cgi-bin/snapshot.cgi`,
-      headers: {
-        "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
-      },
+      headers: authHeaders,
       name: "Basic Auth header",
     });
   }
@@ -53,23 +74,27 @@ function getSnapshotConfigs(camera: CameraProfile): SnapshotConfig[] {
   // Method 3: No auth (some cameras allow public access to snapshots)
   configs.push({
     url: `${base}/cgi-bin/snapshot.cgi`,
+    headers: { "Connection": "keep-alive" },
     name: "No auth",
   });
   
   // Method 4: Alternative snapshot endpoints
   configs.push({
     url: `${base}/snapshot.jpg`,
-    headers: camera.username && camera.password ? {
-      "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
-    } : undefined,
+    headers: authHeaders,
     name: "snapshot.jpg",
+  });
+  
+  // Try sub-stream snapshot (usually lower resolution)
+  configs.push({
+    url: `${base}/jpg/2/image.jpg`,
+    headers: authHeaders,
+    name: "Sub-stream snapshot",
   });
   
   configs.push({
     url: `${base}/jpg/image.jpg`,
-    headers: camera.username && camera.password ? {
-      "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
-    } : undefined,
+    headers: authHeaders,
     name: "jpg/image.jpg",
   });
   
@@ -133,12 +158,15 @@ export async function testCameraConnection(camera: CameraProfile): Promise<Conne
   };
 }
 
+// Track previous blob URL to revoke it (prevent memory leak)
+let previousBlobUrl: string | null = null;
+
 export async function fetchCameraFrame(camera: CameraProfile): Promise<string | null> {
   if (!activeSnapshotConfig) {
     return null;
   }
   
-  const timeout = createTimeoutSignal(1500);
+  const timeout = createTimeoutSignal(800); // Shorter timeout for faster failure
   try {
     const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
     const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
@@ -156,6 +184,19 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     }
     
     const blob = await response.blob();
+    
+    // Use blob URL instead of base64 (much faster)
+    if (typeof URL !== "undefined" && URL.createObjectURL) {
+      // Revoke previous URL to prevent memory leak
+      if (previousBlobUrl) {
+        URL.revokeObjectURL(previousBlobUrl);
+      }
+      const blobUrl = URL.createObjectURL(blob);
+      previousBlobUrl = blobUrl;
+      return blobUrl;
+    }
+    
+    // Fallback to base64 for environments without blob URLs
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
