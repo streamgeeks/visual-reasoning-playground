@@ -434,6 +434,10 @@ export default function LiveScreen({ navigation }: any) {
                   style={styles.camera}
                   onFpsUpdate={setPtzFps}
                   onError={(error) => console.log("MJPEG error:", error)}
+                  onFallbackToSnapshot={() => {
+                    console.log("MJPEG failed, switching to snapshot mode");
+                    setPtzStreamMode("snapshot");
+                  }}
                 />
               )
             ) : ptzFrame ? (

@@ -1,33 +1,26 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Text, Platform, Image } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, Text, Platform, Image, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
 import { CameraProfile } from "@/lib/storage";
+import { getAlternateMjpegUrls } from "@/lib/camera";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 
 interface MJPEGStreamProps {
   camera: CameraProfile;
   onFpsUpdate?: (fps: number) => void;
   onError?: (error: string) => void;
+  onFallbackToSnapshot?: () => void;
   style?: any;
 }
 
-export function MJPEGStream({ camera, onFpsUpdate, onError, style }: MJPEGStreamProps) {
+export function MJPEGStream({ camera, onFpsUpdate, onError, onFallbackToSnapshot, style }: MJPEGStreamProps) {
   const { theme } = useTheme();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const fpsRef = useRef({ count: 0, lastTime: Date.now() });
-
-  const getMjpegUrl = () => {
-    const base = `http://${camera.ipAddress}:${camera.httpPort}`;
-    
-    if (camera.username && camera.password) {
-      return `${base}/cgi-bin/mjpg/video.cgi?user=${encodeURIComponent(camera.username)}&password=${encodeURIComponent(camera.password)}&channel=0&subtype=1`;
-    }
-    return `${base}/cgi-bin/mjpg/video.cgi?channel=0&subtype=1`;
-  };
-
-  const mjpegUrl = getMjpegUrl();
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const mjpegUrls = getAlternateMjpegUrls(camera);
+  const mjpegUrl = mjpegUrls[currentUrlIndex];
 
   const html = `
     <!DOCTYPE html>
@@ -97,6 +90,18 @@ export function MJPEGStream({ camera, onFpsUpdate, onError, style }: MJPEGStream
     </html>
   `;
 
+  const tryNextUrl = useCallback(() => {
+    if (currentUrlIndex < mjpegUrls.length - 1) {
+      console.log(`MJPEG URL ${currentUrlIndex + 1} failed, trying next...`);
+      setCurrentUrlIndex(prev => prev + 1);
+      setIsLoading(true);
+      setError(null);
+    } else {
+      console.log("All MJPEG URLs failed, falling back to snapshot");
+      onFallbackToSnapshot?.();
+    }
+  }, [currentUrlIndex, mjpegUrls.length, onFallbackToSnapshot]);
+
   const handleMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -108,6 +113,8 @@ export function MJPEGStream({ camera, onFpsUpdate, onError, style }: MJPEGStream
       } else if (data.type === 'error') {
         setError(data.message);
         onError?.(data.message);
+        // Try next URL after a short delay
+        setTimeout(tryNextUrl, 500);
       }
     } catch (e) {
       // Ignore parse errors
@@ -162,11 +169,9 @@ export function MJPEGStream({ camera, onFpsUpdate, onError, style }: MJPEGStream
       ) : null}
       {error ? (
         <View style={styles.errorOverlay}>
-          <Text style={[styles.errorText, { color: theme.error }]}>
-            {error}
-          </Text>
-          <Text style={[styles.errorHint, { color: theme.textSecondary }]}>
-            Trying snapshot fallback...
+          <ActivityIndicator size="small" color={theme.primary} />
+          <Text style={[styles.errorHint, { color: theme.textSecondary, marginTop: Spacing.sm }]}>
+            Trying alternate stream...
           </Text>
         </View>
       ) : null}

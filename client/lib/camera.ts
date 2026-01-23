@@ -219,10 +219,27 @@ export function clearActiveConfig() {
 
 export function getMjpegUrl(camera: CameraProfile): string {
   const base = `http://${camera.ipAddress}:${camera.httpPort}`;
+  // PTZOptics cameras typically use /mjpg/video.mjpg or /video.mjpg
+  // Try the most common PTZOptics MJPEG endpoint
   if (camera.username && camera.password) {
-    return `${base}/cgi-bin/mjpg/video.cgi?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`;
+    return `${base}/mjpg/video.mjpg?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`;
   }
-  return `${base}/cgi-bin/mjpg/video.cgi`;
+  return `${base}/mjpg/video.mjpg`;
+}
+
+export function getAlternateMjpegUrls(camera: CameraProfile): string[] {
+  const base = `http://${camera.ipAddress}:${camera.httpPort}`;
+  const authQuery = camera.username && camera.password 
+    ? `?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`
+    : "";
+  
+  return [
+    `${base}/mjpg/video.mjpg${authQuery}`,
+    `${base}/video.mjpg${authQuery}`,
+    `${base}/cgi-bin/mjpg/video.cgi${authQuery}`,
+    `${base}/mjpeg/1${authQuery}`,
+    `${base}/stream.mjpg${authQuery}`,
+  ];
 }
 
 export function getActiveSnapshotUrl(): string | null {
