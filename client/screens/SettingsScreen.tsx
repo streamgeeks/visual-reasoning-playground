@@ -40,6 +40,7 @@ import {
   generateId,
   DEFAULT_TRACKING_SETTINGS,
 } from "@/lib/storage";
+import { testCameraConnection, sendPtzCommand, PTZ_COMMANDS } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 
 export default function SettingsScreen() {
@@ -115,6 +116,30 @@ export default function SettingsScreen() {
     
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [currentCameraId]);
+
+  const handleTestCamera = useCallback(async (camera: CameraProfile): Promise<boolean> => {
+    try {
+      const result = await testCameraConnection(camera);
+      return result.success;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handlePtzControl = useCallback(async (command: string) => {
+    const activeCamera = cameras.find(c => c.id === currentCameraId);
+    if (!activeCamera) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await sendPtzCommand(activeCamera, command);
+    
+    // For movement commands, stop after a brief pulse
+    if (command !== PTZ_COMMANDS.stop && command !== PTZ_COMMANDS.home) {
+      setTimeout(() => {
+        sendPtzCommand(activeCamera, PTZ_COMMANDS.stop);
+      }, 300);
+    }
+  }, [cameras, currentCameraId]);
 
   const handleAddCamera = useCallback(async () => {
     if (!newCamera.name || !newCamera.ipAddress) return;
@@ -226,9 +251,103 @@ export default function SettingsScreen() {
             isActive={currentCameraId === camera.id}
             onPress={() => handleSelectCamera(camera)}
             onDelete={() => handleDeleteCamera(camera)}
+            onTest={() => handleTestCamera(camera)}
             index={index}
           />
         ))}
+        
+        {currentCameraId ? (
+          <View style={[styles.ptzControlSection, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.ptzHeader}>
+              <Feather name="move" size={16} color={theme.primary} />
+              <Text style={[styles.ptzTitle, { color: theme.text }]}>PTZ Test Controls</Text>
+            </View>
+            
+            <View style={styles.ptzGrid}>
+              <View style={styles.ptzRow}>
+                <View style={styles.ptzSpacer} />
+                <Pressable
+                  onPress={() => handlePtzControl(PTZ_COMMANDS.up)}
+                  style={({ pressed }) => [
+                    styles.ptzButton,
+                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="chevron-up" size={24} color={theme.text} />
+                </Pressable>
+                <View style={styles.ptzSpacer} />
+              </View>
+              
+              <View style={styles.ptzRow}>
+                <Pressable
+                  onPress={() => handlePtzControl(PTZ_COMMANDS.left)}
+                  style={({ pressed }) => [
+                    styles.ptzButton,
+                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="chevron-left" size={24} color={theme.text} />
+                </Pressable>
+                <Pressable
+                  onPress={() => handlePtzControl(PTZ_COMMANDS.home)}
+                  style={({ pressed }) => [
+                    styles.ptzButton,
+                    styles.ptzHomeButton,
+                    { backgroundColor: theme.primary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="home" size={20} color="#FFFFFF" />
+                </Pressable>
+                <Pressable
+                  onPress={() => handlePtzControl(PTZ_COMMANDS.right)}
+                  style={({ pressed }) => [
+                    styles.ptzButton,
+                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="chevron-right" size={24} color={theme.text} />
+                </Pressable>
+              </View>
+              
+              <View style={styles.ptzRow}>
+                <View style={styles.ptzSpacer} />
+                <Pressable
+                  onPress={() => handlePtzControl(PTZ_COMMANDS.down)}
+                  style={({ pressed }) => [
+                    styles.ptzButton,
+                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="chevron-down" size={24} color={theme.text} />
+                </Pressable>
+                <View style={styles.ptzSpacer} />
+              </View>
+            </View>
+            
+            <View style={styles.zoomRow}>
+              <Pressable
+                onPress={() => handlePtzControl(PTZ_COMMANDS.zoomOut)}
+                style={({ pressed }) => [
+                  styles.zoomButton,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="zoom-out" size={20} color={theme.text} />
+                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>Zoom Out</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handlePtzControl(PTZ_COMMANDS.zoomIn)}
+                style={({ pressed }) => [
+                  styles.zoomButton,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="zoom-in" size={20} color={theme.text} />
+                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>Zoom In</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={() => setShowAddCamera(true)}
@@ -930,6 +1049,61 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   resetButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+  },
+  ptzControlSection: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+  },
+  ptzHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  ptzTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  ptzGrid: {
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  ptzRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  ptzButton: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.md,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  ptzHomeButton: {
+    borderRadius: 28,
+  },
+  ptzSpacer: {
+    width: 56,
+    height: 56,
+  },
+  zoomRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  zoomButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  zoomText: {
     fontSize: Typography.small.fontSize,
     fontWeight: "500",
   },

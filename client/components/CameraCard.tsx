@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, Pressable, Text } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, Pressable, Text, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -12,14 +12,17 @@ interface CameraCardProps {
   isActive: boolean;
   onPress: () => void;
   onDelete: () => void;
+  onTest?: () => Promise<boolean>;
   index: number;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function CameraCard({ camera, isActive, onPress, onDelete, index }: CameraCardProps) {
+export function CameraCard({ camera, isActive, onPress, onDelete, onTest, index }: CameraCardProps) {
   const { theme } = useTheme();
   const scale = useSharedValue(1);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -41,6 +44,29 @@ export function CameraCard({ camera, isActive, onPress, onDelete, index }: Camer
   const handleDelete = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     onDelete();
+  };
+
+  const handleTest = async () => {
+    if (!onTest || testing) return;
+    setTesting(true);
+    setTestResult(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    try {
+      const success = await onTest();
+      setTestResult(success ? "success" : "error");
+      Haptics.notificationAsync(
+        success 
+          ? Haptics.NotificationFeedbackType.Success 
+          : Haptics.NotificationFeedbackType.Error
+      );
+    } catch {
+      setTestResult("error");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 3000);
+    }
   };
 
   return (
@@ -86,6 +112,33 @@ export function CameraCard({ camera, isActive, onPress, onDelete, index }: Camer
               {camera.ipAddress}:{camera.httpPort}
             </Text>
           </View>
+
+          <Pressable
+            onPress={handleTest}
+            disabled={testing}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.testButton,
+              { 
+                backgroundColor: testResult === "success" 
+                  ? theme.success + "20" 
+                  : testResult === "error" 
+                  ? theme.error + "20" 
+                  : theme.backgroundSecondary,
+                opacity: pressed && !testing ? 0.7 : 1,
+              },
+            ]}
+          >
+            {testing ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : (
+              <Feather 
+                name={testResult === "success" ? "check-circle" : testResult === "error" ? "x-circle" : "wifi"} 
+                size={16} 
+                color={testResult === "success" ? theme.success : testResult === "error" ? theme.error : theme.textSecondary} 
+              />
+            )}
+          </Pressable>
 
           <Pressable
             onPress={handleDelete}
@@ -147,6 +200,13 @@ const styles = StyleSheet.create({
   },
   ipAddress: {
     fontSize: Typography.small.fontSize,
+  },
+  testButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
   },
   deleteButton: {
     padding: Spacing.sm,
