@@ -17,7 +17,8 @@ MVP implementation with all core features:
 
 ### Technology Stack
 - **Frontend**: React Native with Expo
-- **Backend**: Express.js (minimal - mostly client-side app)
+- **Backend**: Express.js (port 5000) - Moondream AI integration, static file serving
+- **RTSP Backend**: Python/FastAPI + OpenCV (port 8082) - PTZ camera streaming
 - **State Management**: React hooks + AsyncStorage for persistence
 - **Navigation**: React Navigation 7+ (Bottom Tabs + Native Stack)
 
@@ -67,6 +68,13 @@ client/
     ├── PresetsScreen.tsx       # Preset management
     ├── ReplayScreen.tsx        # Instant replay buffer
     └── SettingsScreen.tsx      # App configuration
+
+backend/                        # Python RTSP backend
+├── main.py                     # FastAPI app with WebSocket streaming
+├── requirements.txt            # Python dependencies
+└── services/
+    ├── camera_manager.py       # Multi-camera connection manager
+    └── rtsp_service.py         # OpenCV RTSP capture service
 ```
 
 ### Navigation Structure
@@ -136,6 +144,26 @@ client/
 - Simulated tracking data for demo mode
 
 ## Development Notes
-- The app simulates RTSP camera feeds since actual RTSP streaming isn't available in Expo Go
-- Tracking data is generated client-side for demonstration purposes
-- Real PTZ camera integration would require network access and PTZOptics HTTP API
+
+### RTSP Streaming Architecture
+- PTZOptics cameras use standard RTSP at `rtsp://<ip>:554/1` for main stream
+- Python FastAPI backend (port 8082) handles RTSP capture via OpenCV
+- Frames are captured server-side and served to mobile app as JPEG images
+- WebSocket endpoint available for real-time streaming at higher FPS
+
+### Starting the RTSP Backend
+```bash
+cd backend && python main.py
+```
+
+### Camera Configuration
+Users configure cameras in Settings with:
+- IP address (e.g., 192.168.1.100)
+- RTSP port (default 554)
+- HTTP port (default 80)
+- Username/password for authenticated streams
+
+### Object Tracking Tool
+- Connect to configured PTZ camera via RTSP
+- Select tracking model (Person, Ball, Face, Multi-Object)
+- Live FPS and frame count displayed when connected
