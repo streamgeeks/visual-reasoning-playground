@@ -65,7 +65,7 @@ import {
   BoundingBox,
   getObjectDescription,
 } from "@/lib/trackingService";
-import { sendPtzCommand, PTZ_COMMANDS } from "@/lib/camera";
+import { sendPtzCommand, PTZ_COMMANDS, testCameraConnection, fetchCameraFrame } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -945,12 +945,58 @@ export default function LiveScreen({ navigation }: any) {
                   ) : null}
                 </View>
               ) : activeTool === "ptz" ? (
-                <PTZJoystick
-                  onMove={handlePTZMove}
-                  onZoom={handleZoom}
-                  onQuickAction={handleQuickAction}
-                  currentZoom={currentZoom}
-                />
+                <View>
+                  {/* Camera Connection for PTZ */}
+                  {!ptzConnected && camera ? (
+                    <Pressable
+                      onPress={async () => {
+                        const result = await testCameraConnection(camera);
+                        if (result.success) {
+                          handlePtzConnected(true);
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          // Start frame capture loop
+                          const captureFrames = async () => {
+                            while (true) {
+                              const frame = await fetchCameraFrame(camera);
+                              if (frame) {
+                                handlePtzFrameUpdate(frame);
+                              }
+                              await new Promise(r => setTimeout(r, 150));
+                            }
+                          };
+                          captureFrames();
+                        } else {
+                          Alert.alert("Connection Failed", result.error || "Could not connect to camera");
+                        }
+                      }}
+                      style={[styles.connectButton, { backgroundColor: theme.primary }]}
+                    >
+                      <Feather name="video" size={18} color="#FFF" />
+                      <Text style={styles.connectButtonText}>Connect to {camera.name}</Text>
+                    </Pressable>
+                  ) : !camera ? (
+                    <View style={[styles.noCameraMessage, { backgroundColor: theme.backgroundSecondary }]}>
+                      <Feather name="alert-circle" size={20} color={theme.warning} />
+                      <Text style={[styles.noCameraText, { color: theme.textSecondary }]}>
+                        No camera configured. Add one in Settings.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.connectedBadge, { backgroundColor: theme.success + "20" }]}>
+                      <View style={[styles.connectedDot, { backgroundColor: theme.success }]} />
+                      <Text style={[styles.connectedText, { color: theme.success }]}>
+                        Connected to {camera.name}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  <PTZJoystick
+                    onMove={handlePTZMove}
+                    onZoom={handleZoom}
+                    onQuickAction={handleQuickAction}
+                    currentZoom={currentZoom}
+                  />
+                </View>
               ) : null}
             </ScrollView>
           </View>
@@ -1197,6 +1243,52 @@ const styles = StyleSheet.create({
   },
   describeContainer: {
     gap: Spacing.md,
+  },
+  connectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+  },
+  connectButtonText: {
+    color: "#FFFFFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  noCameraMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+  },
+  noCameraText: {
+    flex: 1,
+    fontSize: Typography.small.fontSize,
+  },
+  connectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.lg,
+    alignSelf: "flex-start",
+  },
+  connectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  connectedText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
   },
   settingsToggle: {
     flexDirection: "row",
