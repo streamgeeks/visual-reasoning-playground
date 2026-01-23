@@ -71,38 +71,55 @@ export function ModelSelector({
     fpsStartTimeRef.current = Date.now();
     fpsCountRef.current = 0;
     
+    let isCapturing = false;
+    let consecutiveFailures = 0;
+    
     const captureFrame = async () => {
-      const frame = await fetchCameraFrame(cam);
-      if (frame) {
-        frameCountRef.current++;
-        fpsCountRef.current++;
-        setPreviewFrame(frame);
-        onFrameUpdate?.(frame);
+      if (isCapturing) return;
+      isCapturing = true;
+      
+      try {
+        const startTime = Date.now();
+        const frame = await fetchCameraFrame(cam);
+        const captureTime = Date.now() - startTime;
         
-        const elapsed = (Date.now() - fpsStartTimeRef.current) / 1000;
-        if (elapsed >= 1) {
-          const fps = Math.round(fpsCountRef.current / elapsed);
-          setCameraStatus({
-            connected: true,
-            fps,
-            frameCount: frameCountRef.current,
-          });
-          fpsStartTimeRef.current = Date.now();
-          fpsCountRef.current = 0;
+        if (frame) {
+          consecutiveFailures = 0;
+          frameCountRef.current++;
+          fpsCountRef.current++;
+          setPreviewFrame(frame);
+          onFrameUpdate?.(frame);
+          
+          const elapsed = (Date.now() - fpsStartTimeRef.current) / 1000;
+          if (elapsed >= 1) {
+            const fps = Math.round(fpsCountRef.current / elapsed);
+            setCameraStatus({
+              connected: true,
+              fps,
+              frameCount: frameCountRef.current,
+            });
+            fpsStartTimeRef.current = Date.now();
+            fpsCountRef.current = 0;
+          }
+        } else {
+          consecutiveFailures++;
+          if (consecutiveFailures >= 5) {
+            setCameraConnected(false);
+            onCameraConnected?.(false);
+            setConnectionError("Lost connection to camera");
+            if (frameIntervalRef.current) {
+              clearInterval(frameIntervalRef.current);
+              frameIntervalRef.current = null;
+            }
+          }
         }
-      } else {
-        setCameraConnected(false);
-        onCameraConnected?.(false);
-        setConnectionError("Lost connection to camera");
-        if (frameIntervalRef.current) {
-          clearInterval(frameIntervalRef.current);
-          frameIntervalRef.current = null;
-        }
+      } finally {
+        isCapturing = false;
       }
     };
     
     captureFrame();
-    frameIntervalRef.current = setInterval(captureFrame, 200);
+    frameIntervalRef.current = setInterval(captureFrame, 100);
   }, [onCameraConnected, onFrameUpdate]);
 
   const handleConnect = useCallback(async () => {

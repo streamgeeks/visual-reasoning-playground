@@ -133,7 +133,7 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     return null;
   }
   
-  const timeout = createTimeoutSignal(3000);
+  const timeout = createTimeoutSignal(1500);
   try {
     const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
     const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
@@ -161,7 +161,6 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     });
   } catch (error) {
     timeout.clear();
-    console.log("Frame fetch error:", error);
     return null;
   }
 }

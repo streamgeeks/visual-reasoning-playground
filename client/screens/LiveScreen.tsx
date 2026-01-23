@@ -82,6 +82,9 @@ export default function LiveScreen({ navigation }: any) {
   // PTZ camera connection state
   const [ptzConnected, setPtzConnected] = useState(false);
   const [ptzFrame, setPtzFrame] = useState<string | null>(null);
+  const [ptzFps, setPtzFps] = useState(0);
+  const ptzFrameCountRef = useRef(0);
+  const ptzFpsStartTimeRef = useRef(0);
 
   // Tool navigation state (null = show list, string = show that tool)
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -201,11 +204,28 @@ export default function LiveScreen({ navigation }: any) {
     setPtzConnected(connected);
     if (!connected) {
       setPtzFrame(null);
+      setPtzFps(0);
+      ptzFrameCountRef.current = 0;
+      ptzFpsStartTimeRef.current = 0;
     }
   }, []);
 
   const handlePtzFrameUpdate = useCallback((frameUri: string) => {
     setPtzFrame(frameUri);
+    
+    ptzFrameCountRef.current++;
+    const now = Date.now();
+    if (ptzFpsStartTimeRef.current === 0) {
+      ptzFpsStartTimeRef.current = now;
+    }
+    
+    const elapsed = (now - ptzFpsStartTimeRef.current) / 1000;
+    if (elapsed >= 1) {
+      const fps = Math.round(ptzFrameCountRef.current / elapsed);
+      setPtzFps(fps);
+      ptzFrameCountRef.current = 0;
+      ptzFpsStartTimeRef.current = now;
+    }
   }, []);
 
   const handleOpenSettings = useCallback(async () => {
@@ -434,9 +454,15 @@ export default function LiveScreen({ navigation }: any) {
               <Text style={styles.cameraInfoText}>
                 {ptzConnected ? camera?.name : `Phone Camera (${cameraType})`}
               </Text>
-              <Text style={styles.cameraInfoText}>
-                P:{ptzPosition.pan} T:{ptzPosition.tilt} Z:{currentZoom}
-              </Text>
+              {ptzConnected ? (
+                <Text style={[styles.cameraInfoText, { color: "#00D9FF" }]}>
+                  {ptzFps} FPS
+                </Text>
+              ) : (
+                <Text style={styles.cameraInfoText}>
+                  P:{ptzPosition.pan} T:{ptzPosition.tilt} Z:{currentZoom}
+                </Text>
+              )}
             </View>
 
             {/* Stats overlay */}

@@ -1,0 +1,503 @@
+# High FPS Optimization Guide for RTSP Streaming
+
+You're right to prioritize FPS over resolution for smooth tracking. Let's optimize the entire pipeline.
+
+## Performance Bottlenecks
+
+Current issues causing low FPS:
+1. **High resolution (1080p)** → processing overhead
+2. **JPEG encoding quality** → CPU intensive
+3. **WebSocket polling** → network overhead
+4. **Frame buffer management** → memory bottleneck
+
+---
+
+## Optimization Strategy
+
+### **Target: 30 FPS at 480p-720p**
+
+Lower resolution = faster processing = higher FPS
+
+---
+
+## Updated Python Backend (High FPS Version)
+
+### **1. Update backend/python/services/rtsp_service.py**
+
+```python
+import cv2
+import threading
+import time
+import numpy as np
+
+class RTSPService:
+    def __init__(self, rtsp_url, target_width=640, target_height=360, jpeg_quality=60):
+        """
+        Initialize RTSP service with performance optimizations
+        
+        Args:
+            rtsp_url: RTSP stream URL
+            target_width: Target width (default 640 for 360p)
+            target_height: Target height (default 360)
+            jpeg_quality: JPEG compression quality 1-100 (lower = faster, default 60)
+        """
+        self.rtsp_url = rtsp_url
+        self.target_width = target_width
+        self.target_height = target_height
+        self.jpeg_quality = jpeg_quality
+        
+        self.cap = None
+        self.current_frame = None
+        self.last_frame_time = None
+        self.frame_count = 0
+        self.start_time = None
+        self.is_active = False
+        self.lock = threading.Lock()
+        self.capture_thread = None
+        self.should_stop = False
+        
+    async def start(self):
+        """Start capturing RTSP stream with low-latency settings"""
+        print(f"Connecting to RTSP stream (target: {self.target_width}x{self.target_height})...")
+        
+        # OpenCV with aggressive low-latency settings
+        self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+        
+        # CRITICAL: Minimize latency
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Only keep 1 frame in buffer
+        self.cap.set(cv2.CAP_PROP_FPS, 30)         # Request 30 FPS from camera
+        
+        # Additional performance settings
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+        
+        if not self.cap.isOpened():
+            raise Exception("Failed to open RTSP stream")
+        
+        self.is_active = True
+        self.start_time = time.time()
+        self.should_stop = False
+        
+        # Start capture thread with high priority
+        self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self.capture_thread.start()
+        
+        # Wait for first frame
+        timeout = time.time() + 5
+        while self.current_frame is None and time.time() < timeout:
+            await asyncio.sleep(0.05)  # Check every 50ms
+        
+        if self.current_frame is None:
+            raise Exception("No frames received from camera")
+        
+        print(f"RTSP stream connected - Target FPS: 30")
+        return True
+        
+    def _capture_loop(self):
+        """Optimized capture loop for maximum FPS"""
+        consecutive_failures = 0
+        
+        while not self.should_stop:
+            try:
+                # Grab frame (fast, doesn't decode)
+                ret = self.cap.grab()
+                
+                if not ret:
+                    consecutive_failures += 1
+                    if consecutive_failures > 30:
+                        print("Too many failures, stopping stream")
+                        self.is_active = False
+                        break
+                    time.sleep(0.01)
+                    continue
+                
+                consecutive_failures = 0
+                
+                # Retrieve and decode frame (slower)
+                ret, frame = self.cap.retrieve()
+                
+                if not ret or frame is None:
+                    continue
+                
+                # Fast resize (use INTER_NEAREST for speed, or INTER_LINEAR for balance)
+                frame = cv2.resize(
+                    frame, 
+                    (self.target_width, self.target_height),
+                    interpolation=cv2.INTER_LINEAR  # Faster than INTER_AREA
+                )
+                
+                # Fast JPEG encoding with low quality for speed
+                encode_param = [
+                    int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality,
+                    int(cv2.IMWRITE_JPEG_OPTIMIZE), 0,  # Disable optimization for speed
+                    int(cv2.IMWRITE_JPEG_PROGRESSIVE), 0  # Disable progressive
+                ]
+                
+                _, jpeg_buffer = cv2.imencode('.jpg', frame, encode_param)
+                jpeg_bytes = jpeg_buffer.tobytes()
+                
+                # Thread-safe update
+                with self.lock:
+                    self.current_frame = jpeg_bytes
+                    self.last_frame_time = time.time()
+                    self.frame_count += 1
+                
+                # No sleep - run as fast as possible
+                
+            except Exception as e:
+                print(f"Capture error: {e}")
+                time.sleep(0.1)
+        
+        print("Capture loop ended")
+    
+    async def get_frame(self):
+        """Get latest frame (non-blocking)"""
+        with self.lock:
+            return self.current_frame
+    
+    def get_frame_rate(self):
+        """Calculate actual FPS"""
+        if not self.start_time or self.frame_count == 0:
+            return 0
+        
+        elapsed = time.time() - self.start_time
+        if elapsed > 0:
+            return round(self.frame_count / elapsed, 1)
+        return 0
+    
+    def get_last_frame_time(self):
+        return self.last_frame_time
+    
+    def is_connected(self):
+        """Check if receiving frames"""
+        if not self.is_active:
+            return False
+        
+        if self.last_frame_time:
+            return (time.time() - self.last_frame_time) < 2.0
+        
+        return False
+    
+    async def stop(self):
+        """Stop and cleanup"""
+        print("Stopping RTSP service...")
+        
+        self.should_stop = True
+        self.is_active = False
+        
+        if self.capture_thread and self.capture_thread.is_alive():
+            self.capture_thread.join(timeout=2.0)
+        
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+        
+        self.current_frame = None
+        print("RTSP service stopped")
+
+import asyncio
+```
+
+### **2. Update backend/python/services/camera_manager.py**
+
+Add resolution/quality configuration:
+
+```python
+import asyncio
+import time
+from typing import Dict, Optional
+from services.rtsp_service import RTSPService
+
+class CameraManager:
+    def __init__(self):
+        self.cameras: Dict[str, RTSPService] = {}
+        self.start_time = time.time()
+    
+    async def connect_camera(
+        self, 
+        camera_id: str, 
+        rtsp_url: str,
+        resolution: str = "360p",  # NEW: 360p, 480p, 720p, 1080p
+        jpeg_quality: int = 60     # NEW: 1-100
+    ) -> bool:
+        """
+        Connect to camera with configurable resolution/quality
+        
+        Resolution options:
+        - 360p: 640x360 (fastest, ~30 FPS)
+        - 480p: 854x480 (balanced, ~25 FPS)
+        - 720p: 1280x720 (quality, ~20 FPS)
+        - 1080p: 1920x1080 (best quality, ~15 FPS)
+        """
+        try:
+            if camera_id in self.cameras:
+                await self.disconnect_camera(camera_id)
+            
+            # Map resolution to dimensions
+            resolutions = {
+                "360p": (640, 360),
+                "480p": (854, 480),
+                "720p": (1280, 720),
+                "1080p": (1920, 1080)
+            }
+            
+            width, height = resolutions.get(resolution, (640, 360))
+            
+            print(f"Connecting camera {camera_id} at {resolution} (quality: {jpeg_quality})")
+            
+            rtsp_service = RTSPService(
+                rtsp_url,
+                target_width=width,
+                target_height=height,
+                jpeg_quality=jpeg_quality
+            )
+            
+            await rtsp_service.start()
+            
+            self.cameras[camera_id] = rtsp_service
+            
+            print(f"Camera {camera_id} connected - Resolution: {width}x{height}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to connect camera {camera_id}: {e}")
+            raise
+    
+    async def disconnect_camera(self, camera_id: str):
+        if camera_id in self.cameras:
+            rtsp_service = self.cameras[camera_id]
+            await rtsp_service.stop()
+            del self.cameras[camera_id]
+            print(f"Camera {camera_id} disconnected")
+    
+    async def disconnect_all(self):
+        disconnect_tasks = []
+        
+        for camera_id in list(self.cameras.keys()):
+            disconnect_tasks.append(self.disconnect_camera(camera_id))
+        
+        if disconnect_tasks:
+            await asyncio.gather(*disconnect_tasks, return_exceptions=True)
+        
+        print("All cameras disconnected")
+    
+    async def capture_frame(self, camera_id: str) -> Optional[bytes]:
+        if camera_id not in self.cameras:
+            raise ValueError(f"Camera {camera_id} not found")
+        
+        rtsp_service = self.cameras[camera_id]
+        return await rtsp_service.get_frame()
+    
+    def get_camera_status(self, camera_id: str) -> Optional[dict]:
+        if camera_id not in self.cameras:
+            return None
+        
+        rtsp_service = self.cameras[camera_id]
+        
+        return {
+            "cameraId": camera_id,
+            "connected": rtsp_service.is_connected(),
+            "frameRate": rtsp_service.get_frame_rate(),
+            "lastFrameTime": rtsp_service.get_last_frame_time(),
+            "frameCount": rtsp_service.frame_count,
+            "resolution": f"{rtsp_service.target_width}x{rtsp_service.target_height}",
+            "quality": rtsp_service.jpeg_quality
+        }
+    
+    def get_active_count(self) -> int:
+        return len(self.cameras)
+    
+    def get_uptime(self) -> float:
+        return round(time.time() - self.start_time, 2)
+```
+
+### **3. Update backend/python/rtsp_server.py**
+
+Add resolution/quality parameters:
+
+```python
+# In the connect_camera endpoint, update:
+
+@app.post("/api/cameras/connect")
+async def connect_camera(data: CameraConnect):
+    try:
+        rtsp_url = f"rtsp://{data.username}:{data.password}@{data.ip}:554{data.streamPath}"
+        
+        # Extract optional performance params
+        resolution = data.resolution if hasattr(data, 'resolution') else "360p"
+        jpeg_quality = data.jpeg_quality if hasattr(data, 'jpeg_quality') else 60
+        
+        await camera_manager.connect_camera(
+            data.cameraId, 
+            rtsp_url,
+            resolution=resolution,
+            jpeg_quality=jpeg_quality
+        )
+        
+        return {
+            "success": True,
+            "cameraId": data.cameraId,
+            "message": f"Camera connected at {resolution}",
+            "settings": {
+                "resolution": resolution,
+                "quality": jpeg_quality
+            }
+        }
+    except Exception as e:
+        print(f"Connection error: {e}", file=sys.stderr, flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Update the model:
+class CameraConnect(BaseModel):
+    cameraId: str
+    ip: str
+    username: str
+    password: str
+    streamPath: str = "/1"
+    resolution: str = "360p"    # NEW
+    jpeg_quality: int = 60       # NEW
+```
+
+---
+
+## Frontend Optimization (Expo App)
+
+### **Update camera connection to request lower resolution:**
+
+```javascript
+// In your Expo app camera service:
+
+export const connectCamera = async (cameraId, ip, username, password) => {
+  const response = await fetch(`${API_URL}/api/cameras/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      cameraId,
+      ip,
+      username,
+      password,
+      streamPath: '/1',
+      resolution: '360p',      // ← LOW RES FOR HIGH FPS
+      jpeg_quality: 50         // ← LOW QUALITY FOR SPEED
+    })
+  });
+  
+  return response.json();
+};
+```
+
+### **WebSocket optimization:**
+
+```javascript
+// Request higher FPS in WebSocket subscription:
+
+ws.send(JSON.stringify({
+  action: 'subscribe',
+  cameraId: 'cam1',
+  fps: 30  // ← Request 30 FPS instead of 15
+}));
+```
+
+---
+
+## Additional Performance Tweaks
+
+### **1. PTZOptics Camera Settings**
+
+Log into camera web interface and set:
+
+```
+Video Settings:
+- Resolution: 720p or lower (not 1080p)
+- Frame Rate: 30 FPS
+- Bitrate: 2-4 Mbps (lower = less network load)
+- Encoding: H.264 (not H.265)
+- GOP Size: 30 (= 1 second at 30fps)
+```
+
+### **2. Network Optimization**
+
+```bash
+# On camera's network settings:
+- Use wired Ethernet (not WiFi)
+- Disable any "smart" encoding features
+- Enable "constant bitrate" mode
+```
+
+### **3. Python Process Priority** (Linux/Mac)
+
+```python
+# In rtsp_server.py, add at startup:
+import os
+os.nice(-10)  # Higher priority (requires sudo)
+```
+
+### **4. OpenCV Build with Hardware Acceleration**
+
+For maximum performance, rebuild OpenCV with hardware acceleration:
+
+```bash
+# This is advanced - only if you need absolute max FPS
+pip uninstall opencv-python
+pip install opencv-contrib-python  # Includes extra codecs
+```
+
+---
+
+## Performance Comparison
+
+| Resolution | JPEG Quality | Expected FPS | Bandwidth | Use Case |
+|------------|--------------|--------------|-----------|----------|
+| 360p (640x360) | 50 | **30 FPS** | ~300 KB/s | AI tracking preview |
+| 480p (854x480) | 60 | 25-28 FPS | ~500 KB/s | Balanced |
+| 720p (1280x720) | 70 | 20-25 FPS | ~800 KB/s | Quality preview |
+| 1080p (1920x1080) | 80 | 15-20 FPS | ~1.5 MB/s | Full quality (slow) |
+
+**Recommendation for your use case: 360p @ quality 50 = ~30 FPS**
+
+---
+
+## Testing FPS
+
+Add this to your Expo app to measure actual FPS:
+
+```javascript
+// FPS Counter component:
+const [fps, setFps] = useState(0);
+const frameTimestamps = useRef([]);
+
+useEffect(() => {
+  // Called every time a new frame arrives
+  const now = Date.now();
+  frameTimestamps.current.push(now);
+  
+  // Keep last 30 timestamps
+  if (frameTimestamps.current.length > 30) {
+    frameTimestamps.current.shift();
+  }
+  
+  // Calculate FPS
+  if (frameTimestamps.current.length > 1) {
+    const duration = now - frameTimestamps.current[0];
+    const calculatedFps = (frameTimestamps.current.length - 1) / (duration / 1000);
+    setFps(Math.round(calculatedFps));
+  }
+}, [currentFrame]);
+
+return <Text>FPS: {fps}</Text>;
+```
+
+---
+
+## Quick Wins Summary
+
+**Change these NOW for immediate FPS boost:**
+
+1. ✅ Set `resolution: "360p"` in camera connect
+2. ✅ Set `jpeg_quality: 50` 
+3. ✅ Request `fps: 30` in WebSocket subscription
+4. ✅ Set camera to 720p30 (in camera web UI)
+5. ✅ Use wired connection for camera
+
+**Expected result: 25-30 FPS** (up from ~10-15 FPS)
+
+Want me to show you the exact Expo frontend code to display this smoothly?
