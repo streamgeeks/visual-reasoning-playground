@@ -8,7 +8,8 @@ import { CameraProfile } from "@/lib/storage";
 import {
   testCameraConnection,
   fetchCameraFrame,
-  getCameraSnapshotUrl,
+  setCachedEndpoint,
+  clearCachedEndpoint,
 } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
@@ -109,16 +110,18 @@ export function ModelSelector({
     
     setIsConnecting(true);
     setConnectionError(null);
+    clearCachedEndpoint();
     
     try {
-      const canConnect = await testCameraConnection(camera);
-      if (canConnect) {
+      const result = await testCameraConnection(camera);
+      if (result.success && result.endpoint) {
+        setCachedEndpoint(result.endpoint);
         setCameraConnected(true);
         onCameraConnected?.(true);
         startFrameCapture(camera);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        setConnectionError("Cannot reach camera. Check IP address and network.");
+        setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } catch (error: any) {
@@ -135,6 +138,7 @@ export function ModelSelector({
       frameIntervalRef.current = null;
     }
     
+    clearCachedEndpoint();
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);

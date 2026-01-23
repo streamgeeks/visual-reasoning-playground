@@ -10,7 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.visualreasoning.playground"
+      "bundleIdentifier": "com.visualreasoning.playground",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "This app needs to access your local network to connect to PTZ cameras.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
