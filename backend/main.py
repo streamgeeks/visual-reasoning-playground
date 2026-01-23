@@ -178,7 +178,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.getenv("RTSP_PORT", 3001))
+    port = int(os.getenv("RTSP_PORT", 8082))
     
     uvicorn.run(
         app,

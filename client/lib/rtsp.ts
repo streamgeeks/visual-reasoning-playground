@@ -1,7 +1,7 @@
 import { getApiUrl } from "./query-client";
 import { CameraProfile } from "./storage";
 
-const RTSP_BACKEND_PORT = 3001;
+const RTSP_BACKEND_PORT = 8082;
 
 function getRtspApiUrl(): string {
   const apiUrl = getApiUrl();
