@@ -16,6 +16,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
+import Slider from "@react-native-community/slider";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { CameraCard } from "@/components/CameraCard";
@@ -25,6 +26,7 @@ import {
   CameraProfile,
   UserProfile,
   AppSettings,
+  TrackingSettings,
   StreamQuality,
   getCameraProfiles,
   saveCameraProfile,
@@ -36,6 +38,7 @@ import {
   getUserProfile,
   saveUserProfile,
   generateId,
+  DEFAULT_TRACKING_SETTINGS,
 } from "@/lib/storage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 
@@ -51,6 +54,11 @@ export default function SettingsScreen() {
     replayBufferDuration: 30,
     showStatsByDefault: false,
     moondreamApiKey: "",
+    tracking: {
+      ptzSpeed: 18,
+      pulseDuration: 400,
+      deadZone: 0.15,
+    },
   });
   const [userProfile, setUserProfile] = useState<UserProfile>({ displayName: "User" });
   const [showAddCamera, setShowAddCamera] = useState(false);
@@ -307,6 +315,129 @@ export default function SettingsScreen() {
               API key saved successfully
             </Text>
           ) : null}
+        </View>
+
+        {/* Tracking Settings */}
+        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+          Tracking Settings
+        </ThemedText>
+        
+        <View style={[styles.trackingSection, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.trackingRow}>
+            <View style={styles.trackingLabelRow}>
+              <Feather name="zap" size={16} color={theme.primary} />
+              <Text style={[styles.trackingLabel, { color: theme.text }]}>PTZ Speed</Text>
+              <Text style={[styles.trackingValue, { color: theme.primary }]}>
+                {settings.tracking.ptzSpeed}
+              </Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={6}
+              maximumValue={24}
+              step={1}
+              value={settings.tracking.ptzSpeed}
+              onValueChange={(value) => {
+                const newTracking = { ...settings.tracking, ptzSpeed: value };
+                setSettings({ ...settings, tracking: newTracking });
+              }}
+              onSlidingComplete={(value) => {
+                const newTracking = { ...settings.tracking, ptzSpeed: value };
+                saveSettings({ tracking: newTracking });
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              minimumTrackTintColor={theme.primary}
+              maximumTrackTintColor={theme.backgroundSecondary}
+              thumbTintColor={theme.primary}
+            />
+            <View style={styles.sliderLabels}>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Slow (6)</Text>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Fast (24)</Text>
+            </View>
+          </View>
+          
+          <View style={styles.trackingRow}>
+            <View style={styles.trackingLabelRow}>
+              <Feather name="clock" size={16} color={theme.warning} />
+              <Text style={[styles.trackingLabel, { color: theme.text }]}>Movement Duration</Text>
+              <Text style={[styles.trackingValue, { color: theme.warning }]}>
+                {settings.tracking.pulseDuration}ms
+              </Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={100}
+              maximumValue={1000}
+              step={50}
+              value={settings.tracking.pulseDuration}
+              onValueChange={(value) => {
+                const newTracking = { ...settings.tracking, pulseDuration: value };
+                setSettings({ ...settings, tracking: newTracking });
+              }}
+              onSlidingComplete={(value) => {
+                const newTracking = { ...settings.tracking, pulseDuration: value };
+                saveSettings({ tracking: newTracking });
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              minimumTrackTintColor={theme.warning}
+              maximumTrackTintColor={theme.backgroundSecondary}
+              thumbTintColor={theme.warning}
+            />
+            <View style={styles.sliderLabels}>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Quick (100ms)</Text>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Long (1000ms)</Text>
+            </View>
+          </View>
+          
+          <View style={styles.trackingRow}>
+            <View style={styles.trackingLabelRow}>
+              <Feather name="target" size={16} color={theme.success} />
+              <Text style={[styles.trackingLabel, { color: theme.text }]}>Dead Zone</Text>
+              <Text style={[styles.trackingValue, { color: theme.success }]}>
+                {Math.round(settings.tracking.deadZone * 100)}%
+              </Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0.05}
+              maximumValue={0.4}
+              step={0.05}
+              value={settings.tracking.deadZone}
+              onValueChange={(value) => {
+                const newTracking = { ...settings.tracking, deadZone: value };
+                setSettings({ ...settings, tracking: newTracking });
+              }}
+              onSlidingComplete={(value) => {
+                const newTracking = { ...settings.tracking, deadZone: value };
+                saveSettings({ tracking: newTracking });
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              minimumTrackTintColor={theme.success}
+              maximumTrackTintColor={theme.backgroundSecondary}
+              thumbTintColor={theme.success}
+            />
+            <View style={styles.sliderLabels}>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Small (5%)</Text>
+              <Text style={[styles.sliderMinMax, { color: theme.textSecondary }]}>Large (40%)</Text>
+            </View>
+          </View>
+          
+          <Pressable
+            onPress={() => {
+              setSettings({ ...settings, tracking: DEFAULT_TRACKING_SETTINGS });
+              saveSettings({ tracking: DEFAULT_TRACKING_SETTINGS });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }}
+            style={({ pressed }) => [
+              styles.resetButton,
+              { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="refresh-cw" size={14} color={theme.textSecondary} />
+            <Text style={[styles.resetButtonText, { color: theme.textSecondary }]}>
+              Reset to Defaults
+            </Text>
+          </Pressable>
         </View>
 
         {/* About */}
@@ -754,5 +885,52 @@ const styles = StyleSheet.create({
   },
   qualitySubtext: {
     fontSize: Typography.small.fontSize,
+  },
+  trackingSection: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xl,
+  },
+  trackingRow: {
+    gap: Spacing.sm,
+  },
+  trackingLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  trackingLabel: {
+    flex: 1,
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  trackingValue: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  slider: {
+    width: "100%",
+    height: 40,
+  },
+  sliderLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  sliderMinMax: {
+    fontSize: 11,
+  },
+  resetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.md,
+  },
+  resetButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
   },
 });

@@ -220,13 +220,19 @@ export default function LiveScreen({ navigation }: any) {
         return;
       }
       
+      const trackingSettings = appSettings?.tracking || { ptzSpeed: 18, pulseDuration: 400, deadZone: 0.15 };
       const controller = new TrackingController(
         camera,
         appSettings?.moondreamApiKey || "",
         selectedModel,
         async () => latestFrameRef.current,
         (state) => setAutoTrackingState(state),
-        { updateInterval: selectedModel === "custom" ? 600 : 300 }, // Faster for YOLO
+        { 
+          updateInterval: selectedModel === "custom" ? 600 : 300,
+          ptzSpeed: trackingSettings.ptzSpeed,
+          pulseDuration: trackingSettings.pulseDuration,
+          deadZone: trackingSettings.deadZone,
+        },
         selectedModel === "custom" ? customObject.trim() : undefined
       );
       

@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   MOONDREAM_API_KEY: "@vrp_moondream_key",
   SHOW_STATS_BY_DEFAULT: "@vrp_show_stats",
   USER_PROFILE: "@vrp_user_profile",
+  TRACKING_SETTINGS: "@vrp_tracking_settings",
 } as const;
 
 export type StreamQuality = "high" | "low";
@@ -43,11 +44,24 @@ export interface UserProfile {
   avatarUri?: string;
 }
 
+export interface TrackingSettings {
+  ptzSpeed: number; // 1-24 for PTZOptics
+  pulseDuration: number; // ms to move before stopping
+  deadZone: number; // 0-1, percentage of frame center to ignore
+}
+
 export interface AppSettings {
   replayBufferDuration: number;
   showStatsByDefault: boolean;
   moondreamApiKey: string;
+  tracking: TrackingSettings;
 }
+
+export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
+  ptzSpeed: 18,
+  pulseDuration: 400,
+  deadZone: 0.15,
+};
 
 // Camera Profiles
 export async function getCameraProfiles(): Promise<CameraProfile[]> {
@@ -132,22 +146,29 @@ export async function deletePreset(id: string): Promise<void> {
 // Settings
 export async function getSettings(): Promise<AppSettings> {
   try {
-    const [duration, showStats, apiKey] = await Promise.all([
+    const [duration, showStats, apiKey, trackingData] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.REPLAY_BUFFER_DURATION),
       AsyncStorage.getItem(STORAGE_KEYS.SHOW_STATS_BY_DEFAULT),
       AsyncStorage.getItem(STORAGE_KEYS.MOONDREAM_API_KEY),
+      AsyncStorage.getItem(STORAGE_KEYS.TRACKING_SETTINGS),
     ]);
+    
+    const tracking = trackingData 
+      ? { ...DEFAULT_TRACKING_SETTINGS, ...JSON.parse(trackingData) }
+      : DEFAULT_TRACKING_SETTINGS;
     
     return {
       replayBufferDuration: duration ? parseInt(duration, 10) : 30,
       showStatsByDefault: showStats === "true",
       moondreamApiKey: apiKey || "",
+      tracking,
     };
   } catch {
     return {
       replayBufferDuration: 30,
       showStatsByDefault: false,
       moondreamApiKey: "",
+      tracking: DEFAULT_TRACKING_SETTINGS,
     };
   }
 }
@@ -176,6 +197,12 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<void
   if (settings.moondreamApiKey !== undefined) {
     promises.push(
       AsyncStorage.setItem(STORAGE_KEYS.MOONDREAM_API_KEY, settings.moondreamApiKey)
+    );
+  }
+  
+  if (settings.tracking !== undefined) {
+    promises.push(
+      AsyncStorage.setItem(STORAGE_KEYS.TRACKING_SETTINGS, JSON.stringify(settings.tracking))
     );
   }
   
