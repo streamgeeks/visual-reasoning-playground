@@ -8,8 +8,6 @@ import { CameraProfile } from "@/lib/storage";
 import {
   testCameraConnection,
   fetchCameraFrame,
-  setCachedEndpoint,
-  clearCachedEndpoint,
 } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
@@ -111,12 +109,10 @@ export function ModelSelector({
     
     setIsConnecting(true);
     setConnectionError(null);
-    clearCachedEndpoint();
     
     try {
       const result = await testCameraConnection(camera);
-      if (result.success && result.endpoint) {
-        setCachedEndpoint(result.endpoint);
+      if (result.success) {
         setCameraConnected(true);
         onCameraConnected?.(true);
         startFrameCapture(camera);
@@ -139,7 +135,6 @@ export function ModelSelector({
       frameIntervalRef.current = null;
     }
     
-    clearCachedEndpoint();
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);
