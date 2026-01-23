@@ -11,12 +11,20 @@ import {
   clearActiveConfig,
   getMjpegUrl,
 } from "@/lib/camera";
+import {
+  checkBackendHealth,
+  connectCameraRtsp,
+  disconnectCameraRtsp,
+  fetchRtspFrame,
+  StreamMode,
+} from "@/lib/rtspBackend";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 interface CameraConnectionStatus {
   connected: boolean;
   fps: number;
   frameCount: number;
+  mode: StreamMode;
 }
 
 interface ModelSelectorProps {
@@ -51,6 +59,8 @@ export function ModelSelector({
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [mjpegUrl, setMjpegUrl] = useState<string | null>(null);
   const [useMjpeg, setUseMjpeg] = useState(false);
+  const [streamMode, setStreamMode] = useState<StreamMode>("snapshot");
+  const [backendAvailable, setBackendAvailable] = useState(false);
   
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCountRef = useRef(0);
@@ -71,7 +81,7 @@ export function ModelSelector({
     };
   }, []);
 
-  const startFrameCapture = useCallback((cam: CameraProfile) => {
+  const startFrameCapture = useCallback((cam: CameraProfile, mode: StreamMode) => {
     if (frameIntervalRef.current) {
       if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
         (frameIntervalRef.current as any).stop();
@@ -87,11 +97,13 @@ export function ModelSelector({
     let isRunning = true;
     let consecutiveFailures = 0;
     
-    // Continuous loop - immediately start next request after current finishes
     const captureLoop = async () => {
       while (isRunning) {
         try {
-          const frame = await fetchCameraFrame(cam);
+          // Use RTSP backend or direct snapshot based on mode
+          const frame = mode === "rtsp" 
+            ? await fetchRtspFrame(cam.id)
+            : await fetchCameraFrame(cam);
           
           if (frame) {
             consecutiveFailures = 0;
@@ -107,36 +119,35 @@ export function ModelSelector({
                 connected: true,
                 fps,
                 frameCount: frameCountRef.current,
+                mode,
               });
               fpsStartTimeRef.current = Date.now();
               fpsCountRef.current = 0;
             }
           } else {
             consecutiveFailures++;
-            if (consecutiveFailures >= 5) {
+            if (consecutiveFailures >= 10) {
               setCameraConnected(false);
               onCameraConnected?.(false);
               setConnectionError("Lost connection to camera");
               isRunning = false;
               break;
             }
-            // Brief pause on failure before retry
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise(r => setTimeout(r, 50));
           }
         } catch (error) {
           consecutiveFailures++;
-          if (consecutiveFailures >= 5) {
+          if (consecutiveFailures >= 10) {
             isRunning = false;
             break;
           }
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 50));
         }
       }
     };
     
     captureLoop();
     
-    // Store cleanup function
     frameIntervalRef.current = {
       stop: () => { isRunning = false; }
     } as any;
@@ -149,7 +160,27 @@ export function ModelSelector({
     setConnectionError(null);
     
     try {
-      // Try snapshot connection first (works on all platforms)
+      // Step 1: Check if RTSP backend is available (high FPS)
+      const backendStatus = await checkBackendHealth();
+      setBackendAvailable(backendStatus.available);
+      
+      if (backendStatus.available) {
+        // Try RTSP backend first (20-30 FPS)
+        console.log("RTSP backend available, connecting via RTSP...");
+        const rtspResult = await connectCameraRtsp(camera);
+        
+        if (rtspResult.success) {
+          setCameraConnected(true);
+          setStreamMode("rtsp");
+          onCameraConnected?.(true);
+          startFrameCapture(camera, "rtsp");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          return;
+        }
+        console.log("RTSP connection failed, falling back to snapshot...");
+      }
+      
+      // Step 2: Fall back to direct snapshot (1-2 FPS)
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
@@ -159,15 +190,14 @@ export function ModelSelector({
           const mjpeg = getMjpegUrl(camera);
           setMjpegUrl(mjpeg);
           setUseMjpeg(true);
+          setStreamMode("mjpeg");
           onCameraConnected?.(true, mjpeg);
         } else {
-          // On native, use snapshot polling
+          setStreamMode("snapshot");
           onCameraConnected?.(true);
         }
         
-        // Start snapshot polling for FPS tracking
-        startFrameCapture(camera);
-        
+        startFrameCapture(camera, "snapshot");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
@@ -191,15 +221,21 @@ export function ModelSelector({
       frameIntervalRef.current = null;
     }
     
+    // Disconnect from RTSP backend if it was used
+    if (streamMode === "rtsp" && camera) {
+      await disconnectCameraRtsp(camera.id);
+    }
+    
     clearActiveConfig();
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);
     setMjpegUrl(null);
     setUseMjpeg(false);
+    setStreamMode("snapshot");
     onCameraConnected?.(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [onCameraConnected]);
+  }, [onCameraConnected, streamMode, camera]);
 
   const handleToggleTracking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -212,7 +248,25 @@ export function ModelSelector({
       <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]}>Camera Source</Text>
-          {cameraConnected ? (
+          {cameraConnected && cameraStatus ? (
+            <View style={[styles.statusBadge, { 
+              backgroundColor: streamMode === "rtsp" ? theme.success + "20" : theme.warning + "20" 
+            }]}>
+              <View style={[styles.statusDot, { 
+                backgroundColor: streamMode === "rtsp" ? theme.success : theme.warning 
+              }]} />
+              <Text style={[styles.statusText, { 
+                color: streamMode === "rtsp" ? theme.success : theme.warning 
+              }]}>
+                {cameraStatus.fps} FPS
+              </Text>
+              <Text style={[styles.modeText, { 
+                color: streamMode === "rtsp" ? theme.success : theme.warning 
+              }]}>
+                {streamMode === "rtsp" ? "RTSP" : streamMode === "mjpeg" ? "MJPEG" : "Snapshot"}
+              </Text>
+            </View>
+          ) : cameraConnected ? (
             <View style={[styles.statusBadge, { backgroundColor: theme.success + "20" }]}>
               <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
               <Text style={[styles.statusText, { color: theme.success }]}>Live</Text>
@@ -468,6 +522,11 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  modeText: {
+    fontSize: 9,
+    fontWeight: "500",
+    opacity: 0.8,
   },
   noCamera: {
     paddingVertical: Spacing.xl,

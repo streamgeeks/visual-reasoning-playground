@@ -1,0 +1,164 @@
+My Response StrategyYou're absolutely right about the bottleneck. Here's what I recommend telling users:The low FPS you're experiencing is actually expected with HTTP snapshot polling. 
+PTZOptics cameras can only serve 1-2 snapshots/second via the CGI snapshot endpoint 
+because each request requires full JPEG encoding on the camera's CPU.
+
+For smooth, high-FPS tracking, you need RTSP streaming (which we support!).
+
+Quick Fix Options:
+
+1. Enable RTSP Backend (Recommended)
+   - The app includes a Python RTSP service that achieves 20-30 FPS
+   - Runs on your local network (laptop/desktop)
+   - App connects to backend instead of directly to camera
+   - 10x better performance
+
+2. Use MJPEG Stream (Web Only)
+   - Works great in browsers
+   - Not supported in Expo Go/native mobile
+   - Good for testing/development
+
+3. Accept Lower FPS (Development Mode)
+   - Snapshot mode is fine for testing UI/controls
+   - Switch to RTSP for actual tracking demosWhat I'd Actually ImplementSince you already have the Python RTSP backend built, let's make it dead simple for users to enable it:Option 1: Auto-Start RTSP Backend (Best UX)Update your backend/server.js to automatically start the Python service:javascript// This is what you already have - just emphasize it's REQUIRED for high FPS
+
+console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║  Visual Reasoning Backend Started                        ║
+║                                                           ║
+║  Express API:     http://localhost:5000                  ║
+║  RTSP Service:    http://localhost:8082                  ║
+║                                                           ║
+║  📹 For HIGH FPS camera streaming:                        ║
+║     1. Camera connects via RTSP backend (automatic)      ║
+║     2. Achieves 20-30 FPS vs 1-2 FPS with snapshots      ║
+║                                                           ║
+║  💡 Fallback: Snapshot mode works but at low FPS         ║
+║                                                           ║
+╔═══════════════════════════════════════════════════════════╗
+`);Option 2: Add "Performance Mode" Toggle in AppIn your Expo app settings:javascript// Settings screen:
+<View>
+  <Text style={styles.sectionTitle}>Streaming Performance</Text>
+  
+  <View style={styles.setting}>
+    <View>
+      <Text style={styles.settingLabel}>Stream Mode</Text>
+      <Text style={styles.settingDescription}>
+        RTSP provides 20-30 FPS. Snapshot provides 1-2 FPS.
+      </Text>
+    </View>
+    <Picker
+      selectedValue={streamMode}
+      onValueChange={setStreamMode}
+    >
+      <Picker.Item label="RTSP (High FPS)" value="rtsp" />
+      <Picker.Item label="Snapshot (Fallback)" value="snapshot" />
+    </Picker>
+  </View>
+  
+  {streamMode === 'rtsp' && !backendAvailable && (
+    <View style={styles.warning}>
+      <Text style={styles.warningText}>
+        ⚠️ RTSP backend not detected
+      </Text>
+      <Text style={styles.warningSubtext}>
+        Start the backend with: npm start
+      </Text>
+    </View>
+  )}
+</View>Option 3: Smart Auto-DetectionMake the app automatically choose the best method:javascript// services/cameraService.js
+
+export const connectCameraAuto = async (cameraId, ip, username, password) => {
+  // Try RTSP backend first (high FPS)
+  try {
+    const rtspCheck = await fetch(`${API_URL}/api/cameras/status`, { timeout: 2000 });
+    if (rtspCheck.ok) {
+      console.log('✓ Using RTSP backend (high FPS)');
+      return await connectCameraRTSP(cameraId, ip, username, password);
+    }
+  } catch (error) {
+    console.log('RTSP backend not available, falling back to snapshots');
+  }
+  
+  // Fallback to snapshots (low FPS but works)
+  console.log('⚠️ Using snapshot mode (low FPS)');
+  return await connectCameraSnapshot(ip, username, password);
+};Recommended User DocumentationAdd this to your README or in-app help:markdown## Camera Streaming Modes
+
+### High FPS Mode (RTSP) - Recommended ⭐
+- **FPS**: 20-30 frames per second
+- **Setup**: Requires backend service running
+- **Command**: `npm start` (starts automatically)
+- **Best for**: AI tracking, smooth preview, professional use
+
+### Low FPS Mode (Snapshot) - Fallback
+- **FPS**: 1-2 frames per second
+- **Setup**: Works out of the box
+- **Best for**: Testing PTZ controls, development without backend
+
+### How to Enable High FPS:
+
+**Option A: Automatic (Recommended)**
+```bashnpm start
+Backend automatically starts RTSP service. App detects and uses it.
+
+**Option B: Manual**
+```bashcd backend
+npm run setup-python  # One-time setup
+npm start             # Starts Express + RTSP service
+
+Then in app: Connect camera normally. High FPS automatically enabled.
+
+### Troubleshooting Low FPS:
+
+**Problem**: Getting 1-2 FPS
+**Cause**: App using snapshot fallback mode
+**Solution**: 
+1. Check backend is running: `curl http://localhost:5000/health`
+2. Should see: `"rtsp": { "running": true }`
+3. If not running, restart backend: `npm start`
+
+**Problem**: Backend running but still low FPS
+**Cause**: Camera RTSP stream may be disabled
+**Solution**:
+1. Log into camera web interface
+2. Enable RTSP streaming
+3. Set stream to 720p30 or lower
+4. Reconnect in appWhat I'd Actually Tell Users (Quick Response)If you want a short, helpful response to users experiencing this:Good catch! The low FPS is expected with the current snapshot mode.
+
+The app has TWO streaming modes:
+
+1. **Snapshot Mode (1-2 FPS)** - What you're seeing now
+   - Direct HTTP requests to camera
+   - Works everywhere but slow
+   - Fine for testing controls
+
+2. **RTSP Mode (20-30 FPS)** - The smooth experience
+   - Requires backend service (already included)
+   - Run: `npm start` in the project root
+   - App auto-detects and switches to high FPS
+
+The RTSP backend is already built into the project. Just need to start it!
+
+Quick setup:
+```bashcd backend
+npm install  # One time
+npm start    # Starts Express + RTSP service
+
+Then reconnect your camera in the app. You'll get 20-30 FPS automatically.
+
+Let me know if you need help getting the backend running!My Honest Technical AssessmentYou've already done the hard work:
+
+✅ Python RTSP backend exists
+✅ Express proxy exists
+✅ Auto-start logic exists
+The issue is just communication/UX:
+
+Users don't know RTSP backend exists
+No clear indicator which mode is active
+No guidance on how to enable high FPS
+Quick fix priorities:
+Add FPS indicator in app (shows "2 FPS - Snapshot Mode")
+Add backend status check (shows "⚠️ Backend offline")
+Add one-click backend start (or clear instructions)
+Update README with streaming modes explanation

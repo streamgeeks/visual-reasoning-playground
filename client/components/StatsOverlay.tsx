@@ -10,12 +10,28 @@ interface StatsOverlayProps {
   cameraName?: string;
   cameraFps?: number;
   cameraConnected?: boolean;
+  streamMode?: "rtsp" | "snapshot" | "mjpeg";
 }
 
-export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected }: StatsOverlayProps) {
+export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected, streamMode }: StatsOverlayProps) {
   const { theme } = useTheme();
   
   const displayFps = cameraConnected && cameraFps !== undefined ? cameraFps : stats.fps;
+  
+  const getModeLabel = () => {
+    if (!streamMode) return "N/A";
+    switch (streamMode) {
+      case "rtsp": return "RTSP (High FPS)";
+      case "mjpeg": return "MJPEG";
+      case "snapshot": return "Snapshot (Low FPS)";
+    }
+  };
+  
+  const getModeColor = () => {
+    if (streamMode === "rtsp") return Colors.dark.success;
+    if (streamMode === "snapshot") return Colors.dark.warning;
+    return Colors.dark.primary;
+  };
 
   return (
     <View style={styles.container}>
@@ -23,8 +39,11 @@ export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected }: 
       {cameraConnected ? (
         <StatRow label="Status" value="LIVE" color={Colors.dark.success} />
       ) : null}
+      {cameraConnected && streamMode ? (
+        <StatRow label="Mode" value={getModeLabel()} color={getModeColor()} />
+      ) : null}
       <StatRow label="Model" value={stats.modelName} />
-      <StatRow label="Stream FPS" value={displayFps.toFixed(1)} color={cameraConnected ? Colors.dark.primary : undefined} />
+      <StatRow label="Stream FPS" value={displayFps.toFixed(1)} color={cameraConnected ? getModeColor() : undefined} />
       <StatRow label="Inference" value={`${stats.inferenceTime.toFixed(0)}ms`} />
       <StatRow label="Confidence" value={stats.confidence.toFixed(2)} />
       <StatRow label="Latency" value={`${stats.latency.toFixed(0)}ms`} />
