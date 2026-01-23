@@ -209,7 +209,9 @@ export function StoryDisplay({
               { backgroundColor: isLoading ? theme.backgroundDefault : theme.primary },
             ]}
           >
-            <Feather name={isLoading ? "loader" : "camera"} size={16} color="#FFFFFF" />
+            <Text style={styles.captureBtnText}>
+              {isLoading ? "..." : "Describe"}
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -334,11 +336,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   captureBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.xs,
     alignItems: "center",
     justifyContent: "center",
+  },
+  captureBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
   },
   storyRow: {
     flexDirection: "row",
