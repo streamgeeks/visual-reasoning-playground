@@ -544,6 +544,7 @@ export default function LiveScreen({ navigation }: any) {
                   onModelChange={handleModelChange}
                   onToggleTracking={handleToggleTracking}
                   onShowInfo={handleShowModelInfo}
+                  camera={camera}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick
