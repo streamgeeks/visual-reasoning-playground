@@ -418,28 +418,15 @@ export default function LiveScreen({ navigation }: any) {
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
           {ptzConnected && camera ? (
-            ptzStreamMode === "mjpeg" ? (
-              Platform.OS === "web" ? (
-                <img
-                  src={ptzMjpegUrl || ""}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  }}
-                />
-              ) : (
-                <MJPEGStream
-                  camera={camera}
-                  style={styles.camera}
-                  onFpsUpdate={setPtzFps}
-                  onError={(error) => console.log("MJPEG error:", error)}
-                  onFallbackToSnapshot={() => {
-                    console.log("MJPEG failed, switching to snapshot mode");
-                    setPtzStreamMode("snapshot");
-                  }}
-                />
-              )
+            ptzStreamMode === "mjpeg" && Platform.OS === "web" ? (
+              <img
+                src={ptzMjpegUrl || ""}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
             ) : ptzFrame ? (
               <Image
                 source={{ uri: ptzFrame }}
@@ -637,7 +624,6 @@ export default function LiveScreen({ navigation }: any) {
                   onCameraConnected={handlePtzConnected}
                   onFrameUpdate={handlePtzFrameUpdate}
                   onStreamModeChange={setPtzStreamMode}
-                  externalStreamMode={ptzStreamMode}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick

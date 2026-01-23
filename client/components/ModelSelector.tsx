@@ -39,7 +39,7 @@ interface ModelSelectorProps {
   onCameraConnected?: (connected: boolean, mjpegUrl?: string) => void;
   onFrameUpdate?: (frameUri: string) => void;
   onStreamModeChange?: (mode: StreamMode) => void;
-  externalStreamMode?: StreamMode;
+  onMjpegFallback?: () => void;
 }
 
 export function ModelSelector({
@@ -52,7 +52,7 @@ export function ModelSelector({
   onCameraConnected,
   onFrameUpdate,
   onStreamModeChange,
-  externalStreamMode,
+  onMjpegFallback,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
@@ -171,20 +171,17 @@ export function ModelSelector({
     } as any;
   }, [onCameraConnected, onFrameUpdate]);
 
-  // Handle external stream mode changes (e.g., MJPEG fallback to snapshot)
-  useEffect(() => {
-    if (externalStreamMode && externalStreamMode !== streamMode && cameraConnected && camera) {
-      console.log(`External stream mode change: ${streamMode} -> ${externalStreamMode}`);
-      setStreamMode(externalStreamMode);
-      
-      // If switching to snapshot mode, start snapshot capture
-      if (externalStreamMode === "snapshot") {
-        setUseMjpeg(false);
-        setMjpegUrl(null);
-        startFrameCapture(camera, "snapshot");
-      }
+  // Handle MJPEG fallback to snapshot - called when MJPEGStream fails
+  const handleMjpegFallback = useCallback(() => {
+    if (cameraConnected && camera) {
+      console.log("MJPEG failed, switching to snapshot mode");
+      setUseMjpeg(false);
+      setMjpegUrl(null);
+      setStreamMode("snapshot");
+      startFrameCapture(camera, "snapshot");
+      onMjpegFallback?.();
     }
-  }, [externalStreamMode, streamMode, cameraConnected, camera, startFrameCapture]);
+  }, [cameraConnected, camera, startFrameCapture, onMjpegFallback]);
 
   const handleConnect = useCallback(async () => {
     if (!camera) return;
@@ -213,20 +210,25 @@ export function ModelSelector({
         console.log("RTSP connection failed, falling back to snapshot...");
       }
       
-      // Step 2: Try MJPEG streaming (10-15 FPS on all platforms)
+      // Step 2: Use snapshot mode for reliable streaming
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
         
-        // Use MJPEG for better FPS on all platforms
-        const mjpeg = getMjpegUrl(camera);
-        setMjpegUrl(mjpeg);
-        setUseMjpeg(true);
-        setStreamMode("mjpeg");
-        onCameraConnected?.(true, mjpeg);
+        // On web, try MJPEG for better FPS; on native use snapshot for reliability
+        if (Platform.OS === "web") {
+          const mjpeg = getMjpegUrl(camera);
+          setMjpegUrl(mjpeg);
+          setUseMjpeg(true);
+          setStreamMode("mjpeg");
+          onCameraConnected?.(true, mjpeg);
+        } else {
+          // Native: use snapshot mode directly (more reliable)
+          setStreamMode("snapshot");
+          onCameraConnected?.(true);
+          startFrameCapture(camera, "snapshot");
+        }
         
-        // Don't start snapshot polling when using MJPEG
-        // The MJPEGStream component handles its own frame updates
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
