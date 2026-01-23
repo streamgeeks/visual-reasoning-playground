@@ -637,6 +637,7 @@ export default function LiveScreen({ navigation }: any) {
                   onCameraConnected={handlePtzConnected}
                   onFrameUpdate={handlePtzFrameUpdate}
                   onStreamModeChange={setPtzStreamMode}
+                  externalStreamMode={ptzStreamMode}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick

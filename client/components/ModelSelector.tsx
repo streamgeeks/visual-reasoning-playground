@@ -39,6 +39,7 @@ interface ModelSelectorProps {
   onCameraConnected?: (connected: boolean, mjpegUrl?: string) => void;
   onFrameUpdate?: (frameUri: string) => void;
   onStreamModeChange?: (mode: StreamMode) => void;
+  externalStreamMode?: StreamMode;
 }
 
 export function ModelSelector({
@@ -51,6 +52,7 @@ export function ModelSelector({
   onCameraConnected,
   onFrameUpdate,
   onStreamModeChange,
+  externalStreamMode,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
@@ -168,6 +170,21 @@ export function ModelSelector({
       stop: () => { isRunning = false; }
     } as any;
   }, [onCameraConnected, onFrameUpdate]);
+
+  // Handle external stream mode changes (e.g., MJPEG fallback to snapshot)
+  useEffect(() => {
+    if (externalStreamMode && externalStreamMode !== streamMode && cameraConnected && camera) {
+      console.log(`External stream mode change: ${streamMode} -> ${externalStreamMode}`);
+      setStreamMode(externalStreamMode);
+      
+      // If switching to snapshot mode, start snapshot capture
+      if (externalStreamMode === "snapshot") {
+        setUseMjpeg(false);
+        setMjpegUrl(null);
+        startFrameCapture(camera, "snapshot");
+      }
+    }
+  }, [externalStreamMode, streamMode, cameraConnected, camera, startFrameCapture]);
 
   const handleConnect = useCallback(async () => {
     if (!camera) return;
