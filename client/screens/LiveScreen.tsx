@@ -8,6 +8,7 @@ import {
   Platform,
   Linking,
   ScrollView,
+  Image,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -77,6 +78,10 @@ export default function LiveScreen({ navigation }: any) {
   const [detections, setDetections] = useState<DetectionBox[]>([]);
   const [currentZoom, setCurrentZoom] = useState(0);
   const [ptzPosition, setPtzPosition] = useState({ pan: 0, tilt: 0 });
+  
+  // PTZ camera connection state
+  const [ptzConnected, setPtzConnected] = useState(false);
+  const [ptzFrame, setPtzFrame] = useState<string | null>(null);
 
   // Tool navigation state (null = show list, string = show that tool)
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -190,6 +195,17 @@ export default function LiveScreen({ navigation }: any) {
   const toggleCameraType = useCallback(() => {
     setCameraType((prev) => (prev === "back" ? "front" : "back"));
     Haptics.selectionAsync();
+  }, []);
+
+  const handlePtzConnected = useCallback((connected: boolean) => {
+    setPtzConnected(connected);
+    if (!connected) {
+      setPtzFrame(null);
+    }
+  }, []);
+
+  const handlePtzFrameUpdate = useCallback((frameUri: string) => {
+    setPtzFrame(frameUri);
   }, []);
 
   const handleOpenSettings = useCallback(async () => {
@@ -373,12 +389,20 @@ export default function LiveScreen({ navigation }: any) {
       {/* Video Area */}
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={cameraType}
-            zoom={currentZoom / 100}
-          />
+          {ptzConnected && ptzFrame ? (
+            <Image
+              source={{ uri: ptzFrame }}
+              style={styles.camera}
+              resizeMode="cover"
+            />
+          ) : (
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing={cameraType}
+              zoom={currentZoom / 100}
+            />
+          )}
 
           <View style={styles.overlayContainer} pointerEvents="box-none">
             {/* Center crosshair */}
@@ -408,7 +432,7 @@ export default function LiveScreen({ navigation }: any) {
             {/* Camera info */}
             <View style={styles.cameraInfoOverlay} pointerEvents="none">
               <Text style={styles.cameraInfoText}>
-                {camera ? camera.name : `Phone Camera (${cameraType})`}
+                {ptzConnected ? camera?.name : `Phone Camera (${cameraType})`}
               </Text>
               <Text style={styles.cameraInfoText}>
                 P:{ptzPosition.pan} T:{ptzPosition.tilt} Z:{currentZoom}
@@ -545,6 +569,8 @@ export default function LiveScreen({ navigation }: any) {
                   onToggleTracking={handleToggleTracking}
                   onShowInfo={handleShowModelInfo}
                   camera={camera}
+                  onCameraConnected={handlePtzConnected}
+                  onFrameUpdate={handlePtzFrameUpdate}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick
