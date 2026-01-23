@@ -108,6 +108,7 @@ export function ModelSelector({
     
     const captureLoop = async () => {
       while (isRunning) {
+        const frameStart = Date.now();
         try {
           // Use RTSP backend or direct snapshot based on mode
           const frame = mode === "rtsp" 
@@ -133,6 +134,12 @@ export function ModelSelector({
               fpsStartTimeRef.current = Date.now();
               fpsCountRef.current = 0;
             }
+            
+            // Yield to UI thread - target ~2-5 FPS for snapshot mode to avoid overwhelming
+            const frameTime = Date.now() - frameStart;
+            const targetDelay = mode === "rtsp" ? 33 : 300; // 30 FPS for RTSP, ~3 FPS for snapshot
+            const delay = Math.max(16, targetDelay - frameTime);
+            await new Promise(r => setTimeout(r, delay));
           } else {
             consecutiveFailures++;
             if (consecutiveFailures >= 10) {
@@ -142,7 +149,7 @@ export function ModelSelector({
               isRunning = false;
               break;
             }
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 100));
           }
         } catch (error) {
           consecutiveFailures++;
@@ -150,7 +157,7 @@ export function ModelSelector({
             isRunning = false;
             break;
           }
-          await new Promise(r => setTimeout(r, 50));
+          await new Promise(r => setTimeout(r, 100));
         }
       }
     };
