@@ -239,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/cameras/:cameraId/status", async (req: Request, res: Response) => {
     try {
-      const { cameraId } = req.params;
+      const cameraId = req.params.cameraId as string;
       const status = await rtspManager.getCameraStatus(cameraId);
 
       if (!status) {
@@ -256,7 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/cameras/:cameraId/frame", async (req: Request, res: Response) => {
     try {
-      const { cameraId } = req.params;
+      const cameraId = req.params.cameraId as string;
       const frame = await rtspManager.getFrame(cameraId);
 
       if (!frame) {

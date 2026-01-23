@@ -55,6 +55,11 @@ import {
   AppSettings,
 } from "@/lib/storage";
 import { getApiUrl } from "@/lib/query-client";
+import {
+  TrackingController,
+  TrackingState,
+  getObjectDescription,
+} from "@/lib/trackingService";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -95,6 +100,11 @@ export default function LiveScreen({ navigation }: any) {
   
   // Settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+
+  // Auto-tracking state
+  const [autoTrackingState, setAutoTrackingState] = useState<TrackingState | null>(null);
+  const trackingControllerRef = useRef<TrackingController | null>(null);
+  const latestFrameRef = useRef<string | null>(null);
 
   const pulseOpacity = useSharedValue(0.3);
 
@@ -141,6 +151,16 @@ export default function LiveScreen({ navigation }: any) {
     return () => clearInterval(interval);
   }, [isTracking, selectedModel]);
 
+  // Cleanup tracking controller on unmount
+  useEffect(() => {
+    return () => {
+      if (trackingControllerRef.current) {
+        trackingControllerRef.current.stop();
+        trackingControllerRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     pulseOpacity.value = withRepeat(
       withTiming(0.8, { duration: 800 }),
@@ -159,13 +179,41 @@ export default function LiveScreen({ navigation }: any) {
   }, [isTracking]);
 
   const handleToggleTracking = useCallback(() => {
-    setIsTracking((prev) => !prev);
-    Haptics.notificationAsync(
-      isTracking
-        ? Haptics.NotificationFeedbackType.Warning
-        : Haptics.NotificationFeedbackType.Success
-    );
-  }, [isTracking]);
+    if (isTracking) {
+      // Stop tracking
+      trackingControllerRef.current?.stop();
+      trackingControllerRef.current = null;
+      setIsTracking(false);
+      setAutoTrackingState(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } else {
+      // Start tracking
+      if (!camera || !ptzConnected) {
+        console.log("Cannot start tracking: no PTZ camera connected");
+        return;
+      }
+      
+      if (!appSettings?.moondreamApiKey) {
+        console.log("Cannot start tracking: no Moondream API key configured");
+        return;
+      }
+      
+      // Create tracking controller
+      const controller = new TrackingController(
+        camera,
+        appSettings.moondreamApiKey,
+        selectedModel,
+        async () => latestFrameRef.current,
+        (state) => setAutoTrackingState(state),
+        { updateInterval: 600 } // ~1.5 updates per second for Moondream
+      );
+      
+      trackingControllerRef.current = controller;
+      controller.start();
+      setIsTracking(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [isTracking, camera, ptzConnected, appSettings, selectedModel]);
 
   const handlePTZMove = useCallback((pan: number, tilt: number) => {
     setPtzPosition({ pan, tilt });
@@ -220,6 +268,7 @@ export default function LiveScreen({ navigation }: any) {
 
   const handlePtzFrameUpdate = useCallback((frameUri: string) => {
     setPtzFrame(frameUri);
+    latestFrameRef.current = frameUri; // Store for tracking
     
     ptzFrameCountRef.current++;
     const now = Date.now();
@@ -448,13 +497,36 @@ export default function LiveScreen({ navigation }: any) {
             {/* Tracking indicator */}
             {isTracking ? (
               <Animated.View style={[styles.recordingIndicator, pulseStyle]}>
-                <View style={[styles.recordingDot, { backgroundColor: theme.error }]} />
-                <Text style={styles.recordingText}>TRACKING</Text>
+                <View style={[
+                  styles.recordingDot, 
+                  { backgroundColor: autoTrackingState?.lastDetection?.found ? theme.success : theme.error }
+                ]} />
+                <Text style={styles.recordingText}>
+                  {autoTrackingState?.lastDetection?.found 
+                    ? `TRACKING ${getObjectDescription(selectedModel).toUpperCase()}`
+                    : "SEARCHING..."}
+                </Text>
               </Animated.View>
             ) : null}
 
+            {/* Detection target marker */}
+            {isTracking && autoTrackingState?.lastDetection?.found && 
+             autoTrackingState.lastDetection.x !== undefined && 
+             autoTrackingState.lastDetection.y !== undefined ? (
+              <View 
+                style={[
+                  styles.detectionMarker, 
+                  { 
+                    left: autoTrackingState.lastDetection.x * VIDEO_WIDTH - 20,
+                    top: autoTrackingState.lastDetection.y * VIDEO_HEIGHT - 20,
+                    borderColor: theme.success,
+                  }
+                ]} 
+              />
+            ) : null}
+
             {/* Detection boxes */}
-            {isTracking ? (
+            {isTracking && !autoTrackingState?.lastDetection?.found ? (
               <DetectionOverlay
                 detections={detections}
                 containerWidth={VIDEO_WIDTH}
@@ -675,6 +747,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     opacity: 0.5,
+  },
+  detectionMarker: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderWidth: 3,
+    borderRadius: 20,
+    backgroundColor: "transparent",
   },
   recordingIndicator: {
     position: "absolute",
