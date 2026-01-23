@@ -18,6 +18,8 @@ import {
   fetchRtspFrame,
   StreamMode,
 } from "@/lib/rtspBackend";
+
+export type { StreamMode };
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 interface CameraConnectionStatus {
@@ -36,6 +38,7 @@ interface ModelSelectorProps {
   camera?: CameraProfile | null;
   onCameraConnected?: (connected: boolean, mjpegUrl?: string) => void;
   onFrameUpdate?: (frameUri: string) => void;
+  onStreamModeChange?: (mode: StreamMode) => void;
 }
 
 export function ModelSelector({
@@ -47,6 +50,7 @@ export function ModelSelector({
   camera,
   onCameraConnected,
   onFrameUpdate,
+  onStreamModeChange,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
@@ -68,6 +72,11 @@ export function ModelSelector({
   const fpsCountRef = useRef(0);
   const mjpegFpsRef = useRef(0);
   const lastMjpegLoadRef = useRef(0);
+
+  // Notify parent when stream mode changes
+  useEffect(() => {
+    onStreamModeChange?.(streamMode);
+  }, [streamMode, onStreamModeChange]);
 
   useEffect(() => {
     return () => {

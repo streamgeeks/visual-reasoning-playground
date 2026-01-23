@@ -31,7 +31,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
-import { ModelSelector } from "@/components/ModelSelector";
+import { ModelSelector, StreamMode } from "@/components/ModelSelector";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
 import {
   StoryCapture,
@@ -85,6 +85,7 @@ export default function LiveScreen({ navigation }: any) {
   const [ptzFrame, setPtzFrame] = useState<string | null>(null);
   const [ptzMjpegUrl, setPtzMjpegUrl] = useState<string | null>(null);
   const [ptzFps, setPtzFps] = useState(0);
+  const [ptzStreamMode, setPtzStreamMode] = useState<StreamMode>("snapshot");
   const ptzFrameCountRef = useRef(0);
   const ptzFpsStartTimeRef = useRef(0);
 
@@ -498,6 +499,7 @@ export default function LiveScreen({ navigation }: any) {
                   cameraName={ptzConnected ? camera?.name : "Phone Camera"}
                   cameraFps={ptzFps}
                   cameraConnected={ptzConnected}
+                  streamMode={ptzConnected ? ptzStreamMode : undefined}
                 />
               </Animated.View>
             ) : null}
@@ -620,6 +622,7 @@ export default function LiveScreen({ navigation }: any) {
                   camera={camera}
                   onCameraConnected={handlePtzConnected}
                   onFrameUpdate={handlePtzFrameUpdate}
+                  onStreamModeChange={setPtzStreamMode}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick
