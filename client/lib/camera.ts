@@ -15,6 +15,15 @@ const SNAPSHOT_ENDPOINTS = [
   "/cgi-bin/jpg/image.cgi",
 ];
 
+function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeoutId),
+  };
+}
+
 function getAuthHeaders(camera: CameraProfile): HeadersInit {
   const headers: HeadersInit = {};
   if (camera.username && camera.password) {
@@ -44,6 +53,7 @@ export async function testCameraConnection(camera: CameraProfile): Promise<Conne
   const headers = getAuthHeaders(camera);
   
   for (const endpoint of SNAPSHOT_ENDPOINTS) {
+    const timeout = createTimeoutSignal(5000);
     try {
       const url = getCameraSnapshotUrl(camera, endpoint);
       console.log(`Testing camera endpoint: ${url}`);
@@ -51,8 +61,10 @@ export async function testCameraConnection(camera: CameraProfile): Promise<Conne
       const response = await fetch(url, {
         method: "GET",
         headers,
-        signal: AbortSignal.timeout(5000),
+        signal: timeout.signal,
       });
+      
+      timeout.clear();
       
       if (response.ok) {
         const contentType = response.headers.get("content-type") || "";
@@ -63,6 +75,7 @@ export async function testCameraConnection(camera: CameraProfile): Promise<Conne
       }
       console.log(`Endpoint ${endpoint} returned status ${response.status}`);
     } catch (error: any) {
+      timeout.clear();
       console.log(`Endpoint ${endpoint} failed:`, error.message);
     }
   }
@@ -76,6 +89,7 @@ export async function testCameraConnection(camera: CameraProfile): Promise<Conne
 let cachedEndpoint: string | null = null;
 
 export async function fetchCameraFrame(camera: CameraProfile): Promise<string | null> {
+  const timeout = createTimeoutSignal(3000);
   try {
     const endpoint = cachedEndpoint || SNAPSHOT_ENDPOINTS[0];
     const url = getCameraSnapshotUrl(camera, endpoint);
@@ -85,8 +99,10 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     const response = await fetch(`${url}?t=${timestamp}`, {
       method: "GET",
       headers,
-      signal: AbortSignal.timeout(3000),
+      signal: timeout.signal,
     });
+    
+    timeout.clear();
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -102,6 +118,7 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
       reader.readAsDataURL(blob);
     });
   } catch (error) {
+    timeout.clear();
     console.log("Frame fetch error:", error);
     return null;
   }
@@ -120,6 +137,7 @@ export function getPtzControlUrl(camera: CameraProfile, command: string): string
 }
 
 export async function sendPtzCommand(camera: CameraProfile, command: string): Promise<boolean> {
+  const timeout = createTimeoutSignal(2000);
   try {
     const url = getPtzControlUrl(camera, command);
     const headers = getAuthHeaders(camera);
@@ -127,11 +145,13 @@ export async function sendPtzCommand(camera: CameraProfile, command: string): Pr
     const response = await fetch(url, {
       method: "GET",
       headers,
-      signal: AbortSignal.timeout(2000),
+      signal: timeout.signal,
     });
     
+    timeout.clear();
     return response.ok;
   } catch (error) {
+    timeout.clear();
     console.log("PTZ command error:", error);
     return false;
   }
