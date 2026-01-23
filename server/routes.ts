@@ -14,6 +14,11 @@ interface DetectObjectRequest {
   object: string; // what to detect: "person", "ball", "face", etc.
 }
 
+interface YoloDetectRequest {
+  image: string; // base64 encoded image
+  model_type: string; // person, ball, face, multi-object
+}
+
 interface BoundingBox {
   x_min: number;
   y_min: number;
@@ -231,6 +236,36 @@ async function describeSceeneWithMoondream(
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Moondream object detection endpoint for tracking
+  // YOLO detection endpoint - proxies to Python backend
+  app.post("/api/yolo/detect", async (req: Request, res: Response) => {
+    try {
+      const { image, model_type } = req.body as YoloDetectRequest;
+
+      if (!image) {
+        return res.status(400).json({ found: false, error: "Image is required" });
+      }
+
+      // Proxy to Python RTSP backend
+      const pythonResponse = await fetch("http://localhost:8082/api/yolo/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image, model_type: model_type || "person" }),
+      });
+
+      if (!pythonResponse.ok) {
+        const errorText = await pythonResponse.text();
+        console.error("YOLO backend error:", errorText);
+        return res.status(500).json({ found: false, error: "YOLO detection failed" });
+      }
+
+      const result = await pythonResponse.json();
+      return res.json(result);
+    } catch (error: any) {
+      console.error("YOLO detection error:", error);
+      return res.status(500).json({ found: false, error: error.message });
+    }
+  });
+
   app.post("/api/detect-object", async (req: Request, res: Response) => {
     try {
       const { image, apiKey, object } = req.body as DetectObjectRequest;

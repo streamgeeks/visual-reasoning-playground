@@ -74,7 +74,8 @@ export async function detectWithYolo(
   modelType: string
 ): Promise<DetectionResult> {
   try {
-    const response = await fetch(`http://localhost:8082/api/yolo/detect`, {
+    const apiUrl = getApiUrl();
+    const response = await fetch(new URL("/api/yolo/detect", apiUrl).toString(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
