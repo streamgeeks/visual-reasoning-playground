@@ -2,11 +2,19 @@ import { CameraProfile } from "./storage";
 import { sendPtzCommand, PTZ_COMMANDS } from "./camera";
 import { getApiUrl } from "./query-client";
 
+export interface BoundingBox {
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+}
+
 export interface DetectionResult {
   found: boolean;
   x?: number; // normalized 0-1
   y?: number; // normalized 0-1
   confidence?: number;
+  box?: BoundingBox; // bounding box (normalized 0-1)
   error?: string;
 }
 
@@ -15,6 +23,8 @@ export interface TrackingState {
   targetObject: string;
   lastDetection: DetectionResult | null;
   lastPtzCommand: string | null;
+  lastDirection: { pan: "left" | "right" | null; tilt: "up" | "down" | null } | null;
+  inDeadzone: boolean;
   errorCount: number;
 }
 
@@ -201,6 +211,8 @@ export class TrackingController {
       targetObject,
       lastDetection: null,
       lastPtzCommand: null,
+      lastDirection: null,
+      inDeadzone: false,
       errorCount: 0,
     };
   }
@@ -257,7 +269,7 @@ export class TrackingController {
         const base64Data = frame.includes(",") ? frame.split(",")[1] : frame;
 
         // Execute tracking step
-        const { detection, ptzCommand } = await executeTrackingStep(
+        const { detection, ptzCommand, direction } = await executeTrackingStep(
           this.camera,
           base64Data,
           getObjectDescription(this.state.targetObject),
@@ -265,11 +277,16 @@ export class TrackingController {
           this.config
         );
 
+        // Check if in deadzone (no movement needed)
+        const inDeadzone = detection.found && direction.pan === null && direction.tilt === null;
+
         // Update state
         this.state = {
           ...this.state,
           lastDetection: detection,
           lastPtzCommand: ptzCommand,
+          lastDirection: direction,
+          inDeadzone,
           errorCount: detection.error ? this.state.errorCount + 1 : 0,
         };
         this.onStateChange(this.state);

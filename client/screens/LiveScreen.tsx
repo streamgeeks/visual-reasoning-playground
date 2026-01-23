@@ -58,6 +58,7 @@ import { getApiUrl } from "@/lib/query-client";
 import {
   TrackingController,
   TrackingState,
+  BoundingBox,
   getObjectDescription,
 } from "@/lib/trackingService";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
@@ -508,30 +509,49 @@ export default function LiveScreen({ navigation }: any) {
               <Animated.View style={[styles.recordingIndicator, pulseStyle]}>
                 <View style={[
                   styles.recordingDot, 
-                  { backgroundColor: autoTrackingState?.lastDetection?.found ? theme.success : theme.error }
+                  { backgroundColor: autoTrackingState?.lastDetection?.found 
+                      ? (autoTrackingState.inDeadzone ? theme.success : theme.warning)
+                      : theme.error }
                 ]} />
                 <Text style={styles.recordingText}>
                   {autoTrackingState?.lastDetection?.found 
-                    ? `TRACKING ${getObjectDescription(selectedModel).toUpperCase()}`
+                    ? (autoTrackingState.inDeadzone 
+                        ? "LOCKED" 
+                        : `TRACKING ${autoTrackingState.lastDirection?.pan?.toUpperCase() || ""}${autoTrackingState.lastDirection?.tilt?.toUpperCase() || ""}`)
                     : "SEARCHING..."}
                 </Text>
               </Animated.View>
             ) : null}
 
-            {/* Detection target marker */}
+            {/* Detection bounding box */}
             {isTracking && autoTrackingState?.lastDetection?.found && 
-             autoTrackingState.lastDetection.x !== undefined && 
-             autoTrackingState.lastDetection.y !== undefined ? (
+             autoTrackingState.lastDetection.box ? (
               <View 
                 style={[
-                  styles.detectionMarker, 
+                  styles.detectionBox, 
                   { 
-                    left: autoTrackingState.lastDetection.x * VIDEO_WIDTH - 20,
-                    top: autoTrackingState.lastDetection.y * VIDEO_HEIGHT - 20,
-                    borderColor: theme.success,
+                    left: autoTrackingState.lastDetection.box.x_min * VIDEO_WIDTH,
+                    top: autoTrackingState.lastDetection.box.y_min * VIDEO_HEIGHT,
+                    width: (autoTrackingState.lastDetection.box.x_max - autoTrackingState.lastDetection.box.x_min) * VIDEO_WIDTH,
+                    height: (autoTrackingState.lastDetection.box.y_max - autoTrackingState.lastDetection.box.y_min) * VIDEO_HEIGHT,
+                    borderColor: autoTrackingState.inDeadzone ? theme.success : theme.warning,
                   }
                 ]} 
-              />
+              >
+                <View style={[styles.detectionLabel, { backgroundColor: autoTrackingState.inDeadzone ? theme.success : theme.warning }]}>
+                  <Text style={styles.detectionLabelText}>
+                    {getObjectDescription(selectedModel).toUpperCase()}
+                    {autoTrackingState.lastDetection.confidence 
+                      ? ` ${Math.round(autoTrackingState.lastDetection.confidence * 100)}%` 
+                      : ""}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            
+            {/* Deadzone indicator */}
+            {isTracking ? (
+              <View style={[styles.deadzoneIndicator, { borderColor: theme.primary + "40" }]} pointerEvents="none" />
             ) : null}
 
             {/* Detection boxes */}
@@ -763,6 +783,37 @@ const styles = StyleSheet.create({
     height: 40,
     borderWidth: 3,
     borderRadius: 20,
+    backgroundColor: "transparent",
+  },
+  detectionBox: {
+    position: "absolute",
+    borderWidth: 2,
+    borderStyle: "solid",
+    backgroundColor: "transparent",
+  },
+  detectionLabel: {
+    position: "absolute",
+    top: -20,
+    left: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  detectionLabelText: {
+    color: "#000",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  deadzoneIndicator: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    width: VIDEO_WIDTH * 0.3, // 15% on each side
+    height: VIDEO_HEIGHT * 0.3,
+    marginLeft: -(VIDEO_WIDTH * 0.15),
+    marginTop: -(VIDEO_HEIGHT * 0.15),
+    borderWidth: 1,
+    borderStyle: "dashed",
     backgroundColor: "transparent",
   },
   recordingIndicator: {
