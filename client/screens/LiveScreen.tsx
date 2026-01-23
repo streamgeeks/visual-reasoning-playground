@@ -206,7 +206,10 @@ export default function LiveScreen({ navigation }: any) {
       }
       
       if (!appSettings?.moondreamApiKey) {
-        console.log("Cannot start tracking: no Moondream API key configured");
+        Alert.alert(
+          "API Key Required",
+          "Please add your Moondream API key in Settings to enable object tracking."
+        );
         return;
       }
       
