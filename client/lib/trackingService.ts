@@ -318,6 +318,28 @@ export class TrackingController {
     this.onStateChange(this.state);
   }
 
+  // Update the tracking model on the fly
+  updateModel(modelId: string, customObject?: string): void {
+    this.modelId = modelId;
+    this.customObject = customObject;
+    this.state = {
+      ...this.state,
+      targetObject: customObject || getObjectDescription(modelId),
+    };
+    this.onStateChange(this.state);
+    console.log(`Tracking model updated to: ${modelId}${customObject ? ` (${customObject})` : ''}`);
+  }
+
+  // Update the tracking config on the fly
+  updateConfig(config: Partial<TrackingConfig>): void {
+    this.config = { ...this.config, ...config };
+    console.log(`Tracking config updated:`, this.config);
+  }
+
+  getConfig(): TrackingConfig {
+    return { ...this.config };
+  }
+
   private async runTrackingLoop(): Promise<void> {
     while (this.isRunning) {
       try {

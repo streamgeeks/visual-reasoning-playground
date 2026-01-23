@@ -152,8 +152,17 @@ export default function LiveScreen({ navigation }: any) {
     if (appSettings) {
       setAppSettings({ ...appSettings, tracking: newSettings });
     }
+    // Update the tracking controller if tracking is active
+    if (trackingControllerRef.current && isTracking) {
+      trackingControllerRef.current.updateConfig({
+        ptzSpeed: newSettings.ptzSpeed,
+        pulseDuration: newSettings.pulseDuration,
+        deadZone: newSettings.deadZone,
+        continuousMode: newSettings.continuousMode,
+      });
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [localTrackingSettings, appSettings]);
+  }, [localTrackingSettings, appSettings, isTracking]);
 
   useEffect(() => {
     if (!isTracking) {
@@ -204,7 +213,19 @@ export default function LiveScreen({ navigation }: any) {
   const handleModelChange = useCallback((model: TrackingModel) => {
     setSelectedModel(model);
     setStats(generateMockStats(model, isTracking));
-  }, [isTracking]);
+    // Update the tracking controller if tracking is active
+    if (trackingControllerRef.current && isTracking) {
+      trackingControllerRef.current.updateModel(model, model === "custom" ? customObject : undefined);
+    }
+  }, [isTracking, customObject]);
+
+  const handleCustomObjectChange = useCallback((text: string) => {
+    setCustomObject(text);
+    // Update the tracking controller if tracking custom model
+    if (trackingControllerRef.current && isTracking && selectedModel === "custom") {
+      trackingControllerRef.current.updateModel("custom", text);
+    }
+  }, [isTracking, selectedModel]);
 
   const handleToggleTracking = useCallback(() => {
     if (isTracking) {
@@ -532,6 +553,21 @@ export default function LiveScreen({ navigation }: any) {
           )}
 
           <View style={styles.overlayContainer} pointerEvents="box-none">
+            {/* Deadzone indicator - shows target area for tracking */}
+            {(isTracking || showTrackingSettings) ? (
+              <View 
+                style={[
+                  styles.deadzoneIndicator,
+                  {
+                    width: `${localTrackingSettings.deadZone * 200}%`,
+                    height: `${localTrackingSettings.deadZone * 200}%`,
+                    borderColor: autoTrackingState?.inDeadzone ? theme.success : theme.primary,
+                  }
+                ]} 
+                pointerEvents="none"
+              />
+            ) : null}
+
             {/* Center crosshair */}
             <View style={styles.centerCrosshair} pointerEvents="none">
               <View style={[styles.crosshairLineH, { backgroundColor: theme.primary }]} />
@@ -754,7 +790,7 @@ export default function LiveScreen({ navigation }: any) {
                     onFrameUpdate={handlePtzFrameUpdate}
                     onStreamModeChange={setPtzStreamMode}
                     customObject={customObject}
-                    onCustomObjectChange={setCustomObject}
+                    onCustomObjectChange={handleCustomObjectChange}
                   />
                   
                   <Pressable
@@ -913,6 +949,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     opacity: 0.5,
   },
+  deadzoneIndicator: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: [{ translateX: "-50%" }, { translateY: "-50%" }],
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderRadius: BorderRadius.md,
+    opacity: 0.6,
+  },
   detectionMarker: {
     position: "absolute",
     width: 40,
@@ -939,18 +985,6 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 10,
     fontWeight: "700",
-  },
-  deadzoneIndicator: {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    width: VIDEO_WIDTH * 0.3, // 15% on each side
-    height: VIDEO_HEIGHT * 0.3,
-    marginLeft: -(VIDEO_WIDTH * 0.15),
-    marginTop: -(VIDEO_HEIGHT * 0.15),
-    borderWidth: 1,
-    borderStyle: "dashed",
-    backgroundColor: "transparent",
   },
   recordingIndicator: {
     position: "absolute",
