@@ -46,8 +46,9 @@ export interface UserProfile {
 
 export interface TrackingSettings {
   ptzSpeed: number; // 1-24 for PTZOptics
-  pulseDuration: number; // ms to move before stopping
+  pulseDuration: number; // ms to move before stopping (0 = continuous)
   deadZone: number; // 0-1, percentage of frame center to ignore
+  continuousMode: boolean; // if true, camera keeps moving until object centered
 }
 
 export interface AppSettings {
@@ -58,9 +59,10 @@ export interface AppSettings {
 }
 
 export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
-  ptzSpeed: 18,
-  pulseDuration: 400,
+  ptzSpeed: 24,
+  pulseDuration: 0,
   deadZone: 0.15,
+  continuousMode: true,
 };
 
 // Camera Profiles

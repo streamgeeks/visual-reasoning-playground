@@ -32,17 +32,19 @@ export interface TrackingState {
 export interface TrackingConfig {
   deadZone: number; // percentage of frame center to ignore (0-1)
   ptzSpeed: number; // 1-24 for PTZOptics
-  pulseDuration: number; // ms to move before stopping
+  pulseDuration: number; // ms to move before stopping (0 = continuous until next command)
   updateInterval: number; // ms between tracking updates
   maxErrorsBeforeStop: number;
+  continuousMode: boolean; // if true, don't auto-stop - just keep moving until centered
 }
 
 const DEFAULT_CONFIG: TrackingConfig = {
   deadZone: 0.15, // 15% dead zone in center
-  ptzSpeed: 18, // higher speed for faster response
-  pulseDuration: 400, // 400ms movement pulse (was 200ms)
+  ptzSpeed: 24, // max speed for fastest response
+  pulseDuration: 0, // 0 = continuous mode (no auto-stop)
   updateInterval: 500, // 2 updates per second (limited by Moondream API)
   maxErrorsBeforeStop: 5,
+  continuousMode: true, // keep moving until object is centered
 };
 
 // Map tracking model IDs to object descriptions for Moondream (custom mode only)
@@ -230,10 +232,16 @@ export async function executeTrackingStep(
 
   if (ptzCommand) {
     await sendPtzCommand(camera, ptzCommand);
-    // Movement pulse - longer duration = more movement per detection
-    setTimeout(() => {
-      sendPtzCommand(camera, PTZ_COMMANDS.stop);
-    }, config.pulseDuration);
+    // In continuous mode (pulseDuration=0), don't auto-stop - camera keeps moving until next command
+    // In pulse mode, stop after the specified duration
+    if (!config.continuousMode && config.pulseDuration > 0) {
+      setTimeout(() => {
+        sendPtzCommand(camera, PTZ_COMMANDS.stop);
+      }, config.pulseDuration);
+    }
+  } else {
+    // No movement needed (in deadzone) - stop camera
+    await sendPtzCommand(camera, PTZ_COMMANDS.stop);
   }
 
   return { detection, ptzCommand, direction };

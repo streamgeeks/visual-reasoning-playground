@@ -53,7 +53,10 @@ import {
   getCameraProfiles,
   getCurrentCameraId,
   getSettings,
+  saveSettings,
   AppSettings,
+  TrackingSettings,
+  DEFAULT_TRACKING_SETTINGS,
 } from "@/lib/storage";
 import { getApiUrl } from "@/lib/query-client";
 import {
@@ -103,6 +106,8 @@ export default function LiveScreen({ navigation }: any) {
   
   // Settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [showTrackingSettings, setShowTrackingSettings] = useState(false);
+  const [localTrackingSettings, setLocalTrackingSettings] = useState<TrackingSettings>(DEFAULT_TRACKING_SETTINGS);
 
   // Auto-tracking state
   const [autoTrackingState, setAutoTrackingState] = useState<TrackingState | null>(null);
@@ -134,10 +139,21 @@ export default function LiveScreen({ navigation }: any) {
 
       setShowStats(settings.showStatsByDefault);
       setAppSettings(settings);
+      setLocalTrackingSettings(settings.tracking || DEFAULT_TRACKING_SETTINGS);
     } catch (error) {
       console.error("Error loading camera:", error);
     }
   };
+
+  const handleUpdateTrackingSetting = useCallback(async (key: keyof TrackingSettings, value: number | boolean) => {
+    const newSettings = { ...localTrackingSettings, [key]: value };
+    setLocalTrackingSettings(newSettings);
+    await saveSettings({ tracking: newSettings });
+    if (appSettings) {
+      setAppSettings({ ...appSettings, tracking: newSettings });
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [localTrackingSettings, appSettings]);
 
   useEffect(() => {
     if (!isTracking) {
@@ -220,7 +236,7 @@ export default function LiveScreen({ navigation }: any) {
         return;
       }
       
-      const trackingSettings = appSettings?.tracking || { ptzSpeed: 18, pulseDuration: 400, deadZone: 0.15 };
+      const trackingSettings = appSettings?.tracking || { ptzSpeed: 24, pulseDuration: 0, deadZone: 0.15, continuousMode: true };
       const controller = new TrackingController(
         camera,
         appSettings?.moondreamApiKey || "",
@@ -232,6 +248,7 @@ export default function LiveScreen({ navigation }: any) {
           ptzSpeed: trackingSettings.ptzSpeed,
           pulseDuration: trackingSettings.pulseDuration,
           deadZone: trackingSettings.deadZone,
+          continuousMode: trackingSettings.continuousMode,
         },
         selectedModel === "custom" ? customObject.trim() : undefined
       );
@@ -725,19 +742,116 @@ export default function LiveScreen({ navigation }: any) {
                   onCaptureToStory={handleCaptureToStory}
                 />
               ) : activeTool === "tracking" ? (
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  isTracking={isTracking}
-                  onModelChange={handleModelChange}
-                  onToggleTracking={handleToggleTracking}
-                  onShowInfo={handleShowModelInfo}
-                  camera={camera}
-                  onCameraConnected={handlePtzConnected}
-                  onFrameUpdate={handlePtzFrameUpdate}
-                  onStreamModeChange={setPtzStreamMode}
-                  customObject={customObject}
-                  onCustomObjectChange={setCustomObject}
-                />
+                <View>
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    isTracking={isTracking}
+                    onModelChange={handleModelChange}
+                    onToggleTracking={handleToggleTracking}
+                    onShowInfo={handleShowModelInfo}
+                    camera={camera}
+                    onCameraConnected={handlePtzConnected}
+                    onFrameUpdate={handlePtzFrameUpdate}
+                    onStreamModeChange={setPtzStreamMode}
+                    customObject={customObject}
+                    onCustomObjectChange={setCustomObject}
+                  />
+                  
+                  <Pressable
+                    onPress={() => setShowTrackingSettings(!showTrackingSettings)}
+                    style={[styles.settingsToggle, { backgroundColor: theme.backgroundSecondary }]}
+                  >
+                    <Feather name="sliders" size={16} color={theme.primary} />
+                    <Text style={[styles.settingsToggleText, { color: theme.text }]}>
+                      Tracking Settings
+                    </Text>
+                    <Feather 
+                      name={showTrackingSettings ? "chevron-up" : "chevron-down"} 
+                      size={16} 
+                      color={theme.textSecondary} 
+                    />
+                  </Pressable>
+                  
+                  {showTrackingSettings ? (
+                    <View style={[styles.trackingSettingsPanel, { backgroundColor: theme.backgroundDefault }]}>
+                      <View style={styles.settingRow}>
+                        <Text style={[styles.settingLabel, { color: theme.text }]}>Mode</Text>
+                        <View style={styles.modeButtons}>
+                          <Pressable
+                            onPress={() => handleUpdateTrackingSetting("continuousMode", true)}
+                            style={[
+                              styles.modeButton,
+                              { 
+                                backgroundColor: localTrackingSettings.continuousMode ? theme.primary : theme.backgroundSecondary,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.modeButtonText, { color: localTrackingSettings.continuousMode ? "#FFF" : theme.textSecondary }]}>
+                              Continuous
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handleUpdateTrackingSetting("continuousMode", false)}
+                            style={[
+                              styles.modeButton,
+                              { 
+                                backgroundColor: !localTrackingSettings.continuousMode ? theme.primary : theme.backgroundSecondary,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.modeButtonText, { color: !localTrackingSettings.continuousMode ? "#FFF" : theme.textSecondary }]}>
+                              Pulse
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.settingRow}>
+                        <Text style={[styles.settingLabel, { color: theme.text }]}>Speed: {localTrackingSettings.ptzSpeed}</Text>
+                        <View style={styles.speedButtons}>
+                          {[12, 18, 24].map((speed) => (
+                            <Pressable
+                              key={speed}
+                              onPress={() => handleUpdateTrackingSetting("ptzSpeed", speed)}
+                              style={[
+                                styles.speedButton,
+                                { 
+                                  backgroundColor: localTrackingSettings.ptzSpeed === speed ? theme.primary : theme.backgroundSecondary,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.speedButtonText, { color: localTrackingSettings.ptzSpeed === speed ? "#FFF" : theme.textSecondary }]}>
+                                {speed === 12 ? "Slow" : speed === 18 ? "Med" : "Fast"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                      
+                      <View style={styles.settingRow}>
+                        <Text style={[styles.settingLabel, { color: theme.text }]}>Dead Zone: {Math.round(localTrackingSettings.deadZone * 100)}%</Text>
+                        <View style={styles.speedButtons}>
+                          {[0.1, 0.15, 0.25].map((dz) => (
+                            <Pressable
+                              key={dz}
+                              onPress={() => handleUpdateTrackingSetting("deadZone", dz)}
+                              style={[
+                                styles.speedButton,
+                                { 
+                                  backgroundColor: localTrackingSettings.deadZone === dz ? theme.success : theme.backgroundSecondary,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.speedButtonText, { color: localTrackingSettings.deadZone === dz ? "#FFF" : theme.textSecondary }]}>
+                                {dz === 0.1 ? "Small" : dz === 0.15 ? "Med" : "Large"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
               ) : activeTool === "ptz" ? (
                 <PTZJoystick
                   onMove={handlePTZMove}
@@ -993,5 +1107,63 @@ const styles = StyleSheet.create({
   },
   describeContainer: {
     gap: Spacing.md,
+  },
+  settingsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  settingsToggleText: {
+    flex: 1,
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  trackingSettingsPanel: {
+    marginTop: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.lg,
+  },
+  settingRow: {
+    gap: Spacing.sm,
+  },
+  settingLabel: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+    marginBottom: Spacing.xs,
+  },
+  modeButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  modeButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+  },
+  speedButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  speedButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  speedButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
   },
 });
