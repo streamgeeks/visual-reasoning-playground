@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image } from "react-native";
+import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, Linking } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
@@ -283,7 +283,32 @@ export function ModelSelector({
         )}
         
         {connectionError ? (
-          <Text style={[styles.errorText, { color: theme.error }]}>{connectionError}</Text>
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.error }]}>{connectionError}</Text>
+            <Text style={[styles.errorHint, { color: theme.textSecondary }]}>
+              {Platform.OS === "ios" 
+                ? "Go to Settings > Privacy & Security > Local Network and make sure Expo Go is enabled."
+                : "Make sure your phone and camera are on the same WiFi network."}
+            </Text>
+            {Platform.OS === "ios" ? (
+              <Pressable
+                onPress={async () => {
+                  try {
+                    await Linking.openSettings();
+                  } catch (e) {
+                    console.log("Could not open settings");
+                  }
+                }}
+                style={({ pressed }) => [
+                  styles.openSettingsButton,
+                  { borderColor: theme.primary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="settings" size={14} color={theme.primary} />
+                <Text style={[styles.openSettingsText, { color: theme.primary }]}>Open Settings</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
@@ -511,9 +536,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  errorContainer: {
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
+  },
   errorText: {
     fontSize: Typography.small.fontSize,
-    marginTop: Spacing.sm,
+  },
+  errorHint: {
+    fontSize: Typography.caption.fontSize,
+    lineHeight: 16,
+  },
+  openSettingsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    marginTop: Spacing.xs,
+  },
+  openSettingsText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
   },
   controls: {
     flexDirection: "row",
