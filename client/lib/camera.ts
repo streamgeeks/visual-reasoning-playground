@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { CameraProfile } from "./storage";
 
 export interface CameraConnectionState {
@@ -166,11 +167,18 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     return null;
   }
   
-  const timeout = createTimeoutSignal(800); // Shorter timeout for faster failure
+  const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
+  const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
+  
+  // On native, return URL directly - RN Image handles fetching
+  // This is fast since we don't download the image twice
+  if (Platform.OS !== "web") {
+    return url;
+  }
+  
+  // On web, use blob URL for better performance
+  const timeout = createTimeoutSignal(800);
   try {
-    const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
-    const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
-    
     const response = await fetch(url, {
       method: "GET",
       headers: activeSnapshotConfig.headers,
@@ -185,9 +193,7 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     
     const blob = await response.blob();
     
-    // Use blob URL instead of base64 (much faster)
     if (typeof URL !== "undefined" && URL.createObjectURL) {
-      // Revoke previous URL to prevent memory leak
       if (previousBlobUrl) {
         URL.revokeObjectURL(previousBlobUrl);
       }
@@ -196,7 +202,7 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
       return blobUrl;
     }
     
-    // Fallback to base64 for environments without blob URLs
+    // Fallback to base64
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
