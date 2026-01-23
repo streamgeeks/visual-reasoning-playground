@@ -226,6 +226,8 @@ function setupErrorHandler(app: express.Application) {
   });
 }
 
+import { rtspManager } from "./services/rtspManager";
+
 (async () => {
   setupCors(app);
   setupBodyParsing(app);
@@ -244,8 +246,26 @@ function setupErrorHandler(app: express.Application) {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`express server serving on port ${port}`);
+      
+      // Start RTSP service in background (don't block server startup)
+      rtspManager.start().catch((err) => {
+        console.warn("RTSP service failed to start:", err.message);
+      });
     },
   );
+  
+  // Graceful shutdown
+  process.on("SIGTERM", async () => {
+    console.log("SIGTERM received, shutting down...");
+    await rtspManager.stop();
+    process.exit(0);
+  });
+  
+  process.on("SIGINT", async () => {
+    console.log("SIGINT received, shutting down...");
+    await rtspManager.stop();
+    process.exit(0);
+  });
 })();

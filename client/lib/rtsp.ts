@@ -1,13 +1,8 @@
 import { getApiUrl } from "./query-client";
 import { CameraProfile } from "./storage";
 
-const RTSP_BACKEND_PORT = 8082;
-
 function getRtspApiUrl(): string {
-  const apiUrl = getApiUrl();
-  const url = new URL(apiUrl);
-  url.port = RTSP_BACKEND_PORT.toString();
-  return url.toString();
+  return getApiUrl();
 }
 
 export interface CameraStatus {
@@ -95,10 +90,12 @@ export async function fetchFrame(cameraId: string): Promise<string | null> {
 
 export async function checkRtspBackendHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${getRtspApiUrl()}health`, {
+    const response = await fetch(`${getRtspApiUrl()}api/rtsp/status`, {
       signal: AbortSignal.timeout(3000),
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.running === true;
   } catch {
     return false;
   }
