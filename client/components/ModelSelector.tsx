@@ -214,21 +214,8 @@ export function ModelSelector({
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
-        
-        // On web, try MJPEG for better FPS; on native use snapshot for reliability
-        if (Platform.OS === "web") {
-          const mjpeg = getMjpegUrl(camera);
-          setMjpegUrl(mjpeg);
-          setUseMjpeg(true);
-          setStreamMode("mjpeg");
-          onCameraConnected?.(true, mjpeg);
-        } else {
-          // Native: use snapshot mode directly (more reliable)
-          setStreamMode("snapshot");
-          onCameraConnected?.(true);
-          startFrameCapture(camera, "snapshot");
-        }
-        
+        setStreamMode("snapshot");
+        onCameraConnected?.(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");

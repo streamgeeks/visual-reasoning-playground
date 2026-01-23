@@ -32,7 +32,7 @@ import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector, StreamMode } from "@/components/ModelSelector";
-import { MJPEGStream } from "@/components/MJPEGStream";
+import { OptimizedSnapshotStream } from "@/components/OptimizedSnapshotStream";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
 import {
   StoryCapture,
@@ -418,26 +418,16 @@ export default function LiveScreen({ navigation }: any) {
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
           {ptzConnected && camera ? (
-            ptzStreamMode === "mjpeg" && Platform.OS === "web" ? (
-              <img
-                src={ptzMjpegUrl || ""}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                }}
-              />
-            ) : ptzFrame ? (
-              <Image
-                source={{ uri: ptzFrame }}
-                style={styles.camera}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.camera, { justifyContent: "center", alignItems: "center" }]}>
-                <ActivityIndicator size="large" color={theme.primary} />
-              </View>
-            )
+            <OptimizedSnapshotStream
+              camera={camera}
+              targetFps={8}
+              style={styles.camera}
+              onFpsUpdate={(stats) => {
+                setPtzFps(stats.fps);
+              }}
+              onFrameUpdate={handlePtzFrameUpdate}
+              onError={(err) => console.log("Stream error:", err)}
+            />
           ) : (
             <CameraView
               ref={cameraRef}
