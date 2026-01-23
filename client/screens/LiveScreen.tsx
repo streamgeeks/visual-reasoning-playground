@@ -143,13 +143,22 @@ export default function LiveScreen({ navigation }: any) {
       return;
     }
 
+    // Only use mock detections when NOT connected to PTZ camera
+    // Real tracking uses the TrackingController with Moondream AI
+    if (ptzConnected) {
+      // Real tracking mode - don't generate mock detections
+      setDetections([]);
+      return;
+    }
+
+    // Demo mode with phone camera - use mock detections
     const interval = setInterval(() => {
       setStats(generateMockStats(selectedModel, true));
       setDetections(generateMockDetections(selectedModel));
     }, 500);
 
     return () => clearInterval(interval);
-  }, [isTracking, selectedModel]);
+  }, [isTracking, selectedModel, ptzConnected]);
 
   // Cleanup tracking controller on unmount
   useEffect(() => {
