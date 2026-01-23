@@ -8,7 +8,9 @@ MVP implementation with all core features:
 - Live camera view with simulated video feed and AI tracking overlay
 - PTZ joystick controls (pan/tilt/zoom)
 - 4 tracking models: Person, Ball, Face, Multi-Object
-- Real-time performance stats overlay (FPS, inference time, latency, etc.)
+- Real-time performance stats overlay (FPS, inference time, latency, stream mode)
+- Multi-mode streaming: RTSP (20-30 FPS), MJPEG (web), Snapshot (1-2 FPS fallback)
+- Stream mode indicator with color coding (green=RTSP, yellow=snapshot)
 - Preset management with smart templates
 - Instant replay buffer controls
 - Settings with camera management and profile customization
@@ -51,8 +53,10 @@ client/
 │   ├── useScreenOptions.ts     # Navigation screen options
 │   └── useTheme.ts             # Theme hook
 ├── lib/
+│   ├── camera.ts               # Direct camera connection utilities
 │   ├── presetTemplates.ts      # Smart preset templates
 │   ├── query-client.ts         # React Query setup
+│   ├── rtspBackend.ts          # RTSP backend integration (high FPS streaming)
 │   ├── storage.ts              # AsyncStorage utilities
 │   └── tracking.ts             # Tracking models and mock data
 ├── navigation/
