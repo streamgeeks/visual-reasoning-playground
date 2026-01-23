@@ -8,6 +8,7 @@ import { CameraProfile } from "@/lib/storage";
 import {
   testCameraConnection,
   fetchCameraFrame,
+  clearActiveConfig,
 } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
@@ -135,6 +136,7 @@ export function ModelSelector({
       frameIntervalRef.current = null;
     }
     
+    clearActiveConfig();
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);

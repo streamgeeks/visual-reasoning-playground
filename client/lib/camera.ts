@@ -16,85 +16,131 @@ function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => vo
   };
 }
 
-export function getCameraSnapshotUrl(camera: CameraProfile): string {
-  const authParams = camera.username && camera.password 
-    ? `?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`
-    : "";
-  return `http://${camera.ipAddress}:${camera.httpPort}/cgi-bin/snapshot.cgi${authParams}`;
+interface SnapshotConfig {
+  url: string;
+  headers?: HeadersInit;
+  name: string;
 }
 
-export function getCameraMjpegUrl(camera: CameraProfile): string {
-  const streamPath = camera.streamQuality === "high" ? "1" : "2";
-  return `http://${camera.ipAddress}:${camera.httpPort}/cgi-bin/mjpg/video.cgi?stream=${streamPath}`;
-}
-
-export function getRtspUrl(camera: CameraProfile): string {
-  const auth = camera.username && camera.password 
-    ? `${camera.username}:${camera.password}@` 
-    : "";
-  const stream = camera.streamQuality === "high" ? "1" : "2";
-  return `rtsp://${auth}${camera.ipAddress}:${camera.rtspPort}/${stream}`;
+function getSnapshotConfigs(camera: CameraProfile): SnapshotConfig[] {
+  const base = `http://${camera.ipAddress}:${camera.httpPort}`;
+  const configs: SnapshotConfig[] = [];
+  
+  // Method 1: Query parameters (PTZOptics style)
+  if (camera.username && camera.password) {
+    configs.push({
+      url: `${base}/cgi-bin/snapshot.cgi?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`,
+      name: "Query params auth",
+    });
+  }
+  
+  // Method 2: HTTP Basic Auth header
+  if (camera.username && camera.password) {
+    configs.push({
+      url: `${base}/cgi-bin/snapshot.cgi`,
+      headers: {
+        "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
+      },
+      name: "Basic Auth header",
+    });
+  }
+  
+  // Method 3: No auth (some cameras allow public access to snapshots)
+  configs.push({
+    url: `${base}/cgi-bin/snapshot.cgi`,
+    name: "No auth",
+  });
+  
+  // Method 4: Alternative snapshot endpoints
+  configs.push({
+    url: `${base}/snapshot.jpg`,
+    headers: camera.username && camera.password ? {
+      "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
+    } : undefined,
+    name: "snapshot.jpg",
+  });
+  
+  configs.push({
+    url: `${base}/jpg/image.jpg`,
+    headers: camera.username && camera.password ? {
+      "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
+    } : undefined,
+    name: "jpg/image.jpg",
+  });
+  
+  return configs;
 }
 
 export interface ConnectionTestResult {
   success: boolean;
+  snapshotUrl?: string;
+  headers?: HeadersInit;
   error?: string;
 }
 
+let activeSnapshotConfig: SnapshotConfig | null = null;
+
 export async function testCameraConnection(camera: CameraProfile): Promise<ConnectionTestResult> {
-  const timeout = createTimeoutSignal(8000);
-  try {
-    const url = getCameraSnapshotUrl(camera);
-    console.log(`Testing camera: ${url}`);
-    
-    const response = await fetch(url, {
-      method: "GET",
-      signal: timeout.signal,
-    });
-    
-    timeout.clear();
-    
-    console.log(`Camera response: ${response.status} ${response.statusText}`);
-    
-    if (response.ok) {
+  const configs = getSnapshotConfigs(camera);
+  
+  for (const config of configs) {
+    const timeout = createTimeoutSignal(5000);
+    try {
+      console.log(`Testing ${config.name}: ${config.url}`);
+      
+      const response = await fetch(config.url, {
+        method: "GET",
+        headers: config.headers,
+        signal: timeout.signal,
+      });
+      
+      timeout.clear();
+      
       const contentType = response.headers.get("content-type") || "";
-      console.log(`Content-Type: ${contentType}`);
-      if (contentType.includes("image") || contentType.includes("jpeg") || contentType.includes("jpg")) {
-        console.log("Camera connected successfully!");
-        return { success: true };
+      console.log(`Response: ${response.status}, Content-Type: ${contentType}`);
+      
+      if (response.ok && (contentType.includes("image") || contentType.includes("jpeg") || contentType.includes("jpg"))) {
+        console.log(`Success with ${config.name}!`);
+        activeSnapshotConfig = config;
+        return { success: true, snapshotUrl: config.url, headers: config.headers };
       }
-      return { success: false, error: `Unexpected response type: ${contentType}` };
+      
+      // Check if we got an actual image even if content-type is wrong
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.type.includes("image") || blob.size > 1000) {
+          // Likely an image even if content-type header was wrong
+          console.log(`Success with ${config.name} (blob check)!`);
+          activeSnapshotConfig = config;
+          return { success: true, snapshotUrl: config.url, headers: config.headers };
+        }
+      }
+    } catch (error: any) {
+      timeout.clear();
+      console.log(`${config.name} failed:`, error.message);
     }
-    
-    if (response.status === 401) {
-      return { success: false, error: "Authentication failed. Check username and password in Settings." };
-    }
-    
-    return { success: false, error: `Camera returned error: ${response.status}` };
-  } catch (error: any) {
-    timeout.clear();
-    console.log(`Connection failed:`, error.message);
-    
-    if (error.name === "AbortError") {
-      return { success: false, error: "Connection timed out. Check IP address and make sure camera is on." };
-    }
-    
-    return { 
-      success: false, 
-      error: "Could not connect. Make sure your phone is on the same WiFi network as the camera." 
-    };
   }
+  
+  activeSnapshotConfig = null;
+  return { 
+    success: false, 
+    error: "Could not get snapshot from camera. Check credentials and camera settings." 
+  };
 }
 
 export async function fetchCameraFrame(camera: CameraProfile): Promise<string | null> {
+  if (!activeSnapshotConfig) {
+    return null;
+  }
+  
   const timeout = createTimeoutSignal(3000);
   try {
-    const baseUrl = getCameraSnapshotUrl(camera);
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    const url = `${baseUrl}${separator}t=${Date.now()}`;
+    const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
+    const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
     
     const response = await fetch(url, {
       method: "GET",
+      headers: activeSnapshotConfig.headers,
       signal: timeout.signal,
     });
     
@@ -118,6 +164,18 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     console.log("Frame fetch error:", error);
     return null;
   }
+}
+
+export function clearActiveConfig() {
+  activeSnapshotConfig = null;
+}
+
+export function getRtspUrl(camera: CameraProfile): string {
+  const auth = camera.username && camera.password 
+    ? `${camera.username}:${camera.password}@` 
+    : "";
+  const stream = camera.streamQuality === "high" ? "1" : "2";
+  return `rtsp://${auth}${camera.ipAddress}:${camera.rtspPort}/${stream}`;
 }
 
 export function getPtzControlUrl(camera: CameraProfile, command: string): string {
@@ -152,19 +210,6 @@ export async function sendPtzCommand(camera: CameraProfile, command: string): Pr
     console.log("PTZ command error:", error);
     return false;
   }
-}
-
-export async function sendPtzPosition(
-  camera: CameraProfile, 
-  pan: number, 
-  tilt: number, 
-  speed: number = 5
-): Promise<boolean> {
-  return sendPtzCommand(camera, `ptzcmd&poscall&${pan}&${tilt}&${speed}`);
-}
-
-export async function sendZoomLevel(camera: CameraProfile, level: number): Promise<boolean> {
-  return sendPtzCommand(camera, `ptzcmd&zoomcall&${level}`);
 }
 
 export const PTZ_COMMANDS = {
