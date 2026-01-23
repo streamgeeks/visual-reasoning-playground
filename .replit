@@ -1,8 +1,9 @@
 entrypoint = "README.md"
-modules = ["nodejs-22"]
+modules = ["nodejs-22", "python-3.11"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["freetype", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "opencv", "openjpeg", "tcl", "tk", "zlib"]
 
 [deployment]
 deploymentTarget = "cloudrun"

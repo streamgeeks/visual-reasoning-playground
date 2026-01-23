@@ -1,0 +1,7 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.0.0
+opencv-python-headless==4.8.1.78
+websockets==12.0
+Pillow==10.1.0
+numpy==1.26.2
