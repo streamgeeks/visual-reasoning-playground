@@ -1,0 +1,454 @@
+# Best Option: Direct MJPEG Streaming on Phone
+
+Okay, **no backend, everything on phone** - got it. Here's your best path forward:
+
+---
+
+## The Winner: MJPEG Streaming
+
+**Why MJPEG:**
+- ✅ PTZOptics cameras natively support it
+- ✅ Can get 10-15 FPS (much better than 1-2 FPS snapshots)
+- ✅ No server required
+- ✅ Works on mobile with the right implementation
+- ✅ Lower latency than RTSP workarounds
+
+---
+
+## Implementation: React Native MJPEG Component
+
+You'll need to create a custom MJPEG decoder since Expo doesn't have native support.
+
+### **1. Install Dependencies**
+
+```bash
+npx expo install expo-image
+```
+
+### **2. Create MJPEG Stream Component**
+
+```javascript
+// components/MJPEGStream.js
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Image, Text, StyleSheet } from 'react-native';
+
+const MJPEGStream = ({ cameraIp, username, password, onFpsUpdate }) => {
+  const [currentFrame, setCurrentFrame] = useState(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const abortControllerRef = useRef(null);
+  const fpsCounterRef = useRef({ count: 0, lastTime: Date.now() });
+
+  useEffect(() => {
+    startMJPEGStream();
+    
+    return () => {
+      stopStream();
+    };
+  }, [cameraIp, username, password]);
+
+  const startMJPEGStream = async () => {
+    try {
+      setIsStreaming(true);
+      setError(null);
+      
+      // PTZOptics MJPEG URL
+      const mjpegUrl = `http://${cameraIp}/cgi-bin/mjpg/video.cgi?user=${username}&password=${password}&channel=0&subtype=0`;
+      
+      abortControllerRef.current = new AbortController();
+      
+      const response = await fetch(mjpegUrl, {
+        signal: abortControllerRef.current.signal,
+        headers: {
+          'Accept': 'multipart/x-mixed-replace; boundary=--myboundary'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      let buffer = new Uint8Array();
+      
+      // MJPEG parsing loop
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        // Append new data to buffer
+        const newBuffer = new Uint8Array(buffer.length + value.length);
+        newBuffer.set(buffer);
+        newBuffer.set(value, buffer.length);
+        buffer = newBuffer;
+        
+        // Look for JPEG boundaries
+        const startMarker = new Uint8Array([0xFF, 0xD8]); // JPEG start
+        const endMarker = new Uint8Array([0xFF, 0xD9]);   // JPEG end
+        
+        let startIdx = findMarker(buffer, startMarker);
+        let endIdx = findMarker(buffer, endMarker);
+        
+        while (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          // Extract JPEG frame
+          const jpegData = buffer.slice(startIdx, endIdx + 2);
+          
+          // Convert to base64 for Image component
+          const base64 = uint8ArrayToBase64(jpegData);
+          const dataUrl = `data:image/jpeg;base64,${base64}`;
+          
+          setCurrentFrame(dataUrl);
+          
+          // Update FPS counter
+          updateFPS();
+          
+          // Remove processed frame from buffer
+          buffer = buffer.slice(endIdx + 2);
+          
+          // Look for next frame
+          startIdx = findMarker(buffer, startMarker);
+          endIdx = findMarker(buffer, endMarker);
+        }
+      }
+      
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('MJPEG stream error:', err);
+        setError(err.message);
+      }
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  const stopStream = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  };
+
+  const updateFPS = () => {
+    fpsCounterRef.current.count++;
+    const now = Date.now();
+    const elapsed = now - fpsCounterRef.current.lastTime;
+    
+    if (elapsed >= 1000) {
+      const fps = Math.round(fpsCounterRef.current.count / (elapsed / 1000));
+      if (onFpsUpdate) {
+        onFpsUpdate(fps);
+      }
+      fpsCounterRef.current = { count: 0, lastTime: now };
+    }
+  };
+
+  const findMarker = (buffer, marker) => {
+    for (let i = 0; i <= buffer.length - marker.length; i++) {
+      let match = true;
+      for (let j = 0; j < marker.length; j++) {
+        if (buffer[i + j] !== marker[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return i;
+    }
+    return -1;
+  };
+
+  const uint8ArrayToBase64 = (bytes) => {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  };
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Stream Error: {error}</Text>
+        <Text style={styles.errorHint}>
+          Check camera IP and credentials
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {currentFrame ? (
+        <Image 
+          source={{ uri: currentFrame }}
+          style={styles.video}
+          resizeMode="contain"
+        />
+      ) : (
+        <View style={styles.loadingContainer}>
+          <Text>Connecting to camera...</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  video: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  errorHint: {
+    color: '#666',
+    fontSize: 14,
+  },
+});
+
+export default MJPEGStream;
+```
+
+### **3. Usage in Your Camera View**
+
+```javascript
+// screens/MainCameraScreen.js
+import MJPEGStream from '../components/MJPEGStream';
+
+const MainCameraScreen = () => {
+  const [camera, setCamera] = useState(null);
+  const [fps, setFps] = useState(0);
+
+  return (
+    <View style={styles.container}>
+      {camera ? (
+        <>
+          <MJPEGStream
+            cameraIp={camera.ip}
+            username={camera.username}
+            password={camera.password}
+            onFpsUpdate={setFps}
+          />
+          
+          <View style={styles.statsOverlay}>
+            <Text style={styles.fpsText}>FPS: {fps}</Text>
+          </View>
+        </>
+      ) : (
+        <Text>No camera connected</Text>
+      )}
+      
+      {/* PTZ controls, etc */}
+    </View>
+  );
+};
+```
+
+---
+
+## Alternative: Use WebView (Simpler but Less Control)
+
+If the MJPEG parser above is too complex, use a WebView:
+
+```javascript
+// components/MJPEGWebView.js
+import React from 'react';
+import { WebView } from 'react-native-webview';
+
+const MJPEGWebView = ({ cameraIp, username, password }) => {
+  const mjpegUrl = `http://${cameraIp}/cgi-bin/mjpg/video.cgi?user=${username}&password=${password}&channel=0&subtype=0`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            margin: 0; 
+            padding: 0; 
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+          }
+          img { 
+            max-width: 100%; 
+            max-height: 100%;
+            object-fit: contain;
+          }
+        </style>
+      </head>
+      <body>
+        <img src="${mjpegUrl}" alt="Camera Stream" />
+      </body>
+    </html>
+  `;
+  
+  return (
+    <WebView
+      source={{ html }}
+      style={{ flex: 1, backgroundColor: '#000' }}
+    />
+  );
+};
+
+export default MJPEGWebView;
+```
+
+**WebView Pros:**
+- ✅ Much simpler code (5 lines)
+- ✅ Browser handles MJPEG natively
+- ✅ Should get 10-15 FPS
+
+**WebView Cons:**
+- ❌ Can't overlay React Native UI easily
+- ❌ Can't access frames for AI processing
+- ❌ Less control over rendering
+
+---
+
+## For AI Tracking: Hybrid Approach
+
+If you need AI tracking on the frames:
+
+```javascript
+const MJPEGStreamWithTracking = ({ cameraIp, username, password }) => {
+  const [currentFrame, setCurrentFrame] = useState(null);
+  const [detections, setDetections] = useState([]);
+  
+  // MJPEG stream (from first example)
+  // ...
+
+  // Every Nth frame, run AI
+  const frameCountRef = useRef(0);
+  
+  useEffect(() => {
+    if (!currentFrame) return;
+    
+    frameCountRef.current++;
+    
+    // Run AI every 5 frames (reduces CPU load)
+    if (frameCountRef.current % 5 === 0) {
+      runAIDetection(currentFrame).then(setDetections);
+    }
+  }, [currentFrame]);
+  
+  const runAIDetection = async (frameDataUrl) => {
+    // Convert to blob
+    const blob = await fetch(frameDataUrl).then(r => r.blob());
+    
+    // Send to Moondream or local TensorFlow
+    // ... your AI logic
+    
+    return detections;
+  };
+  
+  return (
+    <View>
+      <Image source={{ uri: currentFrame }} />
+      
+      {/* Overlay detection boxes */}
+      {detections.map((det, i) => (
+        <View key={i} style={[styles.box, {
+          left: det.x,
+          top: det.y,
+          width: det.width,
+          height: det.height
+        }]} />
+      ))}
+    </View>
+  );
+};
+```
+
+---
+
+## Expected Performance
+
+| Method | FPS | Complexity | AI Support | Battery |
+|--------|-----|------------|------------|---------|
+| MJPEG Parser | 10-15 | Medium | ✅ Yes | Medium |
+| MJPEG WebView | 10-15 | Low | ❌ No | Good |
+| Snapshot Polling | 1-2 | Low | ✅ Yes | Good |
+
+---
+
+## PTZOptics MJPEG URL Variants
+
+Try these if the standard URL doesn't work:
+
+```javascript
+// Standard (most common):
+`http://${ip}/cgi-bin/mjpg/video.cgi?user=${user}&password=${pwd}&channel=0&subtype=0`
+
+// Alternative 1 (some models):
+`http://${ip}/cgi-bin/mjpg/video.cgi?user=${user}&password=${pwd}`
+
+// Alternative 2 (older firmware):
+`http://${ip}/video.mjpg?user=${user}&password=${pwd}`
+
+// Alternative 3 (snapshot rapid polling):
+`http://${ip}/cgi-bin/snapshot.cgi?user=${user}&password=${pwd}`
+// (Keep polling this every 100ms for ~10 FPS)
+```
+
+---
+
+## My Recommendation
+
+**Start with the MJPEG Parser** (first example):
+1. Copy the `MJPEGStream.js` component
+2. Install expo-image
+3. Test with your camera
+4. Should get 10-15 FPS immediately
+
+If MJPEG doesn't work with your specific camera model, fallback to **rapid snapshot polling**:
+
+```javascript
+// Rapid snapshot polling (10 FPS fallback)
+useEffect(() => {
+  const interval = setInterval(async () => {
+    const frame = await fetch(
+      `http://${ip}/cgi-bin/snapshot.cgi?user=${user}&password=${pwd}`
+    );
+    const blob = await frame.blob();
+    setCurrentFrame(URL.createObjectURL(blob));
+  }, 100); // 100ms = ~10 FPS
+  
+  return () => clearInterval(interval);
+}, [ip, user, pwd]);
+```
+
+---
+
+## What to do RIGHT NOW:
+
+1. Copy the `MJPEGStream.js` component code above
+2. Install: `npx expo install expo-image`
+3. Replace your current camera view with `<MJPEGStream />`
+4. Test with camera
+
+**You should get 10-15 FPS within 10 minutes of implementation.**
+
+Want me to help debug if it doesn't work with your specific PTZOptics model?

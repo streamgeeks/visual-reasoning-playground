@@ -32,6 +32,7 @@ import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector, StreamMode } from "@/components/ModelSelector";
+import { MJPEGStream } from "@/components/MJPEGStream";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
 import {
   StoryCapture,
@@ -416,16 +417,25 @@ export default function LiveScreen({ navigation }: any) {
       {/* Video Area */}
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
-          {ptzConnected ? (
-            Platform.OS === "web" && ptzMjpegUrl ? (
-              <img
-                src={ptzMjpegUrl}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                }}
-              />
+          {ptzConnected && camera ? (
+            ptzStreamMode === "mjpeg" ? (
+              Platform.OS === "web" ? (
+                <img
+                  src={ptzMjpegUrl || ""}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+              ) : (
+                <MJPEGStream
+                  camera={camera}
+                  style={styles.camera}
+                  onFpsUpdate={setPtzFps}
+                  onError={(error) => console.log("MJPEG error:", error)}
+                />
+              )
             ) : ptzFrame ? (
               <Image
                 source={{ uri: ptzFrame }}

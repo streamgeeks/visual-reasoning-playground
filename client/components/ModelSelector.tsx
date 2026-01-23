@@ -196,24 +196,20 @@ export function ModelSelector({
         console.log("RTSP connection failed, falling back to snapshot...");
       }
       
-      // Step 2: Fall back to direct snapshot (1-2 FPS)
+      // Step 2: Try MJPEG streaming (10-15 FPS on all platforms)
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
         
-        // On web, try MJPEG for better FPS
-        if (Platform.OS === "web") {
-          const mjpeg = getMjpegUrl(camera);
-          setMjpegUrl(mjpeg);
-          setUseMjpeg(true);
-          setStreamMode("mjpeg");
-          onCameraConnected?.(true, mjpeg);
-        } else {
-          setStreamMode("snapshot");
-          onCameraConnected?.(true);
-        }
+        // Use MJPEG for better FPS on all platforms
+        const mjpeg = getMjpegUrl(camera);
+        setMjpegUrl(mjpeg);
+        setUseMjpeg(true);
+        setStreamMode("mjpeg");
+        onCameraConnected?.(true, mjpeg);
         
-        startFrameCapture(camera, "snapshot");
+        // Don't start snapshot polling when using MJPEG
+        // The MJPEGStream component handles its own frame updates
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
