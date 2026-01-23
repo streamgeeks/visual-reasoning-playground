@@ -30,7 +30,6 @@ import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
 import { DetectionOverlay } from "@/components/DetectionOverlay";
 import { ModelSelector } from "@/components/ModelSelector";
-import { ToolSection } from "@/components/ToolSection";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
 import {
   StoryCapture,
@@ -79,8 +78,8 @@ export default function LiveScreen({ navigation }: any) {
   const [currentZoom, setCurrentZoom] = useState(0);
   const [ptzPosition, setPtzPosition] = useState({ pan: 0, tilt: 0 });
 
-  // Tool section states
-  const [expandedSection, setExpandedSection] = useState<string>("describe");
+  // Tool navigation state (null = show list, string = show that tool)
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   
   // Settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -203,8 +202,13 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, []);
 
-  const toggleSection = useCallback((section: string) => {
-    setExpandedSection((prev) => (prev === section ? "" : section));
+  const openTool = useCallback((tool: string) => {
+    setActiveTool(tool);
+    Haptics.selectionAsync();
+  }, []);
+
+  const closeTool = useCallback(() => {
+    setActiveTool(null);
     Haptics.selectionAsync();
   }, []);
 
@@ -454,62 +458,105 @@ export default function LiveScreen({ navigation }: any) {
       </View>
 
       {/* Tools Area */}
-      <ScrollView
-        style={styles.toolsArea}
-        contentContainerStyle={[
-          styles.toolsContent,
-          { paddingBottom: tabBarHeight + Spacing.xl },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Describe Scene - Unified AI Section */}
-        <ToolSection
-          title="Describe Scene"
-          icon="eye"
-          isExpanded={expandedSection === "describe"}
-          onToggle={() => toggleSection("describe")}
-          badge="AI"
-        >
-          <StoryDisplay
-            onCapture={handleStoryCaptureAndDescribe}
-            hasApiKey={Boolean(appSettings?.moondreamApiKey)}
-            onStoryModeStart={handleStoryModeStart}
-            onStoryModeEnd={handleStoryModeEnd}
-            onCaptureToStory={handleCaptureToStory}
-          />
-        </ToolSection>
+      <View style={[styles.toolsArea, { paddingBottom: tabBarHeight }]}>
+        {activeTool === null ? (
+          /* Tool List View */
+          <View style={styles.toolList}>
+            <Pressable
+              onPress={() => openTool("describe")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="eye" size={18} color={theme.primary} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Describe Scene
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.primary + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.primary }]}>AI</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
 
-        {/* Tracking Models */}
-        <ToolSection
-          title="Object Tracking"
-          icon="target"
-          isExpanded={expandedSection === "tracking"}
-          onToggle={() => toggleSection("tracking")}
-        >
-          <ModelSelector
-            selectedModel={selectedModel}
-            isTracking={isTracking}
-            onModelChange={handleModelChange}
-            onToggleTracking={handleToggleTracking}
-            onShowInfo={handleShowModelInfo}
-          />
-        </ToolSection>
+            <Pressable
+              onPress={() => openTool("tracking")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="target" size={18} color={theme.primary} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Object Tracking
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
 
-        {/* PTZ Controls */}
-        <ToolSection
-          title="Camera Controls"
-          icon="move"
-          isExpanded={expandedSection === "ptz"}
-          onToggle={() => toggleSection("ptz")}
-        >
-          <PTZJoystick
-            onMove={handlePTZMove}
-            onZoom={handleZoom}
-            onQuickAction={handleQuickAction}
-            currentZoom={currentZoom}
-          />
-        </ToolSection>
-      </ScrollView>
+            <Pressable
+              onPress={() => openTool("ptz")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="move" size={18} color={theme.primary} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Camera Controls
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+        ) : (
+          /* Expanded Tool View */
+          <View style={styles.toolExpanded}>
+            <Pressable
+              onPress={closeTool}
+              style={[styles.toolBackRow, { borderBottomColor: theme.backgroundDefault }]}
+            >
+              <Feather name="chevron-left" size={18} color={theme.primary} />
+              <Text style={[styles.toolBackText, { color: theme.primary }]}>Back</Text>
+            </Pressable>
+
+            <ScrollView
+              style={styles.toolContent}
+              contentContainerStyle={styles.toolContentInner}
+              showsVerticalScrollIndicator={false}
+            >
+              {activeTool === "describe" ? (
+                <StoryDisplay
+                  onCapture={handleStoryCaptureAndDescribe}
+                  hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+                  onStoryModeStart={handleStoryModeStart}
+                  onStoryModeEnd={handleStoryModeEnd}
+                  onCaptureToStory={handleCaptureToStory}
+                />
+              ) : activeTool === "tracking" ? (
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  isTracking={isTracking}
+                  onModelChange={handleModelChange}
+                  onToggleTracking={handleToggleTracking}
+                  onShowInfo={handleShowModelInfo}
+                />
+              ) : activeTool === "ptz" ? (
+                <PTZJoystick
+                  onMove={handlePTZMove}
+                  onZoom={handleZoom}
+                  onQuickAction={handleQuickAction}
+                  currentZoom={currentZoom}
+                />
+              ) : null}
+            </ScrollView>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -615,7 +662,55 @@ const styles = StyleSheet.create({
   toolsArea: {
     flex: 1,
   },
-  toolsContent: {
+  toolList: {
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  toolRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  toolRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  toolRowTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  toolBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  toolBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  toolExpanded: {
+    flex: 1,
+  },
+  toolBackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  toolBackText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  toolContent: {
+    flex: 1,
+  },
+  toolContentInner: {
     padding: Spacing.md,
   },
   permissionContainer: {
