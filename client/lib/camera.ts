@@ -170,14 +170,7 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
   const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
   const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
   
-  // On native, return URL directly - RN Image handles fetching
-  // This is fast since we don't download the image twice
-  if (Platform.OS !== "web") {
-    return url;
-  }
-  
-  // On web, use blob URL for better performance
-  const timeout = createTimeoutSignal(800);
+  const timeout = createTimeoutSignal(2000);
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -191,26 +184,29 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
       throw new Error(`HTTP ${response.status}`);
     }
     
-    const blob = await response.blob();
-    
-    if (typeof URL !== "undefined" && URL.createObjectURL) {
-      if (previousBlobUrl) {
-        URL.revokeObjectURL(previousBlobUrl);
+    // On web, use blob URL for better performance
+    if (Platform.OS === "web") {
+      const blob = await response.blob();
+      
+      if (typeof URL !== "undefined" && URL.createObjectURL) {
+        if (previousBlobUrl) {
+          URL.revokeObjectURL(previousBlobUrl);
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        previousBlobUrl = blobUrl;
+        return blobUrl;
       }
-      const blobUrl = URL.createObjectURL(blob);
-      previousBlobUrl = blobUrl;
-      return blobUrl;
     }
     
-    // Fallback to base64
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve(reader.result as string);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    // On native, convert to base64 data URI
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return `data:image/jpeg;base64,${base64}`;
   } catch (error) {
     timeout.clear();
     return null;
