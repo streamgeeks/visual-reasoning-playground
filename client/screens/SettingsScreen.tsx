@@ -126,19 +126,27 @@ export default function SettingsScreen() {
     }
   }, []);
 
-  const handlePtzControl = useCallback(async (command: string) => {
+  const handlePtzStart = useCallback(async (command: string) => {
     const activeCamera = cameras.find(c => c.id === currentCameraId);
     if (!activeCamera) return;
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await sendPtzCommand(activeCamera, command);
+  }, [cameras, currentCameraId]);
+
+  const handlePtzStop = useCallback(async () => {
+    const activeCamera = cameras.find(c => c.id === currentCameraId);
+    if (!activeCamera) return;
     
-    // For movement commands, stop after a brief pulse
-    if (command !== PTZ_COMMANDS.stop && command !== PTZ_COMMANDS.home) {
-      setTimeout(() => {
-        sendPtzCommand(activeCamera, PTZ_COMMANDS.stop);
-      }, 300);
-    }
+    await sendPtzCommand(activeCamera, PTZ_COMMANDS.stop);
+  }, [cameras, currentCameraId]);
+
+  const handlePtzHome = useCallback(async () => {
+    const activeCamera = cameras.find(c => c.id === currentCameraId);
+    if (!activeCamera) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await sendPtzCommand(activeCamera, PTZ_COMMANDS.home);
   }, [cameras, currentCameraId]);
 
   const handleAddCamera = useCallback(async () => {
@@ -267,10 +275,11 @@ export default function SettingsScreen() {
               <View style={styles.ptzRow}>
                 <View style={styles.ptzSpacer} />
                 <Pressable
-                  onPress={() => handlePtzControl(PTZ_COMMANDS.up)}
+                  onPressIn={() => handlePtzStart(PTZ_COMMANDS.up)}
+                  onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                   ]}
                 >
                   <Feather name="chevron-up" size={24} color={theme.text} />
@@ -280,16 +289,17 @@ export default function SettingsScreen() {
               
               <View style={styles.ptzRow}>
                 <Pressable
-                  onPress={() => handlePtzControl(PTZ_COMMANDS.left)}
+                  onPressIn={() => handlePtzStart(PTZ_COMMANDS.left)}
+                  onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                   ]}
                 >
                   <Feather name="chevron-left" size={24} color={theme.text} />
                 </Pressable>
                 <Pressable
-                  onPress={() => handlePtzControl(PTZ_COMMANDS.home)}
+                  onPress={handlePtzHome}
                   style={({ pressed }) => [
                     styles.ptzButton,
                     styles.ptzHomeButton,
@@ -299,10 +309,11 @@ export default function SettingsScreen() {
                   <Feather name="home" size={20} color="#FFFFFF" />
                 </Pressable>
                 <Pressable
-                  onPress={() => handlePtzControl(PTZ_COMMANDS.right)}
+                  onPressIn={() => handlePtzStart(PTZ_COMMANDS.right)}
+                  onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                   ]}
                 >
                   <Feather name="chevron-right" size={24} color={theme.text} />
@@ -312,10 +323,11 @@ export default function SettingsScreen() {
               <View style={styles.ptzRow}>
                 <View style={styles.ptzSpacer} />
                 <Pressable
-                  onPress={() => handlePtzControl(PTZ_COMMANDS.down)}
+                  onPressIn={() => handlePtzStart(PTZ_COMMANDS.down)}
+                  onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                   ]}
                 >
                   <Feather name="chevron-down" size={24} color={theme.text} />
@@ -326,20 +338,22 @@ export default function SettingsScreen() {
             
             <View style={styles.zoomRow}>
               <Pressable
-                onPress={() => handlePtzControl(PTZ_COMMANDS.zoomOut)}
+                onPressIn={() => handlePtzStart(PTZ_COMMANDS.zoomOut)}
+                onPressOut={() => sendPtzCommand(cameras.find(c => c.id === currentCameraId)!, PTZ_COMMANDS.zoomStop)}
                 style={({ pressed }) => [
                   styles.zoomButton,
-                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                 ]}
               >
                 <Feather name="zoom-out" size={20} color={theme.text} />
                 <Text style={[styles.zoomText, { color: theme.textSecondary }]}>Zoom Out</Text>
               </Pressable>
               <Pressable
-                onPress={() => handlePtzControl(PTZ_COMMANDS.zoomIn)}
+                onPressIn={() => handlePtzStart(PTZ_COMMANDS.zoomIn)}
+                onPressOut={() => sendPtzCommand(cameras.find(c => c.id === currentCameraId)!, PTZ_COMMANDS.zoomStop)}
                 style={({ pressed }) => [
                   styles.zoomButton,
-                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
                 ]}
               >
                 <Feather name="zoom-in" size={20} color={theme.text} />
