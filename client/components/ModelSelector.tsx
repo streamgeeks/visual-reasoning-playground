@@ -48,6 +48,7 @@ export function ModelSelector({
   const [cameraStatus, setCameraStatus] = useState<CameraConnectionStatus | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [previewFrame, setPreviewFrame] = useState<string | null>(null);
+  const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCountRef = useRef(0);
@@ -175,6 +176,49 @@ export function ModelSelector({
               Add a PTZ camera in Settings
             </Text>
           </View>
+        ) : showPermissionPrompt ? (
+          <View style={[styles.permissionPrompt, { backgroundColor: theme.backgroundSecondary }]}>
+            <View style={styles.permissionHeader}>
+              <Feather name="wifi" size={24} color={theme.primary} />
+              <Text style={[styles.permissionTitle, { color: theme.text }]}>
+                Local Network Access
+              </Text>
+            </View>
+            <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
+              This app needs permission to access your local network to connect to the camera.
+            </Text>
+            <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
+              When prompted, tap "Allow" to enable the connection.
+            </Text>
+            <View style={styles.permissionButtons}>
+              <Pressable
+                onPress={() => setShowPermissionPrompt(false)}
+                style={({ pressed }) => [
+                  styles.permissionCancelButton,
+                  { borderColor: theme.textSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={[styles.permissionCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowPermissionPrompt(false);
+                  handleConnect();
+                }}
+                disabled={isConnecting}
+                style={({ pressed }) => [
+                  styles.permissionAllowButton,
+                  { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                {isConnecting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.permissionAllowText}>Connect Now</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
         ) : cameraConnected ? (
           <View style={styles.connectedInfo}>
             {previewFrame ? (
@@ -223,24 +267,17 @@ export function ModelSelector({
               </View>
             </View>
             <Pressable
-              onPress={handleConnect}
-              disabled={isConnecting}
+              onPress={() => setShowPermissionPrompt(true)}
               style={({ pressed }) => [
                 styles.connectButton,
                 { 
                   backgroundColor: theme.primary,
-                  opacity: isConnecting ? 0.7 : pressed ? 0.8 : 1,
+                  opacity: pressed ? 0.8 : 1,
                 },
               ]}
             >
-              {isConnecting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Feather name="wifi" size={16} color="#FFFFFF" />
-                  <Text style={styles.connectButtonText}>Connect</Text>
-                </>
-              )}
+              <Feather name="wifi" size={16} color="#FFFFFF" />
+              <Text style={styles.connectButtonText}>Connect</Text>
             </Pressable>
           </View>
         )}
@@ -365,6 +402,51 @@ const styles = StyleSheet.create({
   },
   noCameraHint: {
     fontSize: Typography.small.fontSize,
+  },
+  permissionPrompt: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.sm,
+  },
+  permissionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  permissionTitle: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  permissionText: {
+    fontSize: Typography.small.fontSize,
+    lineHeight: 18,
+  },
+  permissionButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  permissionCancelButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  permissionCancelText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  permissionAllowButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  permissionAllowText: {
+    color: "#FFFFFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
   },
   connectedInfo: {
     flexDirection: "row",
