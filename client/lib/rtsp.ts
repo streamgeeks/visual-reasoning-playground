@@ -15,6 +15,8 @@ export interface CameraStatus {
 
 export async function connectCamera(camera: CameraProfile): Promise<boolean> {
   try {
+    const streamPath = camera.streamQuality === "high" ? "/stream1" : "/stream2";
+    
     const response = await fetch(`${getRtspApiUrl()}api/cameras/connect`, {
       method: "POST",
       headers: {
@@ -25,7 +27,7 @@ export async function connectCamera(camera: CameraProfile): Promise<boolean> {
         ip: camera.ipAddress,
         username: camera.username,
         password: camera.password,
-        streamPath: "/1",
+        streamPath,
       }),
     });
 

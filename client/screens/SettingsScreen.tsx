@@ -25,6 +25,7 @@ import {
   CameraProfile,
   UserProfile,
   AppSettings,
+  StreamQuality,
   getCameraProfiles,
   saveCameraProfile,
   deleteCameraProfile,
@@ -61,6 +62,7 @@ export default function SettingsScreen() {
     password: "",
     httpPort: "80",
     rtspPort: "554",
+    streamQuality: "low" as StreamQuality,
   });
   const [pendingApiKey, setPendingApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
@@ -117,6 +119,7 @@ export default function SettingsScreen() {
       password: newCamera.password,
       httpPort: parseInt(newCamera.httpPort, 10) || 80,
       rtspPort: parseInt(newCamera.rtspPort, 10) || 554,
+      streamQuality: newCamera.streamQuality,
       createdAt: new Date().toISOString(),
     };
 
@@ -130,6 +133,7 @@ export default function SettingsScreen() {
       password: "",
       httpPort: "80",
       rtspPort: "554",
+      streamQuality: "low",
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [newCamera]);
@@ -425,6 +429,78 @@ export default function SettingsScreen() {
                 onChangeText={(text) => setNewCamera((prev) => ({ ...prev, password: text }))}
                 secureTextEntry
               />
+
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Stream Quality
+              </Text>
+              <View style={styles.qualitySelector}>
+                <Pressable
+                  onPress={() => setNewCamera((prev) => ({ ...prev, streamQuality: "high" }))}
+                  style={[
+                    styles.qualityOption,
+                    {
+                      backgroundColor: newCamera.streamQuality === "high" 
+                        ? theme.primary 
+                        : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <Feather 
+                    name="zap" 
+                    size={16} 
+                    color={newCamera.streamQuality === "high" ? "#FFFFFF" : theme.textSecondary} 
+                  />
+                  <Text
+                    style={[
+                      styles.qualityText,
+                      { color: newCamera.streamQuality === "high" ? "#FFFFFF" : theme.text },
+                    ]}
+                  >
+                    High Bitrate
+                  </Text>
+                  <Text
+                    style={[
+                      styles.qualitySubtext,
+                      { color: newCamera.streamQuality === "high" ? "rgba(255,255,255,0.7)" : theme.textSecondary },
+                    ]}
+                  >
+                    stream1
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setNewCamera((prev) => ({ ...prev, streamQuality: "low" }))}
+                  style={[
+                    styles.qualityOption,
+                    {
+                      backgroundColor: newCamera.streamQuality === "low" 
+                        ? theme.primary 
+                        : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <Feather 
+                    name="battery" 
+                    size={16} 
+                    color={newCamera.streamQuality === "low" ? "#FFFFFF" : theme.textSecondary} 
+                  />
+                  <Text
+                    style={[
+                      styles.qualityText,
+                      { color: newCamera.streamQuality === "low" ? "#FFFFFF" : theme.text },
+                    ]}
+                  >
+                    Low Bitrate
+                  </Text>
+                  <Text
+                    style={[
+                      styles.qualitySubtext,
+                      { color: newCamera.streamQuality === "low" ? "rgba(255,255,255,0.7)" : theme.textSecondary },
+                    ]}
+                  >
+                    stream2
+                  </Text>
+                </Pressable>
+              </View>
             </ScrollView>
 
             <View style={styles.modalButtons}>
@@ -659,5 +735,24 @@ const styles = StyleSheet.create({
   savedMessage: {
     fontSize: Typography.small.fontSize,
     marginTop: Spacing.xs,
+  },
+  qualitySelector: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  qualityOption: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.xs,
+  },
+  qualityText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  qualitySubtext: {
+    fontSize: Typography.small.fontSize,
   },
 });

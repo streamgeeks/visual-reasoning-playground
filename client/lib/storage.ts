@@ -11,6 +11,8 @@ const STORAGE_KEYS = {
   USER_PROFILE: "@vrp_user_profile",
 } as const;
 
+export type StreamQuality = "high" | "low";
+
 export interface CameraProfile {
   id: string;
   name: string;
@@ -19,6 +21,7 @@ export interface CameraProfile {
   password: string;
   rtspPort: number;
   httpPort: number;
+  streamQuality: StreamQuality;
   createdAt: string;
 }
 
