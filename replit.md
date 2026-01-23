@@ -5,15 +5,36 @@ Visual Reasoning Playground is a mobile application that transforms PTZOptics pr
 
 ## Current State
 MVP implementation with all core features:
-- Live camera view with simulated video feed and AI tracking overlay
+- Live camera view with PTZ camera streaming and AI tracking overlay
 - PTZ joystick controls (pan/tilt/zoom)
-- 4 tracking models: Person, Ball, Face, Multi-Object
+- 5 tracking models: Person, Ball, Face, Multi-Object (YOLO), Custom (Moondream AI)
+- Autonomous object tracking with visual feedback (bounding boxes, tracking state indicators)
 - Real-time performance stats overlay (FPS, inference time, latency, stream mode)
 - Multi-mode streaming: RTSP (20-30 FPS), MJPEG (web), Snapshot (1-2 FPS fallback)
 - Stream mode indicator with color coding (green=RTSP, yellow=snapshot)
 - Preset management with smart templates
 - Instant replay buffer controls
 - Settings with camera management and profile customization
+
+## Tracking System
+
+### Detection Backends
+1. **YOLO (Local)**: Person, Ball, Face, Multi-Object models use YOLOv5 via torch hub
+   - No API key required
+   - Faster updates (~3 FPS)
+   - Runs on Python backend (port 8082)
+   
+2. **Moondream (API)**: Custom object tracking
+   - User types any object description
+   - Requires API key (Settings)
+   - Flexible detection of any object
+
+### Visual Feedback
+- **Bounding Box**: Shows detected object with color-coded border
+  - Green = LOCKED (centered in deadzone)
+  - Yellow = TRACKING (camera moving to center object)
+- **Status Indicator**: LOCKED / TRACKING [direction] / SEARCHING
+- **Deadzone**: 15% center area where no PTZ movement occurs
 
 ## Project Architecture
 
