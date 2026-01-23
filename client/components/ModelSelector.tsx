@@ -1,18 +1,22 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { TrackingModel, TRACKING_MODELS, getModelInfo } from "@/lib/tracking";
 import { CameraProfile } from "@/lib/storage";
 import {
-  connectCamera,
-  disconnectCamera,
-  getCameraStatus,
-  checkRtspBackendHealth,
-  CameraStatus,
-} from "@/lib/rtsp";
+  testCameraConnection,
+  fetchCameraFrame,
+  getCameraSnapshotUrl,
+} from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
+
+interface CameraConnectionStatus {
+  connected: boolean;
+  fps: number;
+  frameCount: number;
+}
 
 interface ModelSelectorProps {
   selectedModel: TrackingModel;
@@ -22,6 +26,7 @@ interface ModelSelectorProps {
   onShowInfo: () => void;
   camera?: CameraProfile | null;
   onCameraConnected?: (connected: boolean) => void;
+  onFrameUpdate?: (frameUri: string) => void;
 }
 
 export function ModelSelector({
@@ -32,36 +37,72 @@ export function ModelSelector({
   onShowInfo,
   camera,
   onCameraConnected,
+  onFrameUpdate,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
   
-  const [rtspAvailable, setRtspAvailable] = useState<boolean | null>(null);
   const [cameraConnected, setCameraConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [cameraStatus, setCameraStatus] = useState<CameraStatus | null>(null);
+  const [cameraStatus, setCameraStatus] = useState<CameraConnectionStatus | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [previewFrame, setPreviewFrame] = useState<string | null>(null);
+  
+  const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const frameCountRef = useRef(0);
+  const fpsStartTimeRef = useRef(0);
+  const fpsCountRef = useRef(0);
 
   useEffect(() => {
-    checkRtspBackendHealth().then(setRtspAvailable);
+    return () => {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+      }
+    };
   }, []);
 
-  useEffect(() => {
-    if (!cameraConnected || !camera) return;
+  const startFrameCapture = useCallback((cam: CameraProfile) => {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+    }
     
-    const interval = setInterval(async () => {
-      const status = await getCameraStatus(camera.id);
-      if (status) {
-        setCameraStatus(status);
-        if (!status.connected) {
-          setCameraConnected(false);
-          onCameraConnected?.(false);
+    frameCountRef.current = 0;
+    fpsStartTimeRef.current = Date.now();
+    fpsCountRef.current = 0;
+    
+    const captureFrame = async () => {
+      const frame = await fetchCameraFrame(cam);
+      if (frame) {
+        frameCountRef.current++;
+        fpsCountRef.current++;
+        setPreviewFrame(frame);
+        onFrameUpdate?.(frame);
+        
+        const elapsed = (Date.now() - fpsStartTimeRef.current) / 1000;
+        if (elapsed >= 1) {
+          const fps = Math.round(fpsCountRef.current / elapsed);
+          setCameraStatus({
+            connected: true,
+            fps,
+            frameCount: frameCountRef.current,
+          });
+          fpsStartTimeRef.current = Date.now();
+          fpsCountRef.current = 0;
+        }
+      } else {
+        setCameraConnected(false);
+        onCameraConnected?.(false);
+        setConnectionError("Lost connection to camera");
+        if (frameIntervalRef.current) {
+          clearInterval(frameIntervalRef.current);
+          frameIntervalRef.current = null;
         }
       }
-    }, 2000);
+    };
     
-    return () => clearInterval(interval);
-  }, [cameraConnected, camera]);
+    captureFrame();
+    frameIntervalRef.current = setInterval(captureFrame, 200);
+  }, [onCameraConnected, onFrameUpdate]);
 
   const handleConnect = useCallback(async () => {
     if (!camera) return;
@@ -70,27 +111,36 @@ export function ModelSelector({
     setConnectionError(null);
     
     try {
-      await connectCamera(camera);
-      setCameraConnected(true);
-      onCameraConnected?.(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const canConnect = await testCameraConnection(camera);
+      if (canConnect) {
+        setCameraConnected(true);
+        onCameraConnected?.(true);
+        startFrameCapture(camera);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setConnectionError("Cannot reach camera. Check IP address and network.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     } catch (error: any) {
       setConnectionError(error.message || "Failed to connect");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsConnecting(false);
     }
-  }, [camera, onCameraConnected]);
+  }, [camera, onCameraConnected, startFrameCapture]);
 
   const handleDisconnect = useCallback(async () => {
-    if (!camera) return;
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
     
-    await disconnectCamera(camera.id);
     setCameraConnected(false);
     setCameraStatus(null);
+    setPreviewFrame(null);
     onCameraConnected?.(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [camera, onCameraConnected]);
+  }, [onCameraConnected]);
 
   const handleToggleTracking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -121,19 +171,16 @@ export function ModelSelector({
               Add a PTZ camera in Settings
             </Text>
           </View>
-        ) : rtspAvailable === false ? (
-          <View style={[styles.noCamera, { backgroundColor: theme.warning + "10" }]}>
-            <Feather name="alert-triangle" size={24} color={theme.warning} />
-            <Text style={[styles.noCameraText, { color: theme.warning }]}>
-              RTSP backend not available
-            </Text>
-            <Text style={[styles.noCameraHint, { color: theme.textSecondary }]}>
-              Start the Python RTSP server
-            </Text>
-          </View>
         ) : cameraConnected ? (
           <View style={styles.connectedInfo}>
-            <View style={[styles.cameraInfo, { backgroundColor: theme.backgroundSecondary }]}>
+            {previewFrame ? (
+              <Image 
+                source={{ uri: previewFrame }} 
+                style={styles.previewThumbnail}
+                resizeMode="cover"
+              />
+            ) : null}
+            <View style={[styles.cameraInfo, { backgroundColor: theme.backgroundSecondary, flex: 1 }]}>
               <View style={styles.cameraDetails}>
                 <Text style={[styles.cameraName, { color: theme.text }]}>{camera.name}</Text>
                 <Text style={[styles.cameraIp, { color: theme.textSecondary }]}>
@@ -319,6 +366,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
+  },
+  previewThumbnail: {
+    width: 60,
+    height: 40,
+    borderRadius: BorderRadius.xs,
+    backgroundColor: "#000",
   },
   connectSection: {
     flexDirection: "row",
