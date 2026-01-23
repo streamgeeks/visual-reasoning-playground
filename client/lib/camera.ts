@@ -7,6 +7,11 @@ export interface CameraConnectionState {
   lastError: string | null;
 }
 
+export interface MjpegConfig {
+  url: string;
+  supported: boolean;
+}
+
 function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), ms);
@@ -167,6 +172,18 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
 
 export function clearActiveConfig() {
   activeSnapshotConfig = null;
+}
+
+export function getMjpegUrl(camera: CameraProfile): string {
+  const base = `http://${camera.ipAddress}:${camera.httpPort}`;
+  if (camera.username && camera.password) {
+    return `${base}/cgi-bin/mjpg/video.cgi?usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}`;
+  }
+  return `${base}/cgi-bin/mjpg/video.cgi`;
+}
+
+export function getActiveSnapshotUrl(): string | null {
+  return activeSnapshotConfig?.url || null;
 }
 
 export function getRtspUrl(camera: CameraProfile): string {

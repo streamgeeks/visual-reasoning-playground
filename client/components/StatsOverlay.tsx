@@ -8,21 +8,27 @@ import { useTheme } from "@/hooks/useTheme";
 interface StatsOverlayProps {
   stats: PerformanceStats;
   cameraName?: string;
+  cameraFps?: number;
+  cameraConnected?: boolean;
 }
 
-export function StatsOverlay({ stats, cameraName }: StatsOverlayProps) {
+export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected }: StatsOverlayProps) {
   const { theme } = useTheme();
+  
+  const displayFps = cameraConnected && cameraFps !== undefined ? cameraFps : stats.fps;
 
   return (
     <View style={styles.container}>
       {cameraName ? <StatRow label="Camera" value={cameraName} /> : null}
+      {cameraConnected ? (
+        <StatRow label="Status" value="LIVE" color={Colors.dark.success} />
+      ) : null}
       <StatRow label="Model" value={stats.modelName} />
-      <StatRow label="FPS" value={stats.fps.toFixed(1)} />
+      <StatRow label="Stream FPS" value={displayFps.toFixed(1)} color={cameraConnected ? Colors.dark.primary : undefined} />
       <StatRow label="Inference" value={`${stats.inferenceTime.toFixed(0)}ms`} />
       <StatRow label="Confidence" value={stats.confidence.toFixed(2)} />
       <StatRow label="Latency" value={`${stats.latency.toFixed(0)}ms`} />
       <StatRow label="Objects" value={stats.objectCount.toString()} />
-      <StatRow label="Bitrate" value={`${stats.bitrate.toFixed(1)} Mbps`} />
       {stats.droppedFrames > 0 ? (
         <StatRow
           label="Dropped"

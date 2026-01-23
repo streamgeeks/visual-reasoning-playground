@@ -9,6 +9,7 @@ import {
   testCameraConnection,
   fetchCameraFrame,
   clearActiveConfig,
+  getMjpegUrl,
 } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
@@ -25,7 +26,7 @@ interface ModelSelectorProps {
   onToggleTracking: () => void;
   onShowInfo: () => void;
   camera?: CameraProfile | null;
-  onCameraConnected?: (connected: boolean) => void;
+  onCameraConnected?: (connected: boolean, mjpegUrl?: string) => void;
   onFrameUpdate?: (frameUri: string) => void;
 }
 
@@ -48,11 +49,15 @@ export function ModelSelector({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [previewFrame, setPreviewFrame] = useState<string | null>(null);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
+  const [mjpegUrl, setMjpegUrl] = useState<string | null>(null);
+  const [useMjpeg, setUseMjpeg] = useState(false);
   
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCountRef = useRef(0);
   const fpsStartTimeRef = useRef(0);
   const fpsCountRef = useRef(0);
+  const mjpegFpsRef = useRef(0);
+  const lastMjpegLoadRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -129,11 +134,25 @@ export function ModelSelector({
     setConnectionError(null);
     
     try {
+      // Try snapshot connection first (works on all platforms)
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
-        onCameraConnected?.(true);
+        
+        // On web, try MJPEG for better FPS
+        if (Platform.OS === "web") {
+          const mjpeg = getMjpegUrl(camera);
+          setMjpegUrl(mjpeg);
+          setUseMjpeg(true);
+          onCameraConnected?.(true, mjpeg);
+        } else {
+          // On native, use snapshot polling
+          onCameraConnected?.(true);
+        }
+        
+        // Start snapshot polling for FPS tracking
         startFrameCapture(camera);
+        
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
@@ -157,6 +176,8 @@ export function ModelSelector({
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);
+    setMjpegUrl(null);
+    setUseMjpeg(false);
     onCameraConnected?.(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [onCameraConnected]);

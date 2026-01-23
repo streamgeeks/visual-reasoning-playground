@@ -9,6 +9,7 @@ import {
   Linking,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -82,6 +83,7 @@ export default function LiveScreen({ navigation }: any) {
   // PTZ camera connection state
   const [ptzConnected, setPtzConnected] = useState(false);
   const [ptzFrame, setPtzFrame] = useState<string | null>(null);
+  const [ptzMjpegUrl, setPtzMjpegUrl] = useState<string | null>(null);
   const [ptzFps, setPtzFps] = useState(0);
   const ptzFrameCountRef = useRef(0);
   const ptzFpsStartTimeRef = useRef(0);
@@ -200,10 +202,14 @@ export default function LiveScreen({ navigation }: any) {
     Haptics.selectionAsync();
   }, []);
 
-  const handlePtzConnected = useCallback((connected: boolean) => {
+  const handlePtzConnected = useCallback((connected: boolean, mjpegUrl?: string) => {
     setPtzConnected(connected);
+    if (connected && mjpegUrl) {
+      setPtzMjpegUrl(mjpegUrl);
+    }
     if (!connected) {
       setPtzFrame(null);
+      setPtzMjpegUrl(null);
       setPtzFps(0);
       ptzFrameCountRef.current = 0;
       ptzFpsStartTimeRef.current = 0;
@@ -409,12 +415,27 @@ export default function LiveScreen({ navigation }: any) {
       {/* Video Area */}
       <View style={{ paddingTop: headerHeight }}>
         <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
-          {ptzConnected && ptzFrame ? (
-            <Image
-              source={{ uri: ptzFrame }}
-              style={styles.camera}
-              resizeMode="cover"
-            />
+          {ptzConnected ? (
+            Platform.OS === "web" && ptzMjpegUrl ? (
+              <img
+                src={ptzMjpegUrl}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : ptzFrame ? (
+              <Image
+                source={{ uri: ptzFrame }}
+                style={styles.camera}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.camera, { justifyContent: "center", alignItems: "center" }]}>
+                <ActivityIndicator size="large" color={theme.primary} />
+              </View>
+            )
           ) : (
             <CameraView
               ref={cameraRef}
@@ -474,7 +495,9 @@ export default function LiveScreen({ navigation }: any) {
               >
                 <StatsOverlay
                   stats={stats}
-                  cameraName={camera?.name || "Phone Camera"}
+                  cameraName={ptzConnected ? camera?.name : "Phone Camera"}
+                  cameraFps={ptzFps}
+                  cameraConnected={ptzConnected}
                 />
               </Animated.View>
             ) : null}
