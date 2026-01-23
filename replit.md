@@ -59,6 +59,8 @@ client/
 │   ├── rtspBackend.ts          # RTSP backend integration (high FPS streaming)
 │   ├── storage.ts              # AsyncStorage utilities
 │   └── tracking.ts             # Tracking models and mock data
+├── components/
+│   └── MJPEGStream.tsx         # WebView-based MJPEG streaming for native
 ├── navigation/
 │   ├── LiveStackNavigator.tsx  # Live tab stack
 │   ├── MainTabNavigator.tsx    # Bottom tab navigator (4 tabs)
@@ -146,6 +148,8 @@ backend/                        # Python RTSP backend
 - Complete UI for all screens
 - AsyncStorage-based persistence
 - Simulated tracking data for demo mode
+- MJPEG streaming now works on all platforms (web, iOS, Android) via WebView
+- Streaming priority: RTSP backend (if available) → MJPEG (10-15 FPS) → Snapshot fallback (1-2 FPS)
 
 ## Development Notes
 
