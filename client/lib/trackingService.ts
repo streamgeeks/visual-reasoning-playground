@@ -1,6 +1,7 @@
 import { CameraProfile } from "./storage";
 import { sendPtzCommand, PTZ_COMMANDS } from "./camera";
 import { getApiUrl } from "./query-client";
+import { TrackingModel, getModelInfo } from "./tracking";
 
 export interface BoundingBox {
   x_min: number;
@@ -42,8 +43,11 @@ const DEFAULT_CONFIG: TrackingConfig = {
   maxErrorsBeforeStop: 5,
 };
 
-// Map tracking model IDs to object descriptions for Moondream
-export function getObjectDescription(modelId: string): string {
+// Map tracking model IDs to object descriptions for Moondream (custom mode only)
+export function getObjectDescription(modelId: string, customObject?: string): string {
+  if (modelId === "custom" && customObject) {
+    return customObject;
+  }
   switch (modelId) {
     case "person":
       return "person";
@@ -51,10 +55,50 @@ export function getObjectDescription(modelId: string): string {
       return "ball or sports ball";
     case "face":
       return "face or human face";
-    case "multi":
+    case "multi-object":
       return "moving object or person";
     default:
-      return "person";
+      return modelId;
+  }
+}
+
+// Check if model uses YOLO (local) or Moondream (API)
+export function usesYoloBackend(modelId: string): boolean {
+  const info = getModelInfo(modelId as TrackingModel);
+  return info?.usesYolo ?? false;
+}
+
+// Detect objects using YOLO backend (local, no API key needed)
+export async function detectWithYolo(
+  imageBase64: string,
+  modelType: string
+): Promise<DetectionResult> {
+  try {
+    const response = await fetch(`http://localhost:8082/api/yolo/detect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: imageBase64,
+        model_type: modelType,
+      }),
+    });
+
+    if (!response.ok) {
+      return { found: false, error: `YOLO API error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    return {
+      found: result.found,
+      x: result.x,
+      y: result.y,
+      confidence: result.confidence,
+      box: result.box,
+      error: result.error,
+    };
+  } catch (error: any) {
+    console.error("YOLO detection error:", error);
+    return { found: false, error: error.message };
   }
 }
 
@@ -148,16 +192,26 @@ export async function detectObject(
 export async function executeTrackingStep(
   camera: CameraProfile,
   imageBase64: string,
-  objectType: string,
+  modelId: string,
   apiKey: string,
-  config: TrackingConfig = DEFAULT_CONFIG
+  config: TrackingConfig = DEFAULT_CONFIG,
+  customObject?: string
 ): Promise<{
   detection: DetectionResult;
   ptzCommand: string | null;
   direction: { pan: "left" | "right" | null; tilt: "up" | "down" | null };
 }> {
-  // Detect object
-  const detection = await detectObject(imageBase64, objectType, apiKey);
+  // Choose detection backend based on model
+  let detection: DetectionResult;
+  
+  if (usesYoloBackend(modelId)) {
+    // Use YOLO backend (local, no API key)
+    detection = await detectWithYolo(imageBase64, modelId);
+  } else {
+    // Use Moondream API for custom objects
+    const objectDescription = getObjectDescription(modelId, customObject);
+    detection = await detectObject(imageBase64, objectDescription, apiKey);
+  }
 
   if (!detection.found || detection.x === undefined || detection.y === undefined) {
     // Object not found - stop PTZ movement
@@ -192,23 +246,28 @@ export class TrackingController {
   private getFrameCallback: () => Promise<string | null>;
   private onStateChange: (state: TrackingState) => void;
   private state: TrackingState;
+  private modelId: string;
+  private customObject?: string;
 
   constructor(
     camera: CameraProfile,
     apiKey: string,
-    targetObject: string,
+    modelId: string,
     getFrame: () => Promise<string | null>,
     onStateChange: (state: TrackingState) => void,
-    config: Partial<TrackingConfig> = {}
+    config: Partial<TrackingConfig> = {},
+    customObject?: string
   ) {
     this.camera = camera;
     this.apiKey = apiKey;
+    this.modelId = modelId;
+    this.customObject = customObject;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.getFrameCallback = getFrame;
     this.onStateChange = onStateChange;
     this.state = {
       isTracking: false,
-      targetObject,
+      targetObject: customObject || getObjectDescription(modelId),
       lastDetection: null,
       lastPtzCommand: null,
       lastDirection: null,
@@ -272,9 +331,10 @@ export class TrackingController {
         const { detection, ptzCommand, direction } = await executeTrackingStep(
           this.camera,
           base64Data,
-          getObjectDescription(this.state.targetObject),
+          this.modelId,
           this.apiKey,
-          this.config
+          this.config,
+          this.customObject
         );
 
         // Check if in deadzone (no movement needed)

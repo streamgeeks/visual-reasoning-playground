@@ -1,36 +1,48 @@
-export type TrackingModel = "person" | "ball" | "face" | "multi-object";
+export type TrackingModel = "person" | "ball" | "face" | "multi-object" | "custom";
 
 export interface TrackingModelInfo {
   id: TrackingModel;
   name: string;
   description: string;
   icon: string;
+  usesYolo: boolean;
 }
 
 export const TRACKING_MODELS: TrackingModelInfo[] = [
   {
     id: "person",
     name: "Person Tracker",
-    description: "Optimized for tracking individual people. Best for interviews, presentations, and single-subject scenarios. Uses YOLOv8n-person model.",
+    description: "Optimized for tracking individual people. Best for interviews, presentations, and single-subject scenarios. Uses YOLOv8 - no API key required.",
     icon: "user",
+    usesYolo: true,
   },
   {
     id: "ball",
     name: "Ball Tracker",
-    description: "Specialized for tracking sports balls in motion. Ideal for basketball, soccer, tennis, and other ball sports. Uses YOLOv8n-ball model.",
+    description: "Specialized for tracking sports balls in motion. Ideal for basketball, soccer, tennis, and other ball sports. Uses YOLOv8 - no API key required.",
     icon: "circle",
+    usesYolo: true,
   },
   {
     id: "face",
     name: "Face Tracker",
-    description: "High-precision face detection and tracking. Perfect for close-up shots, video conferencing, and portrait framing. Uses YOLOv8n-face model.",
+    description: "High-precision face detection and tracking. Perfect for close-up shots, video conferencing, and portrait framing. Uses YOLOv8 - no API key required.",
     icon: "smile",
+    usesYolo: true,
   },
   {
     id: "multi-object",
     name: "Multi-Object",
-    description: "General-purpose object detection supporting 80+ object classes. Best for complex scenes with multiple subjects. Uses YOLOv8n-coco model.",
+    description: "General-purpose object detection supporting 80+ object classes. Best for complex scenes with multiple subjects. Uses YOLOv8 - no API key required.",
     icon: "grid",
+    usesYolo: true,
+  },
+  {
+    id: "custom",
+    name: "Custom Object",
+    description: "Track any object you describe! Uses Moondream AI to find anything - people, objects, colors, even abstract concepts. Requires API key.",
+    icon: "edit-3",
+    usesYolo: false,
   },
 ];
 

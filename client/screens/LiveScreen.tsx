@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -78,6 +79,7 @@ export default function LiveScreen({ navigation }: any) {
   const [cameraType, setCameraType] = useState<CameraType>("back");
   const [camera, setCamera] = useState<CameraProfile | null>(null);
   const [selectedModel, setSelectedModel] = useState<TrackingModel>("person");
+  const [customObject, setCustomObject] = useState("");
   const [isTracking, setIsTracking] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PerformanceStats>(() =>
@@ -209,13 +211,20 @@ export default function LiveScreen({ navigation }: any) {
       }
       
       // Create tracking controller
+      // For custom mode, require an object description
+      if (selectedModel === "custom" && !customObject.trim()) {
+        Alert.alert("Custom Object Required", "Please enter an object description to track.");
+        return;
+      }
+      
       const controller = new TrackingController(
         camera,
-        appSettings.moondreamApiKey,
+        appSettings?.moondreamApiKey || "",
         selectedModel,
         async () => latestFrameRef.current,
         (state) => setAutoTrackingState(state),
-        { updateInterval: 600 } // ~1.5 updates per second for Moondream
+        { updateInterval: selectedModel === "custom" ? 600 : 300 }, // Faster for YOLO
+        selectedModel === "custom" ? customObject.trim() : undefined
       );
       
       trackingControllerRef.current = controller;
@@ -223,7 +232,7 @@ export default function LiveScreen({ navigation }: any) {
       setIsTracking(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-  }, [isTracking, camera, ptzConnected, appSettings, selectedModel]);
+  }, [isTracking, camera, ptzConnected, appSettings, selectedModel, customObject]);
 
   const handlePTZMove = useCallback((pan: number, tilt: number) => {
     setPtzPosition({ pan, tilt });
@@ -517,7 +526,9 @@ export default function LiveScreen({ navigation }: any) {
                   {autoTrackingState?.lastDetection?.found 
                     ? (autoTrackingState.inDeadzone 
                         ? "LOCKED" 
-                        : `TRACKING ${autoTrackingState.lastDirection?.pan?.toUpperCase() || ""}${autoTrackingState.lastDirection?.tilt?.toUpperCase() || ""}`)
+                        : `TRACKING ${(autoTrackingState.lastDirection?.pan || autoTrackingState.lastDirection?.tilt) 
+                            ? [autoTrackingState.lastDirection?.pan, autoTrackingState.lastDirection?.tilt].filter(Boolean).join(" ").toUpperCase()
+                            : ""}`)
                     : "SEARCHING..."}
                 </Text>
               </Animated.View>
@@ -715,6 +726,8 @@ export default function LiveScreen({ navigation }: any) {
                   onCameraConnected={handlePtzConnected}
                   onFrameUpdate={handlePtzFrameUpdate}
                   onStreamModeChange={setPtzStreamMode}
+                  customObject={customObject}
+                  onCustomObjectChange={setCustomObject}
                 />
               ) : activeTool === "ptz" ? (
                 <PTZJoystick

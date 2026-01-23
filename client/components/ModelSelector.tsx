@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, Linking } from "react-native";
+import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, Linking, TextInput } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
@@ -40,6 +40,8 @@ interface ModelSelectorProps {
   onFrameUpdate?: (frameUri: string) => void;
   onStreamModeChange?: (mode: StreamMode) => void;
   onMjpegFallback?: () => void;
+  customObject?: string;
+  onCustomObjectChange?: (text: string) => void;
 }
 
 export function ModelSelector({
@@ -53,6 +55,8 @@ export function ModelSelector({
   onFrameUpdate,
   onStreamModeChange,
   onMjpegFallback,
+  customObject = "",
+  onCustomObjectChange,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
@@ -480,6 +484,24 @@ export function ModelSelector({
             {modelInfo.name}
           </Text>
 
+          {selectedModel === "custom" ? (
+            <TextInput
+              style={[
+                styles.customInput,
+                {
+                  backgroundColor: theme.backgroundSecondary,
+                  color: theme.text,
+                  borderColor: theme.primary,
+                },
+              ]}
+              placeholder="Describe object to track..."
+              placeholderTextColor={theme.textSecondary}
+              value={customObject}
+              onChangeText={onCustomObjectChange}
+              editable={!isTracking}
+            />
+          ) : null}
+
           <Pressable
             onPress={handleToggleTracking}
             disabled={!cameraConnected && Boolean(camera)}
@@ -713,6 +735,14 @@ const styles = StyleSheet.create({
   modelName: {
     flex: 1,
     fontSize: Typography.small.fontSize,
+  },
+  customInput: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    fontSize: Typography.body.fontSize,
   },
   trackButton: {
     flexDirection: "row",
