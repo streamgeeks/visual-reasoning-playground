@@ -65,6 +65,7 @@ import {
   BoundingBox,
   getObjectDescription,
 } from "@/lib/trackingService";
+import { sendPtzCommand, PTZ_COMMANDS } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -281,28 +282,83 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [isTracking, camera, ptzConnected, appSettings, selectedModel, customObject]);
 
-  const handlePTZMove = useCallback((pan: number, tilt: number) => {
+  const lastPtzCommand = useRef<string | null>(null);
+
+  const handlePTZMove = useCallback(async (pan: number, tilt: number) => {
     setPtzPosition({ pan, tilt });
-  }, []);
+    
+    if (!camera) return;
+    
+    // Determine command based on joystick position
+    let command: string | null = null;
+    
+    // Deadzone threshold - don't send commands for tiny movements
+    const threshold = 20;
+    
+    if (pan === 0 && tilt === 0) {
+      // Joystick released - stop movement
+      command = PTZ_COMMANDS.stop;
+    } else if (Math.abs(pan) > threshold || Math.abs(tilt) > threshold) {
+      // Determine direction based on pan/tilt values
+      const goingLeft = pan < -threshold;
+      const goingRight = pan > threshold;
+      const goingUp = tilt > threshold;
+      const goingDown = tilt < -threshold;
+      
+      if (goingUp && goingLeft) command = PTZ_COMMANDS.upleft;
+      else if (goingUp && goingRight) command = PTZ_COMMANDS.upright;
+      else if (goingDown && goingLeft) command = PTZ_COMMANDS.downleft;
+      else if (goingDown && goingRight) command = PTZ_COMMANDS.downright;
+      else if (goingUp) command = PTZ_COMMANDS.up;
+      else if (goingDown) command = PTZ_COMMANDS.down;
+      else if (goingLeft) command = PTZ_COMMANDS.left;
+      else if (goingRight) command = PTZ_COMMANDS.right;
+    }
+    
+    // Only send if command changed (avoid spamming same command)
+    if (command && command !== lastPtzCommand.current) {
+      lastPtzCommand.current = command;
+      await sendPtzCommand(camera, command);
+    }
+  }, [camera]);
 
-  const handleZoom = useCallback((zoom: number) => {
+  const handleZoom = useCallback(async (zoom: number) => {
+    const prevZoom = currentZoom;
     setCurrentZoom(zoom);
-  }, []);
+    
+    if (!camera) return;
+    
+    if (zoom > prevZoom) {
+      await sendPtzCommand(camera, PTZ_COMMANDS.zoomIn);
+      // Brief zoom pulse then stop
+      setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 200);
+    } else if (zoom < prevZoom) {
+      await sendPtzCommand(camera, PTZ_COMMANDS.zoomOut);
+      setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 200);
+    }
+  }, [camera, currentZoom]);
 
-  const handleQuickAction = useCallback((action: "home" | "center" | "wide") => {
+  const handleQuickAction = useCallback(async (action: "home" | "center" | "wide") => {
+    if (!camera) return;
+    
     switch (action) {
       case "home":
         setPtzPosition({ pan: 0, tilt: 0 });
         setCurrentZoom(0);
+        await sendPtzCommand(camera, PTZ_COMMANDS.home);
         break;
       case "center":
         setPtzPosition({ pan: 0, tilt: 0 });
+        await sendPtzCommand(camera, PTZ_COMMANDS.stop);
         break;
       case "wide":
         setCurrentZoom(0);
+        // Zoom out fully
+        await sendPtzCommand(camera, PTZ_COMMANDS.zoomOut);
+        setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 2000);
         break;
     }
-  }, []);
+  }, [camera]);
 
   const handleShowModelInfo = useCallback(() => {
     navigation.navigate("ModelInfo");
