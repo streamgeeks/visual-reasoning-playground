@@ -283,8 +283,9 @@ export default function LiveScreen({ navigation }: any) {
   }, [isTracking, camera, ptzConnected, appSettings, selectedModel, customObject]);
 
   const lastPtzCommand = useRef<string | null>(null);
+  const lastPtzSpeed = useRef<number>(0);
 
-  const handlePTZMove = useCallback(async (pan: number, tilt: number) => {
+  const handlePTZMove = useCallback(async (pan: number, tilt: number, speed: number) => {
     setPtzPosition({ pan, tilt });
     
     if (!camera) return;
@@ -293,9 +294,9 @@ export default function LiveScreen({ navigation }: any) {
     let command: string | null = null;
     
     // Deadzone threshold - don't send commands for tiny movements
-    const threshold = 20;
+    const threshold = 15;
     
-    if (pan === 0 && tilt === 0) {
+    if (pan === 0 && tilt === 0 && speed === 0) {
       // Joystick released - stop movement
       command = PTZ_COMMANDS.stop;
     } else if (Math.abs(pan) > threshold || Math.abs(tilt) > threshold) {
@@ -315,10 +316,12 @@ export default function LiveScreen({ navigation }: any) {
       else if (goingRight) command = PTZ_COMMANDS.right;
     }
     
-    // Only send if command changed (avoid spamming same command)
-    if (command && command !== lastPtzCommand.current) {
+    // Send if command changed OR speed changed significantly (by 3 or more)
+    const speedChanged = Math.abs(speed - lastPtzSpeed.current) >= 3;
+    if (command && (command !== lastPtzCommand.current || speedChanged)) {
       lastPtzCommand.current = command;
-      await sendPtzCommand(camera, command);
+      lastPtzSpeed.current = speed;
+      await sendPtzCommand(camera, command, speed > 0 ? speed : undefined);
     }
   }, [camera]);
 

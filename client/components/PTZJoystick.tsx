@@ -13,19 +13,22 @@ import { useTheme } from "@/hooks/useTheme";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 
 interface PTZJoystickProps {
-  onMove: (pan: number, tilt: number) => void;
+  onMove: (pan: number, tilt: number, speed: number) => void;
   onZoom: (zoom: number) => void;
   onQuickAction: (action: "home" | "center" | "wide") => void;
   currentZoom: number;
 }
 
-const JOYSTICK_SIZE = 160;
-const HANDLE_SIZE = 56;
+const JOYSTICK_SIZE = 220;
+const HANDLE_SIZE = 64;
 const MAX_OFFSET = (JOYSTICK_SIZE - HANDLE_SIZE) / 2;
+const MIN_SPEED = 6;
+const MAX_SPEED = 24;
 
 export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJoystickProps) {
   const { theme, isDark } = useTheme();
   const [isDragging, setIsDragging] = useState(false);
+  const [currentSpeed, setCurrentSpeed] = useState(0);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -39,10 +42,22 @@ export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJ
     (x: number, y: number) => {
       const panValue = Math.round((x / MAX_OFFSET) * 100);
       const tiltValue = Math.round((-y / MAX_OFFSET) * 100);
-      onMove(panValue, tiltValue);
+      
+      // Calculate distance from center (0-1)
+      const distance = Math.sqrt((x * x) + (y * y)) / MAX_OFFSET;
+      // Map distance to speed (MIN_SPEED to MAX_SPEED)
+      const speed = Math.round(MIN_SPEED + (distance * (MAX_SPEED - MIN_SPEED)));
+      
+      setCurrentSpeed(speed);
+      onMove(panValue, tiltValue, speed);
     },
     [onMove]
   );
+  
+  const handlePanEnd = useCallback(() => {
+    setCurrentSpeed(0);
+    onMove(0, 0, 0);
+  }, [onMove]);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
@@ -62,7 +77,7 @@ export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJ
       translateY.value = withSpring(0, { damping: 15 });
       handleScale.value = withSpring(1, { damping: 15 });
       runOnJS(setIsDragging)(false);
-      runOnJS(onMove)(0, 0);
+      runOnJS(handlePanEnd)();
     });
 
   const handleAnimatedStyle = useAnimatedStyle(() => ({
@@ -97,6 +112,11 @@ export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJ
         {/* Joystick */}
         <View style={styles.joystickContainer}>
           <View style={[styles.joystickTrack, { borderColor: theme.textSecondary }]}>
+            {/* Speed zone rings */}
+            <View style={[styles.speedZone, styles.speedZoneSlow, { borderColor: theme.success + "40" }]} />
+            <View style={[styles.speedZone, styles.speedZoneMed, { borderColor: theme.warning + "40" }]} />
+            <View style={[styles.speedZone, styles.speedZoneFast, { borderColor: theme.error + "40" }]} />
+            
             {/* Crosshair lines */}
             <View style={[styles.crosshairH, { backgroundColor: theme.textSecondary }]} />
             <View style={[styles.crosshairV, { backgroundColor: theme.textSecondary }]} />
@@ -106,12 +126,21 @@ export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJ
               <Animated.View
                 style={[
                   styles.joystickHandle,
-                  { backgroundColor: theme.primary },
+                  { backgroundColor: isDragging ? (currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success) : theme.primary },
                   handleAnimatedStyle,
                 ]}
               />
             </GestureDetector>
           </View>
+          
+          {/* Speed indicator */}
+          {isDragging ? (
+            <View style={[styles.speedIndicator, { backgroundColor: theme.backgroundDefault }]}>
+              <Text style={[styles.speedText, { color: currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success }]}>
+                Speed: {currentSpeed}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Zoom Controls */}
@@ -202,6 +231,7 @@ const styles = StyleSheet.create({
   joystickContainer: {
     width: JOYSTICK_SIZE,
     height: JOYSTICK_SIZE,
+    alignItems: "center",
   },
   joystickTrack: {
     width: JOYSTICK_SIZE,
@@ -211,6 +241,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(128, 128, 128, 0.1)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  speedZone: {
+    position: "absolute",
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderRadius: 999,
+  },
+  speedZoneSlow: {
+    width: JOYSTICK_SIZE * 0.4,
+    height: JOYSTICK_SIZE * 0.4,
+  },
+  speedZoneMed: {
+    width: JOYSTICK_SIZE * 0.65,
+    height: JOYSTICK_SIZE * 0.65,
+  },
+  speedZoneFast: {
+    width: JOYSTICK_SIZE * 0.9,
+    height: JOYSTICK_SIZE * 0.9,
   },
   crosshairH: {
     position: "absolute",
@@ -229,6 +277,18 @@ const styles = StyleSheet.create({
     height: HANDLE_SIZE,
     borderRadius: HANDLE_SIZE / 2,
     ...Shadows.small,
+  },
+  speedIndicator: {
+    position: "absolute",
+    bottom: -28,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
+  speedText: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: "600",
+    fontFamily: "monospace",
   },
   zoomContainer: {
     alignItems: "center",

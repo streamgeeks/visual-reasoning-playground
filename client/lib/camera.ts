@@ -267,10 +267,12 @@ function getBasicAuthHeader(camera: CameraProfile): HeadersInit {
   return headers;
 }
 
-export async function sendPtzCommand(camera: CameraProfile, command: string): Promise<boolean> {
+export async function sendPtzCommand(camera: CameraProfile, command: string, speed?: number): Promise<boolean> {
   const timeout = createTimeoutSignal(2000);
   try {
-    const url = getPtzControlUrl(camera, command);
+    // Add speed parameter if provided (PTZOptics uses &speed=1-24)
+    const fullCommand = speed ? `${command}&speed=${speed}` : command;
+    const url = getPtzControlUrl(camera, fullCommand);
     const headers = getBasicAuthHeader(camera);
     
     const response = await fetch(url, {
