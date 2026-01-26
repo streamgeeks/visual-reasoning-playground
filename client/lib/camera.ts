@@ -594,11 +594,11 @@ type ImageSettingParam =
   | "colortemp" 
   | "rgain" 
   | "bgain" 
-  | "BRIGHT" 
-  | "SATURATION" 
-  | "CONTRAST" 
-  | "SHARPNESS" 
-  | "HUE";
+  | "brightness" 
+  | "saturation" 
+  | "contrast" 
+  | "sharpness" 
+  | "hue";
 
 async function sendImageSettingCommand(
   camera: CameraProfile,
@@ -607,12 +607,11 @@ async function sendImageSettingCommand(
 ): Promise<boolean> {
   const base = `http://${camera.ipAddress}:${camera.httpPort}`;
   
-  // Try Basic Auth header first
   const authHeaders: HeadersInit = camera.username && camera.password ? {
     "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
   } : {};
   
-  const urlWithHeader = `${base}/cgi-bin/?post_image_value&${param}&${value}`;
+  const urlWithHeader = `${base}/cgi-bin/param.cgi?post_image_value&${param}&${value}`;
   
   try {
     const { signal, clear } = createTimeoutSignal(3000);
@@ -628,11 +627,10 @@ async function sendImageSettingCommand(
       return true;
     }
     
-    // Fallback to URL-based auth if header auth fails (403/401)
     if ((response.status === 401 || response.status === 403) && camera.username && camera.password) {
       console.log(`[Camera] Header auth failed (${response.status}), trying URL auth for ${param}`);
       
-      const urlWithAuth = `${base}/cgi-bin/?post_image_value&usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}&${param}&${value}`;
+      const urlWithAuth = `${base}/cgi-bin/param.cgi?post_image_value&usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}&${param}&${value}`;
       
       const { signal: signal2, clear: clear2 } = createTimeoutSignal(3000);
       const response2 = await fetch(urlWithAuth, { 
@@ -706,7 +704,7 @@ export async function setCameraBrightness(
     IMAGE_SETTING_RANGES.brightness.min,
     Math.min(IMAGE_SETTING_RANGES.brightness.max, Math.round(value))
   );
-  return sendImageSettingCommand(camera, "BRIGHT", clamped);
+  return sendImageSettingCommand(camera, "brightness", clamped);
 }
 
 export async function setCameraSaturation(
@@ -717,7 +715,7 @@ export async function setCameraSaturation(
     IMAGE_SETTING_RANGES.saturation.min,
     Math.min(IMAGE_SETTING_RANGES.saturation.max, Math.round(value))
   );
-  return sendImageSettingCommand(camera, "SATURATION", clamped);
+  return sendImageSettingCommand(camera, "saturation", clamped);
 }
 
 export async function setCameraContrast(
@@ -728,7 +726,7 @@ export async function setCameraContrast(
     IMAGE_SETTING_RANGES.contrast.min,
     Math.min(IMAGE_SETTING_RANGES.contrast.max, Math.round(value))
   );
-  return sendImageSettingCommand(camera, "CONTRAST", clamped);
+  return sendImageSettingCommand(camera, "contrast", clamped);
 }
 
 export async function setCameraSharpness(
@@ -739,7 +737,7 @@ export async function setCameraSharpness(
     IMAGE_SETTING_RANGES.sharpness.min,
     Math.min(IMAGE_SETTING_RANGES.sharpness.max, Math.round(value))
   );
-  return sendImageSettingCommand(camera, "SHARPNESS", clamped);
+  return sendImageSettingCommand(camera, "sharpness", clamped);
 }
 
 export async function setCameraHue(
@@ -750,7 +748,7 @@ export async function setCameraHue(
     IMAGE_SETTING_RANGES.hue.min,
     Math.min(IMAGE_SETTING_RANGES.hue.max, Math.round(value))
   );
-  return sendImageSettingCommand(camera, "HUE", clamped);
+  return sendImageSettingCommand(camera, "hue", clamped);
 }
 
 export async function applyCameraImageSettings(
