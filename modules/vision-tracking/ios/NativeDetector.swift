@@ -93,29 +93,62 @@ class NativeDetector {
         print("[NativeDetector] Searching for YOLO model in bundle: \(bundle.bundlePath)")
         
         for modelName in modelNames {
-            if let modelURL = bundle.url(forResource: modelName, withExtension: "mlmodelc") ??
-                              bundle.url(forResource: modelName, withExtension: "mlpackage") {
-                do {
-                    let config = MLModelConfiguration()
-                    if #available(iOS 16.0, *) {
-                        config.computeUnits = .cpuAndNeuralEngine
-                    } else {
-                        config.computeUnits = .all
-                    }
-                    
-                    let mlModel = try MLModel(contentsOf: modelURL, configuration: config)
-                    yoloModel = try VNCoreMLModel(for: mlModel)
-                    isYOLOLoaded = true
-                    print("[NativeDetector] YOLO model loaded successfully: \(modelName) from \(modelURL.path)")
+            if let compiledURL = bundle.url(forResource: modelName, withExtension: "mlmodelc") {
+                if loadYOLOFromURL(compiledURL) {
                     return
+                }
+            }
+            
+            if let packageURL = bundle.url(forResource: modelName, withExtension: "mlpackage") {
+                print("[NativeDetector] Found .mlpackage, compiling at runtime: \(packageURL.path)")
+                do {
+                    let compiledURL = try MLModel.compileModel(at: packageURL)
+                    print("[NativeDetector] Compiled to: \(compiledURL.path)")
+                    if loadYOLOFromURL(compiledURL) {
+                        return
+                    }
                 } catch {
-                    print("[NativeDetector] Failed to load YOLO model \(modelName): \(error)")
+                    print("[NativeDetector] Failed to compile .mlpackage: \(error)")
                 }
             }
         }
         
         print("[NativeDetector] YOLO model not found. Searched in: \(bundle.bundlePath)")
-        print("[NativeDetector] Place yolov8n.mlpackage in modules/vision-tracking/ios/Models/")
+        listBundleContents(bundle)
+    }
+    
+    private func loadYOLOFromURL(_ modelURL: URL) -> Bool {
+        do {
+            let config = MLModelConfiguration()
+            if #available(iOS 16.0, *) {
+                config.computeUnits = .cpuAndNeuralEngine
+            } else {
+                config.computeUnits = .all
+            }
+            
+            let mlModel = try MLModel(contentsOf: modelURL, configuration: config)
+            yoloModel = try VNCoreMLModel(for: mlModel)
+            isYOLOLoaded = true
+            print("[NativeDetector] YOLO model loaded successfully from \(modelURL.path)")
+            return true
+        } catch {
+            print("[NativeDetector] Failed to load YOLO model from \(modelURL.path): \(error)")
+            return false
+        }
+    }
+    
+    private func listBundleContents(_ bundle: Bundle) {
+        print("[NativeDetector] Bundle contents:")
+        if let resourcePath = bundle.resourcePath {
+            do {
+                let contents = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
+                for item in contents.prefix(20) {
+                    print("  - \(item)")
+                }
+            } catch {
+                print("  Failed to list: \(error)")
+            }
+        }
     }
     
     private func loadCLIPModels() {
