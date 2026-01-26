@@ -49,29 +49,24 @@ class NativeDetector {
     // MARK: - Bundle for Resources
     private var moduleBundle: Bundle {
         let frameworkBundle = Bundle(for: NativeDetector.self)
+        let mainBundle = Bundle.main
         
-        if let resourceBundleURL = frameworkBundle.url(forResource: "VisionTrackingModels", withExtension: "bundle"),
-           let resourceBundle = Bundle(url: resourceBundleURL) {
-            print("[NativeDetector] Using resource bundle: \(resourceBundleURL.path)")
-            return resourceBundle
+        for bundle in [frameworkBundle, mainBundle] {
+            if bundle.url(forResource: "yolov8n", withExtension: "mlmodelc") != nil ||
+               bundle.url(forResource: "yolov8n", withExtension: "mlpackage") != nil ||
+               bundle.path(forResource: "yolov8n", ofType: "mlmodelc") != nil ||
+               bundle.path(forResource: "yolov8n", ofType: "mlpackage") != nil {
+                print("[NativeDetector] Found model in bundle: \(bundle.bundlePath)")
+                return bundle
+            }
+            
+            if let modelsPath = bundle.path(forResource: "Models", ofType: nil) {
+                print("[NativeDetector] Found Models directory in: \(bundle.bundlePath)")
+                return bundle
+            }
         }
         
-        if let resourceBundleURL = Bundle.main.url(forResource: "VisionTrackingModels", withExtension: "bundle"),
-           let resourceBundle = Bundle(url: resourceBundleURL) {
-            print("[NativeDetector] Using main bundle resource: \(resourceBundleURL.path)")
-            return resourceBundle
-        }
-        
-        let candidates = [frameworkBundle, Bundle.main]
-        if let found = candidates.first(where: { bundle in
-            bundle.url(forResource: "yolov8n", withExtension: "mlmodelc") != nil ||
-            bundle.url(forResource: "yolov8n", withExtension: "mlpackage") != nil
-        }) {
-            print("[NativeDetector] Using direct bundle: \(found.bundlePath)")
-            return found
-        }
-        
-        print("[NativeDetector] No model bundle found, using framework bundle")
+        print("[NativeDetector] No model found, using framework bundle: \(frameworkBundle.bundlePath)")
         return frameworkBundle
     }
     
@@ -92,29 +87,52 @@ class NativeDetector {
         
         print("[NativeDetector] Searching for YOLO model in bundle: \(bundle.bundlePath)")
         
+        var searchPaths: [URL] = []
+        if let resourcePath = bundle.resourcePath {
+            searchPaths.append(URL(fileURLWithPath: resourcePath))
+            searchPaths.append(URL(fileURLWithPath: resourcePath).appendingPathComponent("Models"))
+        }
+        if let bundleURL = bundle.resourceURL {
+            searchPaths.append(bundleURL)
+            searchPaths.append(bundleURL.appendingPathComponent("Models"))
+        }
+        
         for modelName in modelNames {
             if let compiledURL = bundle.url(forResource: modelName, withExtension: "mlmodelc") {
-                if loadYOLOFromURL(compiledURL) {
-                    return
-                }
+                if loadYOLOFromURL(compiledURL) { return }
             }
             
             if let packageURL = bundle.url(forResource: modelName, withExtension: "mlpackage") {
-                print("[NativeDetector] Found .mlpackage, compiling at runtime: \(packageURL.path)")
-                do {
-                    let compiledURL = try MLModel.compileModel(at: packageURL)
-                    print("[NativeDetector] Compiled to: \(compiledURL.path)")
-                    if loadYOLOFromURL(compiledURL) {
-                        return
-                    }
-                } catch {
-                    print("[NativeDetector] Failed to compile .mlpackage: \(error)")
+                if compileAndLoadMLPackage(packageURL) { return }
+            }
+            
+            for basePath in searchPaths {
+                let compiledURL = basePath.appendingPathComponent("\(modelName).mlmodelc")
+                if FileManager.default.fileExists(atPath: compiledURL.path) {
+                    if loadYOLOFromURL(compiledURL) { return }
+                }
+                
+                let packageURL = basePath.appendingPathComponent("\(modelName).mlpackage")
+                if FileManager.default.fileExists(atPath: packageURL.path) {
+                    if compileAndLoadMLPackage(packageURL) { return }
                 }
             }
         }
         
-        print("[NativeDetector] YOLO model not found. Searched in: \(bundle.bundlePath)")
+        print("[NativeDetector] YOLO model not found")
         listBundleContents(bundle)
+    }
+    
+    private func compileAndLoadMLPackage(_ packageURL: URL) -> Bool {
+        print("[NativeDetector] Found .mlpackage, compiling at runtime: \(packageURL.path)")
+        do {
+            let compiledURL = try MLModel.compileModel(at: packageURL)
+            print("[NativeDetector] Compiled to: \(compiledURL.path)")
+            return loadYOLOFromURL(compiledURL)
+        } catch {
+            print("[NativeDetector] Failed to compile .mlpackage: \(error)")
+            return false
+        }
     }
     
     private func loadYOLOFromURL(_ modelURL: URL) -> Bool {

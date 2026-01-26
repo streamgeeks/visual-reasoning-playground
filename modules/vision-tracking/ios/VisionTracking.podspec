@@ -26,17 +26,6 @@ Pod::Spec.new do |s|
 
   s.source_files = "**/*.{h,m,swift}"
   
-  # CoreML models - include both source (.mlpackage) and compiled (.mlmodelc)
-  # Xcode will compile .mlpackage during build if added properly
-  s.resource_bundles = {
-    'VisionTrackingModels' => [
-      'Models/*.mlmodelc',
-      'Models/*.mlmodelc/**/*',
-      'Models/*.mlpackage',
-      'Models/*.mlpackage/**/*'
-    ]
-  }
-  
-  # Preserve model directory structure for Xcode
-  s.preserve_paths = ['Models/**/*']
+  s.resources = ['Models']
+  s.preserve_paths = ['Models', 'Models/**/*']
 end
