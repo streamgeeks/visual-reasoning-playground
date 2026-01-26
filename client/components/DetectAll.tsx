@@ -23,7 +23,10 @@ import {
 interface DetectAllProps {
   isConnected: boolean;
   getFrame: () => Promise<string | null>;
+  onDetectionsChange?: (detections: LabeledDetection[]) => void;
 }
+
+export type { LabeledDetection };
 
 interface LabeledDetection extends NativeDetectionResult {
   color: string;
@@ -45,7 +48,7 @@ function getColorForLabel(label: string, index: number): string {
   return DETECTION_COLORS[(hash + index) % DETECTION_COLORS.length];
 }
 
-export function DetectAll({ isConnected, getFrame }: DetectAllProps) {
+export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectAllProps) {
   const { theme } = useTheme();
   
   const [isDetecting, setIsDetecting] = useState(false);
@@ -92,6 +95,7 @@ export function DetectAll({ isConnected, getFrame }: DetectAllProps) {
       
       setDetections(labeled);
       setLastDetectionTime(Date.now() - startTime);
+      onDetectionsChange?.(labeled);
       
       if (results.length > 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -99,6 +103,7 @@ export function DetectAll({ isConnected, getFrame }: DetectAllProps) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Detection failed");
       setDetections([]);
+      onDetectionsChange?.([]);
     } finally {
       setIsDetecting(false);
       detectingRef.current = false;

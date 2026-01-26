@@ -39,7 +39,7 @@ import { AIPhotographer, PhotoCapture, DetectionResult } from "@/components/AIPh
 import { HuntAndFind } from "@/components/HuntAndFind";
 import { PeopleCounter } from "@/components/PeopleCounter";
 import { ColorMatcher } from "@/components/ColorMatcher";
-import { DetectAll } from "@/components/DetectAll";
+import { DetectAll, DetectAllOverlay, LabeledDetection } from "@/components/DetectAll";
 import { ToolHeader } from "@/components/ToolHeader";
 import { ModelSelector, StreamMode } from "@/components/ModelSelector";
 import { CameraStream } from "@/components/CameraStream";
@@ -150,6 +150,8 @@ const [camera, setCamera] = useState<CameraProfile | null>(null);
   const [aiDetection, setAiDetection] = useState<DetectionResult | null>(null);
   const [aiFlashEffect, setAiFlashEffect] = useState(false);
   const aiDetectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [detectAllDetections, setDetectAllDetections] = useState<LabeledDetection[]>([]);
 
   // Person selection mode state
   const [selectPersonMode, setSelectPersonMode] = useState(false);
@@ -698,11 +700,15 @@ const [cameras, currentId, settings] = await Promise.all([
   }, [navigation]);
 
   const openTool = useCallback((tool: string) => {
+    if (tool !== "detectall") {
+      setDetectAllDetections([]);
+    }
     setActiveTool(tool);
     Haptics.selectionAsync();
   }, []);
 
   const closeTool = useCallback(() => {
+    setDetectAllDetections([]);
     setActiveTool(null);
     Haptics.selectionAsync();
   }, []);
@@ -1065,7 +1071,6 @@ const [cameras, currentId, settings] = await Promise.all([
               </Pressable>
             )}
 
-            {/* AI Photographer detection box - zooms with video */}
             {aiDetection?.box && (
               <DetectionBoxOverlay
                 box={aiDetection.box}
@@ -1076,7 +1081,14 @@ const [cameras, currentId, settings] = await Promise.all([
               />
             )}
 
-            {/* Stats overlay */}
+            {activeTool === "detectall" && detectAllDetections.length > 0 && (
+              <DetectAllOverlay
+                detections={detectAllDetections}
+                containerWidth={VIDEO_WIDTH}
+                containerHeight={VIDEO_HEIGHT}
+              />
+            )}
+
             {showStats ? (
               <Animated.View
                 entering={FadeIn.duration(200)}
@@ -1593,6 +1605,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 <DetectAll
                   isConnected={ptzConnected || (permission?.granted ?? false)}
                   getFrame={captureFrameForAI}
+                  onDetectionsChange={setDetectAllDetections}
                 />
               ) : activeTool === "colormatcher" ? (
                 <ColorMatcher
