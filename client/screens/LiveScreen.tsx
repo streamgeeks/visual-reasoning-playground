@@ -39,6 +39,7 @@ import { AIPhotographer, PhotoCapture, DetectionResult } from "@/components/AIPh
 import { HuntAndFind } from "@/components/HuntAndFind";
 import { PeopleCounter } from "@/components/PeopleCounter";
 import { ColorMatcher } from "@/components/ColorMatcher";
+import { DetectAll } from "@/components/DetectAll";
 import { ToolHeader } from "@/components/ToolHeader";
 import { ModelSelector, StreamMode } from "@/components/ModelSelector";
 import { CameraStream } from "@/components/CameraStream";
@@ -1259,6 +1260,25 @@ const [cameras, currentId, settings] = await Promise.all([
             </Pressable>
 
             <Pressable
+              onPress={() => openTool("detectall")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="grid" size={18} color={theme.success} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Detect All Objects
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>YOLO</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
               onPress={() => openTool("colormatcher")}
               style={({ pressed }) => [
                 styles.toolRow,
@@ -1319,6 +1339,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 activeTool === "photographer" ? "AI Photographer" :
                 activeTool === "huntfind" ? "Hunt & Find" :
                 activeTool === "peoplecounter" ? "People Counter" :
+                activeTool === "detectall" ? "Detect All Objects" :
                 activeTool === "colormatcher" ? "Color Matcher" :
                 activeTool === "tracking" ? "Object Tracking" :
                 activeTool === "ptz" ? "Camera Controls" : "Tool"
@@ -1329,6 +1350,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 activeTool === "photographer" ? "aperture" :
                 activeTool === "huntfind" ? "search" :
                 activeTool === "peoplecounter" ? "users" :
+                activeTool === "detectall" ? "grid" :
                 activeTool === "colormatcher" ? "sliders" :
                 activeTool === "tracking" ? "target" :
                 activeTool === "ptz" ? "move" : "tool"
@@ -1339,6 +1361,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 activeTool === "photographer" ? theme.warning :
                 activeTool === "huntfind" ? theme.success :
                 activeTool === "peoplecounter" ? theme.warning :
+                activeTool === "detectall" ? theme.success :
                 activeTool === "colormatcher" ? theme.success :
                 activeTool === "tracking" ? theme.primary :
                 activeTool === "ptz" ? theme.primary : theme.primary
@@ -1349,6 +1372,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 activeTool === "photographer" ? "AI" :
                 activeTool === "huntfind" ? "AI" :
                 activeTool === "peoplecounter" ? "Vision" :
+                activeTool === "detectall" ? "YOLO" :
                 activeTool === "colormatcher" ? "PTZ" :
                 undefined
               }
@@ -1358,6 +1382,7 @@ const [cameras, currentId, settings] = await Promise.all([
                 activeTool === "photographer" ? theme.warning :
                 activeTool === "huntfind" ? theme.success :
                 activeTool === "peoplecounter" ? theme.warning :
+                activeTool === "detectall" ? theme.success :
                 activeTool === "colormatcher" ? theme.success :
                 undefined
               }
@@ -1559,6 +1584,12 @@ const [cameras, currentId, settings] = await Promise.all([
                 <PeopleCounter
                   getFrame={captureFrameForAI}
                   isConnected={ptzConnected || (permission?.granted ?? false)}
+                />
+              ) : activeTool === "detectall" ? (
+                <DetectAll
+                  camera={camera}
+                  isConnected={ptzConnected}
+                  currentFrame={ptzFrame}
                 />
               ) : activeTool === "colormatcher" ? (
                 <ColorMatcher
