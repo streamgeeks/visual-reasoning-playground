@@ -47,23 +47,32 @@ class NativeDetector {
     private(set) var isCLIPLoaded: Bool = false
     
     // MARK: - Bundle for Resources
-    /// Get the bundle containing this module's resources (models)
     private var moduleBundle: Bundle {
-        // For CocoaPods/Expo modules, resources are in the module's bundle, not Bundle.main
-        let candidates = [
-            // Bundle for this class (preferred)
-            Bundle(for: NativeDetector.self),
-            // Main bundle as fallback
-            Bundle.main,
-            // Framework bundle
-            Bundle(for: type(of: self))
-        ]
-        return candidates.first { bundle in
+        let frameworkBundle = Bundle(for: NativeDetector.self)
+        
+        if let resourceBundleURL = frameworkBundle.url(forResource: "VisionTrackingModels", withExtension: "bundle"),
+           let resourceBundle = Bundle(url: resourceBundleURL) {
+            print("[NativeDetector] Using resource bundle: \(resourceBundleURL.path)")
+            return resourceBundle
+        }
+        
+        if let resourceBundleURL = Bundle.main.url(forResource: "VisionTrackingModels", withExtension: "bundle"),
+           let resourceBundle = Bundle(url: resourceBundleURL) {
+            print("[NativeDetector] Using main bundle resource: \(resourceBundleURL.path)")
+            return resourceBundle
+        }
+        
+        let candidates = [frameworkBundle, Bundle.main]
+        if let found = candidates.first(where: { bundle in
             bundle.url(forResource: "yolov8n", withExtension: "mlmodelc") != nil ||
-            bundle.url(forResource: "yolov8n", withExtension: "mlpackage") != nil ||
-            bundle.url(forResource: "YOLOv8n", withExtension: "mlmodelc") != nil ||
-            bundle.url(forResource: "YOLOv8n", withExtension: "mlpackage") != nil
-        } ?? Bundle(for: NativeDetector.self)
+            bundle.url(forResource: "yolov8n", withExtension: "mlpackage") != nil
+        }) {
+            print("[NativeDetector] Using direct bundle: \(found.bundlePath)")
+            return found
+        }
+        
+        print("[NativeDetector] No model bundle found, using framework bundle")
+        return frameworkBundle
     }
     
     private init() {
