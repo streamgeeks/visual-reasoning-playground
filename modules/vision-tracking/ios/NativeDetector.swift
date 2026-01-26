@@ -88,7 +88,11 @@ class NativeDetector {
                               bundle.url(forResource: modelName, withExtension: "mlpackage") {
                 do {
                     let config = MLModelConfiguration()
-                    config.computeUnits = .cpuAndNeuralEngine
+                    if #available(iOS 16.0, *) {
+                        config.computeUnits = .cpuAndNeuralEngine
+                    } else {
+                        config.computeUnits = .all
+                    }
                     
                     let mlModel = try MLModel(contentsOf: modelURL, configuration: config)
                     yoloModel = try VNCoreMLModel(for: mlModel)
@@ -115,7 +119,11 @@ class NativeDetector {
                               bundle.url(forResource: modelName, withExtension: "mlpackage") {
                 do {
                     let config = MLModelConfiguration()
-                    config.computeUnits = .cpuAndNeuralEngine
+                    if #available(iOS 16.0, *) {
+                        config.computeUnits = .cpuAndNeuralEngine
+                    } else {
+                        config.computeUnits = .all
+                    }
                     clipImageModel = try MLModel(contentsOf: modelURL, configuration: config)
                     print("[NativeDetector] CLIP image encoder loaded: \(modelName)")
                     break
@@ -130,7 +138,11 @@ class NativeDetector {
                               bundle.url(forResource: modelName, withExtension: "mlpackage") {
                 do {
                     let config = MLModelConfiguration()
-                    config.computeUnits = .cpuAndNeuralEngine
+                    if #available(iOS 16.0, *) {
+                        config.computeUnits = .cpuAndNeuralEngine
+                    } else {
+                        config.computeUnits = .all
+                    }
                     clipTextModel = try MLModel(contentsOf: modelURL, configuration: config)
                     print("[NativeDetector] CLIP text encoder loaded: \(modelName)")
                     break
