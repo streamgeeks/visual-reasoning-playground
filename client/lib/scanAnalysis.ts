@@ -33,6 +33,74 @@ import {
   getPtzDirectionFromPanTilt,
 } from "@/lib/trackingService";
 import * as VisionTracking from "vision-tracking";
+import { detectAllObjects, NativeDetectionResult, checkNativeDetectionStatus } from "@/lib/nativeDetection";
+
+// Detection mode for Hunt & Find
+export type DetectionMode = "moondream" | "yolo";
+
+// COCO class names that YOLO can detect (80 classes)
+export const YOLO_CLASSES = [
+  "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+  "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+  "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+  "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
+  "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
+  "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+  "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
+  "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
+  "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+  "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
+];
+
+// Map YOLO labels to our object categories
+function yoloLabelToCategory(label: string): ObjectCategory {
+  const labelLower = label.toLowerCase();
+  
+  // Person
+  if (labelLower === "person") return "person";
+  
+  // Electronics
+  if (["tv", "laptop", "mouse", "remote", "keyboard", "cell phone"].includes(labelLower)) {
+    return "electronics";
+  }
+  
+  // Furniture
+  if (["chair", "couch", "bed", "dining table", "bench"].includes(labelLower)) {
+    return "furniture";
+  }
+  
+  // Appliances
+  if (["microwave", "oven", "toaster", "sink", "refrigerator"].includes(labelLower)) {
+    return "appliance";
+  }
+  
+  // Plants
+  if (labelLower === "potted plant") return "plant";
+  
+  // Lighting (YOLO doesn't have lamps, so clock/vase might be closest to decor)
+  if (["clock", "vase"].includes(labelLower)) return "decor";
+  
+  // Storage (books can indicate shelves)
+  if (labelLower === "book") return "storage";
+  
+  // Animals as "other" - they're detected but not room objects
+  if (["bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "teddy bear"].includes(labelLower)) {
+    return "other";
+  }
+  
+  // Kitchen/food items
+  if (["bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+       "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake"].includes(labelLower)) {
+    return "other";
+  }
+  
+  // Vehicles (usually not indoor, but just in case)
+  if (["bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"].includes(labelLower)) {
+    return "other";
+  }
+  
+  return "other";
+}
 
 const OBJECT_DETECTION_PROMPT = `Analyze this room image carefully. List ALL distinct objects you can see.
 
@@ -235,6 +303,68 @@ export async function analyzePositionImage(
   return detectedObjects;
 }
 
+export async function analyzePositionImageYOLO(
+  imageBase64: string,
+  position: ScanPosition
+): Promise<Omit<DetectedObject, "id" | "scanId" | "detectedAt">[]> {
+  const status = await checkNativeDetectionStatus();
+  if (!status.yoloLoaded) {
+    console.error("[ScanAnalysis/YOLO] YOLO model not loaded");
+    return [];
+  }
+
+  try {
+    const detections = await detectAllObjects(imageBase64);
+    console.log(`[ScanAnalysis/YOLO] Detected ${detections.length} objects`);
+
+    const detectedObjects: Omit<DetectedObject, "id" | "scanId" | "detectedAt">[] = [];
+
+    for (const det of detections) {
+      const boundingBox: BoundingBox = {
+        x_min: det.boundingBox.x,
+        y_min: det.boundingBox.y,
+        x_max: det.boundingBox.x + det.boundingBox.width,
+        y_max: det.boundingBox.y + det.boundingBox.height,
+      };
+
+      const category = yoloLabelToCategory(det.label);
+      const relativeLocation = getRelativeLocationFromBox(boundingBox);
+
+      const boxWidth = det.boundingBox.width * 100;
+      const boxHeight = det.boundingBox.height * 100;
+      console.log(`[ScanAnalysis/YOLO] "${det.label}" conf=${det.confidence.toFixed(2)} box=${boxWidth.toFixed(1)}%x${boxHeight.toFixed(1)}%`);
+
+      detectedObjects.push({
+        positionId: position.id,
+        presetSlot: position.presetSlot,
+        images: [],
+        zoomRoundCompleted: false,
+        starred: false,
+        name: det.label,
+        category,
+        description: "On-device YOLO detection",
+        confidence: det.confidence,
+        boundingBox,
+        relativeLocation,
+        importance: 5,
+        importanceReason: null,
+        thumbnailUri: null,
+      });
+    }
+
+    console.log(`[ScanAnalysis/YOLO] Position complete: ${detectedObjects.length} objects detected`);
+    return detectedObjects;
+  } catch (err) {
+    console.error("[ScanAnalysis/YOLO] Detection failed:", err);
+    return [];
+  }
+}
+
+export async function isYOLOAvailable(): Promise<boolean> {
+  const status = await checkNativeDetectionStatus();
+  return status.yoloLoaded;
+}
+
 export type CustomRanker = (objects: Array<{
   id: string;
   name: string;
@@ -412,11 +542,15 @@ export async function analyzeFullScan(
   scan: RoomScan,
   apiKey: string,
   onProgress?: (positionIndex: number, total: number) => void,
-  customRanker?: CustomRanker
+  customRanker?: CustomRanker,
+  detectionMode: DetectionMode = "moondream"
 ): Promise<RoomScan> {
   let updatedScan = { ...scan };
   const allObjects: DetectedObject[] = [];
   const analysisTimings: AnalysisTiming[] = [];
+  
+  const modeLabel = detectionMode === "yolo" ? "YOLO" : "Moondream";
+  console.log(`[ScanAnalysis] Using ${modeLabel} detection mode`);
   
   for (let i = 0; i < scan.positions.length; i++) {
     const position = scan.positions[i];
@@ -434,7 +568,7 @@ export async function analyzeFullScan(
     }
     
     onProgress?.(i, scan.positions.length);
-    console.log(`[ScanAnalysis] Analyzing position ${i + 1}/${scan.positions.length}`);
+    console.log(`[ScanAnalysis] Analyzing position ${i + 1}/${scan.positions.length} with ${modeLabel}`);
     
     const analysisStartMs = Date.now();
     let objectsDetected = 0;
@@ -445,7 +579,9 @@ export async function analyzeFullScan(
         imageBase64 = imageBase64.split(",")[1];
       }
       
-      const detectedObjects = await analyzePositionImage(imageBase64, apiKey, position);
+      const detectedObjects = detectionMode === "yolo"
+        ? await analyzePositionImageYOLO(imageBase64, position)
+        : await analyzePositionImage(imageBase64, apiKey, position);
       objectsDetected = detectedObjects.length;
       
       for (const obj of detectedObjects) {
@@ -456,7 +592,8 @@ export async function analyzeFullScan(
       
       updatedScan = updateScanPosition(updatedScan, i, { status: "analyzed" });
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const delayMs = detectionMode === "yolo" ? 100 : 500;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
       
     } catch (err) {
       console.error(`[ScanAnalysis] Error analyzing position ${i}:`, err);

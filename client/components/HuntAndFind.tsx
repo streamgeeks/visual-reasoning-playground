@@ -46,7 +46,7 @@ import {
   sendHomeViscaCommand,
 } from "@/lib/camera";
 import { StreamMode } from "@/components/ModelSelector";
-import { enhanceStarredObject } from "@/lib/scanAnalysis";
+import { enhanceStarredObject, DetectionMode, isYOLOAvailable, YOLO_CLASSES } from "@/lib/scanAnalysis";
 import { useLocalLLM } from "@/lib/localLLM";
 import { centerObjectWithVision, CenteringProgress } from "@/lib/visionCentering";
 import { isVisionAvailable } from "vision-tracking";
@@ -102,11 +102,20 @@ export function HuntAndFind({
   const [centeringProgress, setCenteringProgress] = useState<CenteringProgress | null>(null);
   const [renamingScan, setRenamingScan] = useState<RoomScan | null>(null);
   const [renameText, setRenameText] = useState("");
+  const [detectionMode, setDetectionMode] = useState<DetectionMode>("moondream");
+  const [yoloAvailable, setYoloAvailable] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadPreviousScans();
+    checkYOLOAvailability();
   }, []);
+
+  const checkYOLOAvailability = async () => {
+    const available = await isYOLOAvailable();
+    setYoloAvailable(available);
+    console.log("[HuntAndFind] YOLO available:", available);
+  };
 
   useEffect(() => {
     if (scanEngine.state.status === "scanning") {
@@ -169,14 +178,15 @@ export function HuntAndFind({
       Alert.alert("No Camera", "Please connect a PTZ camera first.");
       return;
     }
-    if (!hasApiKey) {
-      Alert.alert("API Key Required", "Please add your Moondream API key in Settings.");
+    if (detectionMode === "moondream" && !hasApiKey) {
+      Alert.alert("API Key Required", "Please add your Moondream API key in Settings, or use YOLO mode.");
       return;
     }
     
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const name = `Scan ${now.toLocaleDateString()} ${timeStr}`;
+    const modeLabel = detectionMode === "yolo" ? "YOLO" : "";
+    const name = `${modeLabel ? modeLabel + " " : ""}Scan ${now.toLocaleDateString()} ${timeStr}`;
     
     scanEngine.setConfig({
       speed: selectedPattern.speed,
@@ -191,7 +201,7 @@ export function HuntAndFind({
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    await scanEngine.runFullScanWithAnalysis(name, apiKey, selectedPattern.gridConfig, zoomRoundsConfig, localLLM.rankObjects);
+    await scanEngine.runFullScanWithAnalysis(name, apiKey, selectedPattern.gridConfig, zoomRoundsConfig, localLLM.rankObjects, detectionMode);
   };
 
   const handleCancelScan = () => {
@@ -1413,6 +1423,79 @@ export function HuntAndFind({
           </View>
         )}
 
+        <View style={styles.detectionModeContainer}>
+          <Text style={[styles.detectionModeLabel, { color: theme.textSecondary }]}>
+            Detection Mode:
+          </Text>
+          <View style={styles.detectionModeButtons}>
+            <Pressable
+              onPress={() => {
+                setDetectionMode("moondream");
+                Haptics.selectionAsync();
+              }}
+              style={[
+                styles.detectionModeButton,
+                { 
+                  backgroundColor: detectionMode === "moondream" ? theme.primary : theme.backgroundSecondary,
+                  borderTopLeftRadius: BorderRadius.sm,
+                  borderBottomLeftRadius: BorderRadius.sm,
+                },
+              ]}
+            >
+              <Feather 
+                name="cloud" 
+                size={14} 
+                color={detectionMode === "moondream" ? "#fff" : theme.textSecondary} 
+              />
+              <Text style={[
+                styles.detectionModeButtonText,
+                { color: detectionMode === "moondream" ? "#fff" : theme.textSecondary },
+              ]}>
+                Moondream
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (yoloAvailable) {
+                  setDetectionMode("yolo");
+                  Haptics.selectionAsync();
+                } else {
+                  Alert.alert(
+                    "YOLO Not Available",
+                    "YOLO detection requires iOS with the CoreML model loaded. Make sure you're running on a physical device."
+                  );
+                }
+              }}
+              style={[
+                styles.detectionModeButton,
+                { 
+                  backgroundColor: detectionMode === "yolo" ? theme.success : theme.backgroundSecondary,
+                  borderTopRightRadius: BorderRadius.sm,
+                  borderBottomRightRadius: BorderRadius.sm,
+                  opacity: yoloAvailable ? 1 : 0.5,
+                },
+              ]}
+            >
+              <Feather 
+                name="smartphone" 
+                size={14} 
+                color={detectionMode === "yolo" ? "#fff" : theme.textSecondary} 
+              />
+              <Text style={[
+                styles.detectionModeButtonText,
+                { color: detectionMode === "yolo" ? "#fff" : theme.textSecondary },
+              ]}>
+                YOLO
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={[styles.detectionModeHint, { color: theme.textSecondary }]}>
+            {detectionMode === "moondream" 
+              ? "Cloud AI - understands natural language, finds any object" 
+              : `On-device - fast, no API key needed (${YOLO_CLASSES.length} object types)`}
+          </Text>
+        </View>
+
         <View style={styles.zoomRoundsContainer}>
           <View style={styles.zoomRoundsHeader}>
             <Text style={[styles.zoomRoundsLabel, { color: theme.textSecondary }]}>
@@ -1485,17 +1568,19 @@ export function HuntAndFind({
         
         <Pressable
           onPress={handleStartScan}
-          disabled={!camera || !hasApiKey || !isConnected}
+          disabled={!camera || !isConnected || (detectionMode === "moondream" && !hasApiKey)}
           style={[
             styles.startButton,
             { 
-              backgroundColor: theme.primary,
-              opacity: !camera || !hasApiKey || !isConnected ? 0.5 : 1,
+              backgroundColor: detectionMode === "yolo" ? theme.success : theme.primary,
+              opacity: !camera || !isConnected || (detectionMode === "moondream" && !hasApiKey) ? 0.5 : 1,
             },
           ]}
         >
           <Feather name="play" size={18} color="#fff" />
-          <Text style={styles.startButtonText}>Start Room Scan</Text>
+          <Text style={styles.startButtonText}>
+            Start {detectionMode === "yolo" ? "YOLO " : ""}Room Scan
+          </Text>
         </Pressable>
         
         {!camera && (
@@ -1508,9 +1593,9 @@ export function HuntAndFind({
             Connect to camera above to start scanning
           </Text>
         )}
-        {camera && isConnected && !hasApiKey && (
+        {camera && isConnected && detectionMode === "moondream" && !hasApiKey && (
           <Text style={[styles.warningText, { color: theme.warning }]}>
-            Add Moondream API key in Settings
+            Add Moondream API key in Settings, or switch to YOLO mode
           </Text>
         )}
       </View>
@@ -1783,6 +1868,35 @@ const styles = StyleSheet.create({
   patternOptionDesc: {
     fontSize: Typography.small.fontSize,
     marginTop: 2,
+  },
+  detectionModeContainer: {
+    width: "100%",
+    marginBottom: Spacing.md,
+  },
+  detectionModeLabel: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.xs,
+  },
+  detectionModeButtons: {
+    flexDirection: "row",
+    width: "100%",
+  },
+  detectionModeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+  },
+  detectionModeButtonText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  detectionModeHint: {
+    fontSize: Typography.small.fontSize,
+    marginTop: Spacing.xs,
+    textAlign: "center",
   },
   startButton: {
     flexDirection: "row",

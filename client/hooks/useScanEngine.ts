@@ -30,7 +30,7 @@ import {
   allPositionsAnalyzed,
   calculateTimingAverages,
 } from "@/lib/huntAndFind";
-import { analyzeFullScan, runZoomRounds, CustomRanker } from "@/lib/scanAnalysis";
+import { analyzeFullScan, runZoomRounds, CustomRanker, DetectionMode } from "@/lib/scanAnalysis";
 
 export interface ScanEngineState {
   scan: RoomScan | null;
@@ -620,7 +620,8 @@ export function useScanEngine(camera: CameraProfile | null) {
 
   const startAnalysis = useCallback(async (
     apiKey: string,
-    customRanker?: CustomRanker
+    customRanker?: CustomRanker,
+    detectionMode: DetectionMode = "moondream"
   ): Promise<RoomScan | null> => {
     const currentScan = scanRef.current || state.scan;
     
@@ -654,8 +655,9 @@ export function useScanEngine(camera: CameraProfile | null) {
     scanRef.current = scan;
     await saveRoomScan(scan);
     
+    const modeLabel = detectionMode === "yolo" ? "YOLO (on-device)" : "Moondream AI";
     try {
-      console.log("[ScanEngine] Starting AI analysis...");
+      console.log(`[ScanEngine] Starting ${modeLabel} analysis...`);
       
       const analyzedScan = await analyzeFullScan(
         scan,
@@ -670,7 +672,8 @@ export function useScanEngine(camera: CameraProfile | null) {
             },
           });
         },
-        customRanker
+        customRanker,
+        detectionMode
       );
       
       const analysisPhaseEndMs = Date.now();
@@ -857,7 +860,8 @@ export function useScanEngine(camera: CameraProfile | null) {
     apiKey: string,
     gridConfig: ScanGridConfig = DEFAULT_GRID_CONFIG,
     zoomRoundsConfig: ZoomRoundsConfig = DEFAULT_ZOOM_ROUNDS_CONFIG,
-    customRanker?: CustomRanker
+    customRanker?: CustomRanker,
+    detectionMode: DetectionMode = "moondream"
   ): Promise<RoomScan | null> => {
     const scanResult = await startScan(name, gridConfig, zoomRoundsConfig);
     
@@ -866,7 +870,7 @@ export function useScanEngine(camera: CameraProfile | null) {
     }
     
     if (scanResult.status === "analyzing" || allPositionsCaptured(scanResult)) {
-      const analyzedScan = await startAnalysis(apiKey, customRanker);
+      const analyzedScan = await startAnalysis(apiKey, customRanker, detectionMode);
       
       if (analyzedScan && zoomRoundsConfig.enabled && zoomRoundsConfig.topObjectCount > 0) {
         return startZoomRounds(apiKey);
