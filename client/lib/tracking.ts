@@ -6,6 +6,32 @@ export type TrackingModel =
 
 export type VisionRequestType = "human" | "face" | "animal" | null;
 
+/**
+ * Tracking mode determines how objects are tracked frame-to-frame
+ * - "detection-only": Re-detect with primary backend every frame (YOLO/Vision/Moondream)
+ * - "hybrid-vision": Detect with YOLO, then track with Vision's VNTrackObjectRequest (faster)
+ */
+export type TrackingMode = "detection-only" | "hybrid-vision";
+
+/**
+ * Real-time status of what the tracking system is doing
+ */
+export type TrackingBackendStatus = 
+  | "idle"
+  | "yolo-detecting"      // Running YOLO detection
+  | "vision-detecting"    // Running Vision framework detection
+  | "vision-tracking"     // Using VNTrackObjectRequest (fast frame tracking)
+  | "moondream-detecting" // Calling Moondream cloud API
+  | "reacquiring";        // Lost track, re-detecting
+
+export interface TrackingStatusInfo {
+  backend: TrackingBackendStatus;
+  lastDetectionMs: number;    // Time for last detection/tracking operation
+  trackingFrameCount: number; // Frames tracked without re-detection (hybrid mode)
+  reacquisitionCount: number; // Times we lost and re-acquired target
+  mode: TrackingMode;
+}
+
 export interface TrackingModelInfo {
   id: TrackingModel;
   name: string;

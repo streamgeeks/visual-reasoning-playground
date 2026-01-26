@@ -254,20 +254,20 @@ const [cameras, currentId, settings] = await Promise.all([
     }
   };
 
-  const handleUpdateTrackingSetting = useCallback(async (key: keyof TrackingSettings, value: number | boolean) => {
+  const handleUpdateTrackingSetting = useCallback(async (key: keyof TrackingSettings, value: number | boolean | string) => {
     const newSettings = { ...localTrackingSettings, [key]: value };
     setLocalTrackingSettings(newSettings);
     await saveSettings({ tracking: newSettings });
     if (appSettings) {
       setAppSettings({ ...appSettings, tracking: newSettings });
     }
-    // Update the tracking controller if tracking is active
     if (trackingControllerRef.current && isTracking) {
       trackingControllerRef.current.updateConfig({
         ptzSpeed: newSettings.ptzSpeed,
         pulseDuration: newSettings.pulseDuration,
         deadZone: newSettings.deadZone,
         continuousMode: newSettings.continuousMode,
+        trackingMode: newSettings.trackingMode,
       });
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -351,7 +351,7 @@ const [cameras, currentId, settings] = await Promise.all([
       return;
     }
     
-    const trackingSettings = appSettings?.tracking || { ptzSpeed: 12, pulseDuration: 0, deadZone: 0.15, continuousMode: true };
+    const trackingSettings = appSettings?.tracking || { ptzSpeed: 12, pulseDuration: 0, deadZone: 0.15, continuousMode: true, trackingMode: "detection-only" as const };
     const controller = new TrackingController(
       cam,
       appSettings?.moondreamApiKey || "",
@@ -364,6 +364,7 @@ const [cameras, currentId, settings] = await Promise.all([
         pulseDuration: trackingSettings.pulseDuration,
         deadZone: trackingSettings.deadZone,
         continuousMode: trackingSettings.continuousMode,
+        trackingMode: trackingSettings.trackingMode || "detection-only",
       },
       selectedModel === "custom" ? customObject.trim() : undefined
     );
@@ -1471,6 +1472,9 @@ const [cameras, currentId, settings] = await Promise.all([
                     onStreamModeChange={setPtzStreamMode}
                     customObject={customObject}
                     onCustomObjectChange={handleCustomObjectChange}
+                    trackingMode={localTrackingSettings.trackingMode}
+                    onTrackingModeChange={(mode) => handleUpdateTrackingSetting("trackingMode", mode)}
+                    trackingState={autoTrackingState}
                   />
                   
                   <Pressable

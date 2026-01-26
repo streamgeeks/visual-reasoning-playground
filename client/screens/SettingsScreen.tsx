@@ -62,6 +62,7 @@ export default function SettingsScreen() {
       pulseDuration: 0,
       deadZone: 0.15,
       continuousMode: true,
+      trackingMode: "detection-only",
     },
   });
   const [userProfile, setUserProfile] = useState<UserProfile>({ displayName: "User" });

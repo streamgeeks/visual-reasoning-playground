@@ -54,10 +54,11 @@ export interface UserProfile {
 }
 
 export interface TrackingSettings {
-  ptzSpeed: number; // 1-24 for PTZOptics
-  pulseDuration: number; // ms to move before stopping (0 = continuous)
-  deadZone: number; // 0-1, percentage of frame center to ignore
-  continuousMode: boolean; // if true, camera keeps moving until object centered
+  ptzSpeed: number;
+  pulseDuration: number;
+  deadZone: number;
+  continuousMode: boolean;
+  trackingMode: "detection-only" | "hybrid-vision";
 }
 
 export interface AppSettings {
@@ -72,6 +73,7 @@ export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
   pulseDuration: 0,
   deadZone: 0.15,
   continuousMode: true,
+  trackingMode: "detection-only",
 };
 
 export interface SavedCustomObject {

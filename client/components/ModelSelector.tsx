@@ -3,8 +3,8 @@ import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, 
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
-import { TrackingModel, TRACKING_MODELS, getModelInfo } from "@/lib/tracking";
-import { getYoloStatus, NativeDetectionStatus } from "@/lib/trackingService";
+import { TrackingModel, TRACKING_MODELS, getModelInfo, TrackingMode, TrackingStatusInfo } from "@/lib/tracking";
+import { getYoloStatus, NativeDetectionStatus, TrackingState } from "@/lib/trackingService";
 import { 
   CameraProfile, 
   SavedCustomObject, 
@@ -54,6 +54,9 @@ interface ModelSelectorProps {
   onMjpegFallback?: () => void;
   customObject?: string;
   onCustomObjectChange?: (text: string) => void;
+  trackingMode?: TrackingMode;
+  onTrackingModeChange?: (mode: TrackingMode) => void;
+  trackingState?: TrackingState | null;
 }
 
 export function ModelSelector({
@@ -70,6 +73,9 @@ export function ModelSelector({
   onMjpegFallback,
   customObject = "",
   onCustomObjectChange,
+  trackingMode = "detection-only",
+  onTrackingModeChange,
+  trackingState,
 }: ModelSelectorProps) {
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
@@ -624,6 +630,91 @@ export function ModelSelector({
             </View>
           </View>
 
+          {modelInfo.usesYolo && (
+            <View style={styles.trackingModeSection}>
+              <Text style={[styles.trackingModeLabel, { color: theme.textSecondary }]}>
+                Tracking Mode:
+              </Text>
+              <View style={[styles.trackingModeSelector, { backgroundColor: theme.backgroundSecondary }]}>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onTrackingModeChange?.("detection-only");
+                  }}
+                  disabled={isTracking}
+                  style={[
+                    styles.trackingModeOption,
+                    trackingMode === "detection-only" && { backgroundColor: theme.primary },
+                    isTracking && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={[
+                    styles.trackingModeText,
+                    { color: trackingMode === "detection-only" ? "#FFF" : theme.textSecondary },
+                  ]}>
+                    YOLO Only
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onTrackingModeChange?.("hybrid-vision");
+                  }}
+                  disabled={isTracking}
+                  style={[
+                    styles.trackingModeOption,
+                    trackingMode === "hybrid-vision" && { backgroundColor: theme.success },
+                    isTracking && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={[
+                    styles.trackingModeText,
+                    { color: trackingMode === "hybrid-vision" ? "#FFF" : theme.textSecondary },
+                  ]}>
+                    YOLO + Vision
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {isTracking && trackingState?.statusInfo && (
+            <View style={[styles.liveStatusContainer, { backgroundColor: theme.backgroundSecondary }]}>
+              <View style={styles.liveStatusRow}>
+                <View style={[styles.liveStatusDot, { 
+                  backgroundColor: trackingState.statusInfo.backend === "vision-tracking" 
+                    ? theme.success 
+                    : trackingState.statusInfo.backend === "yolo-detecting"
+                    ? theme.warning
+                    : trackingState.statusInfo.backend === "reacquiring"
+                    ? theme.error
+                    : theme.primary 
+                }]} />
+                <Text style={[styles.liveStatusText, { color: theme.text }]}>
+                  {trackingState.statusInfo.backend === "vision-tracking" && "Vision Tracking"}
+                  {trackingState.statusInfo.backend === "yolo-detecting" && "YOLO Detecting"}
+                  {trackingState.statusInfo.backend === "vision-detecting" && "Vision Detecting"}
+                  {trackingState.statusInfo.backend === "moondream-detecting" && "Cloud API"}
+                  {trackingState.statusInfo.backend === "reacquiring" && "Re-acquiring..."}
+                  {trackingState.statusInfo.backend === "idle" && "Idle"}
+                </Text>
+                <Text style={[styles.liveStatusTime, { color: theme.textSecondary }]}>
+                  {trackingState.statusInfo.lastDetectionMs}ms
+                </Text>
+              </View>
+              {trackingState.statusInfo.mode === "hybrid-vision" && (
+                <View style={styles.liveStatusStats}>
+                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
+                    Tracked: {trackingState.statusInfo.trackingFrameCount} frames
+                  </Text>
+                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
+                    Re-acquired: {trackingState.statusInfo.reacquisitionCount}x
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {selectedModel === "custom" ? (
             <View style={styles.customObjectSection}>
               <View style={styles.customInputRow}>
@@ -1082,5 +1173,60 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderRadius: BorderRadius.xs,
+  },
+  trackingModeSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
+  },
+  trackingModeLabel: {
+    fontSize: Typography.small.fontSize,
+  },
+  trackingModeSelector: {
+    flexDirection: "row",
+    borderRadius: BorderRadius.sm,
+    padding: 3,
+  },
+  trackingModeOption: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.xs,
+  },
+  trackingModeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  liveStatusContainer: {
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  liveStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  liveStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  liveStatusText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+    flex: 1,
+  },
+  liveStatusTime: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  liveStatusStats: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: 2,
+  },
+  liveStatItem: {
+    fontSize: 10,
   },
 });

@@ -1,6 +1,6 @@
 import { CameraProfile } from "./storage";
 import { sendPtzViscaCommand, PtzDirection } from "./camera";
-import { TrackingModel, getModelInfo, VisionRequestType, getYoloLabel, TrackingModelInfo } from "./tracking";
+import { TrackingModel, getModelInfo, VisionRequestType, getYoloLabel, TrackingModelInfo, TrackingMode, TrackingBackendStatus, TrackingStatusInfo } from "./tracking";
 import { detectObject as moondreamDetect } from "./moondream";
 import * as VisionTracking from "vision-tracking";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -51,15 +51,17 @@ export interface TrackingState {
   lastDirection: { pan: "left" | "right" | null; tilt: "up" | "down" | null } | null;
   inDeadzone: boolean;
   errorCount: number;
+  statusInfo: TrackingStatusInfo;
 }
 
 export interface TrackingConfig {
-  deadZone: number; // percentage of frame center to ignore (0-1)
-  ptzSpeed: number; // 1-24 for PTZOptics
-  pulseDuration: number; // ms to move before stopping (0 = continuous until next command)
-  updateInterval: number; // ms between tracking updates
+  deadZone: number;
+  ptzSpeed: number;
+  pulseDuration: number;
+  updateInterval: number;
   maxErrorsBeforeStop: number;
-  continuousMode: boolean; // if true, don't auto-stop - just keep moving until centered
+  continuousMode: boolean;
+  trackingMode: TrackingMode;
 }
 
 const DEFAULT_CONFIG: TrackingConfig = {
@@ -69,6 +71,7 @@ const DEFAULT_CONFIG: TrackingConfig = {
   updateInterval: 500,
   maxErrorsBeforeStop: 5,
   continuousMode: true,
+  trackingMode: "detection-only",
 };
 
 // Map tracking model IDs to object descriptions for Moondream (custom mode only)
@@ -473,6 +476,13 @@ export class TrackingController {
       lastDirection: null,
       inDeadzone: false,
       errorCount: 0,
+      statusInfo: {
+        backend: "idle",
+        lastDetectionMs: 0,
+        trackingFrameCount: 0,
+        reacquisitionCount: 0,
+        mode: this.config.trackingMode,
+      },
     };
   }
 
@@ -484,6 +494,13 @@ export class TrackingController {
       ...this.state,
       isTracking: true,
       errorCount: 0,
+      statusInfo: {
+        ...this.state.statusInfo,
+        backend: "idle",
+        trackingFrameCount: 0,
+        reacquisitionCount: 0,
+        mode: this.config.trackingMode,
+      },
     };
     this.onStateChange(this.state);
 
@@ -503,6 +520,10 @@ export class TrackingController {
     this.state = {
       ...this.state,
       isTracking: false,
+      statusInfo: {
+        ...this.state.statusInfo,
+        backend: "idle",
+      },
     };
     this.onStateChange(this.state);
   }
@@ -519,9 +540,17 @@ export class TrackingController {
     console.log(`Tracking model updated to: ${modelId}${customObject ? ` (${customObject})` : ''}`);
   }
 
-  // Update the tracking config on the fly
   updateConfig(config: Partial<TrackingConfig>): void {
+    const modeChanged = config.trackingMode && config.trackingMode !== this.config.trackingMode;
     this.config = { ...this.config, ...config };
+    
+    if (modeChanged) {
+      this.clearVisionTracking();
+      this.state.statusInfo.mode = this.config.trackingMode;
+      this.state.statusInfo.trackingFrameCount = 0;
+      console.log(`Tracking mode changed to: ${this.config.trackingMode}`);
+    }
+    
     console.log(`Tracking config updated:`, this.config);
   }
 
@@ -541,7 +570,12 @@ export class TrackingController {
 
   private async runTrackingLoop(): Promise<void> {
     const useVision = usesVisionBackend(this.modelId);
-    const updateInterval = useVision ? VISION_UPDATE_INTERVAL : this.config.updateInterval;
+    const useYolo = usesYoloBackend(this.modelId);
+    const useHybridMode = this.config.trackingMode === "hybrid-vision" && useYolo;
+    
+    const updateInterval = (useVision || useHybridMode) ? VISION_UPDATE_INTERVAL : this.config.updateInterval;
+
+    console.log(`[TrackingLoop] Starting - mode: ${this.config.trackingMode}, useYolo: ${useYolo}, useVision: ${useVision}, hybrid: ${useHybridMode}, interval: ${updateInterval}ms`);
 
     while (this.isRunning) {
       try {
@@ -565,8 +599,17 @@ export class TrackingController {
         let direction: { pan: "left" | "right" | null; tilt: "up" | "down" | null };
 
         if (useVision) {
+          this.updateStatus("vision-detecting");
           ({ detection, ptzDirection, direction } = await this.runVisionTrackingStep(base64Data));
+        } else if (useHybridMode) {
+          ({ detection, ptzDirection, direction } = await this.runYoloHybridTrackingStep(base64Data));
         } else {
+          if (useYolo) {
+            this.updateStatus("yolo-detecting");
+          } else {
+            this.updateStatus("moondream-detecting");
+          }
+          const startTime = Date.now();
           ({ detection, ptzDirection, direction } = await executeTrackingStep(
             this.camera,
             base64Data,
@@ -575,6 +618,7 @@ export class TrackingController {
             this.config,
             this.customObject
           ));
+          this.state.statusInfo.lastDetectionMs = Date.now() - startTime;
         }
 
         const inDeadzone = detection.found && direction.pan === null && direction.tilt === null;
@@ -686,6 +730,97 @@ export class TrackingController {
     }
 
     return { detection, ptzDirection: ptzDirection || "stop", direction };
+  }
+
+  private async runYoloHybridTrackingStep(base64Data: string): Promise<{
+    detection: DetectionResult;
+    ptzDirection: PtzDirection | null;
+    direction: { pan: "left" | "right" | null; tilt: "up" | "down" | null };
+  }> {
+    let detection: DetectionResult = { found: false };
+    const startTime = Date.now();
+
+    if (this.visionTrackingId) {
+      this.updateStatus("vision-tracking");
+      const trackResult = await VisionTracking.updateTracking(this.visionTrackingId, base64Data);
+
+      if (trackResult && !trackResult.isLost && trackResult.confidence >= this.TRACKING_CONFIDENCE_THRESHOLD) {
+        this.consecutiveLostFrames = 0;
+        const centerX = trackResult.x + trackResult.width / 2;
+        const centerY = trackResult.y + trackResult.height / 2;
+
+        detection = {
+          found: true,
+          x: centerX,
+          y: centerY,
+          confidence: trackResult.confidence,
+          box: {
+            x_min: trackResult.x,
+            y_min: trackResult.y,
+            x_max: trackResult.x + trackResult.width,
+            y_max: trackResult.y + trackResult.height,
+          },
+        };
+        this.lastBoundingBox = detection.box!;
+        this.state.statusInfo.trackingFrameCount++;
+        this.state.statusInfo.lastDetectionMs = Date.now() - startTime;
+      } else {
+        this.consecutiveLostFrames++;
+        if (this.consecutiveLostFrames >= this.LOST_FRAME_THRESHOLD) {
+          this.clearVisionTracking();
+          this.updateStatus("reacquiring");
+          this.state.statusInfo.reacquisitionCount++;
+        }
+      }
+    }
+
+    if (!this.visionTrackingId) {
+      this.updateStatus("yolo-detecting");
+      detection = await detectWithYolo(base64Data, this.modelId, this.apiKey);
+      this.state.statusInfo.lastDetectionMs = Date.now() - startTime;
+      this.state.statusInfo.trackingFrameCount = 0;
+
+      if (detection.found && detection.box) {
+        const box = detection.box;
+        const width = box.x_max - box.x_min;
+        const height = box.y_max - box.y_min;
+
+        this.visionTrackingId = VisionTracking.startTracking(box.x_min, box.y_min, width, height);
+        this.lastBoundingBox = box;
+        this.consecutiveLostFrames = 0;
+        console.log(`[YoloHybrid] Started Vision tracker from YOLO detection`);
+      }
+    }
+
+    if (!detection.found || detection.x === undefined || detection.y === undefined) {
+      await sendPtzViscaCommand(this.camera, "stop", this.config.ptzSpeed, this.config.ptzSpeed);
+      return { detection, ptzDirection: "stop", direction: { pan: null, tilt: null } };
+    }
+
+    const direction = calculatePtzDirection(detection.x, detection.y, this.config.deadZone);
+    const ptzDirection = getPtzDirectionFromPanTilt(direction.pan, direction.tilt);
+
+    if (ptzDirection) {
+      const offsetX = Math.abs(detection.x! - 0.5);
+      const offsetY = Math.abs(detection.y! - 0.5);
+      const maxOffset = Math.max(offsetX, offsetY);
+      
+      const minSpeed = 1;
+      const normalizedOffset = Math.min(1, maxOffset / 0.4);
+      const scaledSpeed = Math.max(minSpeed, Math.min(this.config.ptzSpeed, Math.round(minSpeed + normalizedOffset * (this.config.ptzSpeed - minSpeed))));
+      const pulseDuration = Math.max(20, Math.min(50, Math.round(20 + normalizedOffset * 30)));
+      
+      console.log(`[YoloHybrid] Pulse: ${ptzDirection} @ speed ${scaledSpeed} for ${pulseDuration}ms`);
+      await sendPtzViscaCommand(this.camera, ptzDirection, scaledSpeed, scaledSpeed);
+      await this.sleep(pulseDuration);
+      await sendPtzViscaCommand(this.camera, "stop", scaledSpeed, scaledSpeed);
+    }
+
+    return { detection, ptzDirection: ptzDirection || "stop", direction };
+  }
+
+  private updateStatus(backend: TrackingBackendStatus): void {
+    this.state.statusInfo.backend = backend;
   }
 
   private clearVisionTracking(): void {
