@@ -13,8 +13,6 @@ import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography, Colors } from "@/constants/theme";
-import { CameraProfile } from "@/lib/storage";
-import { fetchCameraFrame } from "@/lib/camera";
 import { 
   checkNativeDetectionStatus, 
   detectAllObjects,
@@ -23,9 +21,8 @@ import {
 } from "@/lib/nativeDetection";
 
 interface DetectAllProps {
-  camera: CameraProfile | null;
   isConnected: boolean;
-  currentFrame?: string | null;
+  getFrame: () => Promise<string | null>;
 }
 
 interface LabeledDetection extends NativeDetectionResult {
@@ -48,7 +45,7 @@ function getColorForLabel(label: string, index: number): string {
   return DETECTION_COLORS[(hash + index) % DETECTION_COLORS.length];
 }
 
-export function DetectAll({ camera, isConnected, currentFrame }: DetectAllProps) {
+export function DetectAll({ isConnected, getFrame }: DetectAllProps) {
   const { theme } = useTheme();
   
   const [isDetecting, setIsDetecting] = useState(false);
@@ -70,7 +67,7 @@ export function DetectAll({ camera, isConnected, currentFrame }: DetectAllProps)
   }, []);
 
   const runDetection = useCallback(async () => {
-    if (!camera || !isConnected || detectingRef.current) return;
+    if (!isConnected || detectingRef.current) return;
     
     detectingRef.current = true;
     setIsDetecting(true);
@@ -79,7 +76,7 @@ export function DetectAll({ camera, isConnected, currentFrame }: DetectAllProps)
     const startTime = Date.now();
     
     try {
-      const frame = currentFrame || await fetchCameraFrame(camera);
+      const frame = await getFrame();
       if (!frame) {
         setError("Failed to capture frame");
         return;
@@ -106,7 +103,7 @@ export function DetectAll({ camera, isConnected, currentFrame }: DetectAllProps)
       setIsDetecting(false);
       detectingRef.current = false;
     }
-  }, [camera, isConnected, currentFrame]);
+  }, [isConnected, getFrame]);
 
   useEffect(() => {
     if (!autoDetect || !isConnected) return;
@@ -244,7 +241,7 @@ export function DetectAll({ camera, isConnected, currentFrame }: DetectAllProps)
           <View style={styles.emptyState}>
             <Feather name="box" size={32} color={theme.textSecondary} />
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {isConnected ? "Tap 'Detect Now' to scan for objects" : "Connect camera to start"}
+              {isConnected ? "Tap 'Detect Now' to scan for objects" : "Grant camera permission to start"}
             </Text>
           </View>
         ) : null}

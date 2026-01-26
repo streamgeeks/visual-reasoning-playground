@@ -1591,9 +1591,8 @@ const [cameras, currentId, settings] = await Promise.all([
                 />
               ) : activeTool === "detectall" ? (
                 <DetectAll
-                  camera={camera}
-                  isConnected={ptzConnected}
-                  currentFrame={ptzFrame}
+                  isConnected={ptzConnected || (permission?.granted ?? false)}
+                  getFrame={captureFrameForAI}
                 />
               ) : activeTool === "colormatcher" ? (
                 <ColorMatcher
