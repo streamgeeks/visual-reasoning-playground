@@ -1203,6 +1203,8 @@ const [cameras, currentId, settings] = await Promise.all([
               { id: "ptz", icon: "move" as const, title: "Camera Controls" },
             ].map((tool) => {
               const badge = getAIBadgeInfo(tool.id);
+              const hasApiKey = Boolean(appSettings?.moondreamApiKey);
+              const showApiKeyHint = badge.benefitsFromApiKey && !hasApiKey;
               return (
                 <Pressable
                   key={tool.id}
@@ -1220,6 +1222,12 @@ const [cameras, currentId, settings] = await Promise.all([
                     <View style={[styles.toolBadge, { backgroundColor: badge.color + "20" }]}>
                       <Text style={[styles.toolBadgeText, { color: badge.color }]}>{badge.label}</Text>
                     </View>
+                    {showApiKeyHint && (
+                      <View style={[styles.apiKeyHintBadge, { backgroundColor: "#FF9500" + "20" }]}>
+                        <Feather name="key" size={10} color="#FF9500" />
+                        <Text style={styles.apiKeyHintText}>+API</Text>
+                      </View>
+                    )}
                   </View>
                   <Feather name="chevron-right" size={18} color={theme.textSecondary} />
                 </Pressable>
@@ -1744,6 +1752,19 @@ const styles = StyleSheet.create({
   toolBadgeText: {
     fontSize: 10,
     fontWeight: "600",
+  },
+  apiKeyHintBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  apiKeyHintText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#FF9500",
   },
   toolExpanded: {
     flex: 1,

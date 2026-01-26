@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Linking,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Animated, { FadeIn, FadeOut, SlideInDown } from "react-native-reanimated";
@@ -14,6 +15,12 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { ToolAIInfo, AI_TECHNOLOGIES, getAIBadgeInfo } from "@/lib/aiInfo";
+
+const LEARN_MORE_LINKS = [
+  { label: "Visual Reasoning", url: "https://visualreasoning.ai", icon: "eye" },
+  { label: "PTZOptics", url: "https://ptzoptics.com", icon: "video" },
+  { label: "Moondream AI", url: "https://moondream.ai", icon: "cloud" },
+];
 
 interface ToolInfoModalProps {
   visible: boolean;
@@ -41,7 +48,7 @@ export function ToolInfoModal({ visible, onClose, toolInfo }: ToolInfoModalProps
           exiting={FadeOut.duration(200)}
           style={[styles.container, { backgroundColor: theme.backgroundDefault }]}
         >
-          <Pressable onPress={(e) => e.stopPropagation()}>
+          <Pressable onPress={(e) => e.stopPropagation()} style={styles.innerContainer}>
             <View style={styles.header}>
               <View style={styles.titleRow}>
                 <View style={[styles.iconCircle, { backgroundColor: badgeInfo.color + "20" }]}>
@@ -74,7 +81,7 @@ export function ToolInfoModal({ visible, onClose, toolInfo }: ToolInfoModalProps
               </Pressable>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={true}>
               <Text style={[styles.description, { color: theme.textSecondary }]}>
                 {toolInfo.description}
               </Text>
@@ -115,6 +122,30 @@ export function ToolInfoModal({ visible, onClose, toolInfo }: ToolInfoModalProps
                   </Text>
                 </View>
               )}
+
+              <View style={[styles.linksSection, { borderTopColor: theme.backgroundSecondary }]}>
+                <Text style={[styles.linksTitle, { color: theme.textSecondary }]}>
+                  Learn More
+                </Text>
+                <View style={styles.linksRow}>
+                  {LEARN_MORE_LINKS.map((link) => (
+                    <Pressable
+                      key={link.url}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        Linking.openURL(link.url);
+                      }}
+                      style={({ pressed }) => [
+                        styles.linkButton,
+                        { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Feather name={link.icon as any} size={12} color={theme.primary} />
+                      <Text style={[styles.linkText, { color: theme.primary }]}>{link.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             </ScrollView>
           </Pressable>
         </Animated.View>
@@ -132,8 +163,11 @@ const styles = StyleSheet.create({
   container: {
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
-    maxHeight: "80%",
+    maxHeight: "85%",
     paddingBottom: 40,
+  },
+  innerContainer: {
+    maxHeight: "100%",
   },
   header: {
     flexDirection: "row",
@@ -192,6 +226,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.lg,
+    flexGrow: 1,
   },
   description: {
     fontSize: Typography.body.fontSize,
@@ -252,5 +287,31 @@ const styles = StyleSheet.create({
   apiKeyText: {
     fontSize: Typography.small.fontSize,
     flex: 1,
+  },
+  linksSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+  },
+  linksTitle: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.sm,
+  },
+  linksRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+  },
+  linkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.xs,
+  },
+  linkText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
   },
 });

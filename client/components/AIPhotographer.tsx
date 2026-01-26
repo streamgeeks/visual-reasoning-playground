@@ -443,8 +443,8 @@ Answer with just the gesture name or "none", nothing else.`;
             },
           ]} />
           <Text style={[styles.statusText, { color: theme.text }]}>
-            {status === "idle" && "Ready"}
-            {status === "watching" && `Watching for ${selectedTriggers.length} trigger${selectedTriggers.length > 1 ? 's' : ''}...`}
+            {status === "idle" && "Ready to watch"}
+            {status === "watching" && `Active - watching for ${selectedTriggers.length} trigger${selectedTriggers.length > 1 ? 's' : ''}...`}
             {status === "detected" && "Captured!"}
           </Text>
           {captureCount > 0 && (

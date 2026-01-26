@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  Linking,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Animated, { 
@@ -21,7 +22,7 @@ import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
-import { ONBOARDING_SLIDES } from "@/lib/aiInfo";
+import { ONBOARDING_SLIDES, OnboardingSlide } from "@/lib/aiInfo";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -61,8 +62,14 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
       case "on-device": return "#34C759";
       case "cloud-ai": return "#FF9500";
       case "hybrid": return "#5856D6";
+      case "api-key": return "#AF52DE";
       default: return theme.primary;
     }
+  };
+
+  const handleLinkPress = (url: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL(url);
   };
 
   return (
@@ -114,6 +121,49 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
                   ))}
                 </View>
               </View>
+            )}
+
+            {slide.toolCategories && (
+              <View style={styles.categoriesContainer}>
+                {slide.toolCategories.map((category, catIndex) => (
+                  <View key={catIndex} style={styles.categorySection}>
+                    <View style={styles.categoryHeader}>
+                      <Feather 
+                        name={category.color === "#34C759" ? "smartphone" : "cloud"} 
+                        size={14} 
+                        color={category.color} 
+                      />
+                      <Text style={[styles.categoryLabel, { color: category.color }]}>
+                        {category.label}
+                      </Text>
+                    </View>
+                    <View style={styles.categoryTools}>
+                      {category.tools.map((tool, toolIndex) => (
+                        <View 
+                          key={toolIndex} 
+                          style={[styles.categoryToolChip, { backgroundColor: category.color + "15" }]}
+                        >
+                          <Text style={[styles.categoryToolText, { color: theme.text }]}>
+                            {tool}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {slide.link && (
+              <Pressable
+                onPress={() => handleLinkPress(slide.link!.url)}
+                style={({ pressed }) => [
+                  styles.linkButton,
+                  { backgroundColor: getIconColor(slide.id), opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Text style={styles.linkButtonText}>{slide.link.text}</Text>
+              </Pressable>
             )}
           </Animated.View>
         </View>
@@ -265,6 +315,49 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   nextButtonText: {
+    color: "#FFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  categoriesContainer: {
+    marginTop: Spacing.lg,
+    width: "100%",
+    gap: Spacing.md,
+  },
+  categorySection: {
+    width: "100%",
+  },
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  categoryLabel: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+  },
+  categoryTools: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  categoryToolChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+  },
+  categoryToolText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  linkButton: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  linkButtonText: {
     color: "#FFF",
     fontSize: Typography.body.fontSize,
     fontWeight: "600",

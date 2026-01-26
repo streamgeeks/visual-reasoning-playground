@@ -645,14 +645,27 @@ public class VisionTrackingModule: Module {
     }
     
     private func detectOpenPalm(observation: VNHumanHandPoseObservation) -> Bool {
-        let tips: [VNHumanHandPoseObservation.JointName] = [.thumbTip, .indexTip, .middleTip, .ringTip, .littleTip]
-        var extendedCount = 0
-        
-        for tip in tips {
-            if let point = try? observation.recognizedPoint(tip), point.confidence > 0.3 {
-                extendedCount += 1
-            }
+        guard let wrist = try? observation.recognizedPoint(.wrist),
+              let indexTip = try? observation.recognizedPoint(.indexTip),
+              let indexPIP = try? observation.recognizedPoint(.indexPIP),
+              let middleTip = try? observation.recognizedPoint(.middleTip),
+              let middlePIP = try? observation.recognizedPoint(.middlePIP),
+              let ringTip = try? observation.recognizedPoint(.ringTip),
+              let ringPIP = try? observation.recognizedPoint(.ringPIP),
+              let littleTip = try? observation.recognizedPoint(.littleTip),
+              let littlePIP = try? observation.recognizedPoint(.littlePIP),
+              let thumbTip = try? observation.recognizedPoint(.thumbTip),
+              wrist.confidence > 0.3 else {
+            return false
         }
+        
+        let indexExtended = indexTip.confidence > 0.4 && indexTip.location.y > indexPIP.location.y
+        let middleExtended = middleTip.confidence > 0.4 && middleTip.location.y > middlePIP.location.y
+        let ringExtended = ringTip.confidence > 0.4 && ringTip.location.y > ringPIP.location.y
+        let littleExtended = littleTip.confidence > 0.4 && littleTip.location.y > littlePIP.location.y
+        let thumbVisible = thumbTip.confidence > 0.3
+        
+        let extendedCount = [indexExtended, middleExtended, ringExtended, littleExtended, thumbVisible].filter { $0 }.count
         
         return extendedCount >= 4
     }
@@ -673,33 +686,52 @@ public class VisionTrackingModule: Module {
     private func detectThumbsUp(observation: VNHumanHandPoseObservation) -> Bool {
         guard let thumbTip = try? observation.recognizedPoint(.thumbTip),
               let thumbCMC = try? observation.recognizedPoint(.thumbCMC),
+              let thumbIP = try? observation.recognizedPoint(.thumbIP),
               let indexTip = try? observation.recognizedPoint(.indexTip),
-              thumbTip.confidence > 0.3, thumbCMC.confidence > 0.3 else {
-            return false
-        }
-        
-        let thumbExtendedUp = thumbTip.location.y > thumbCMC.location.y + 0.1
-        let indexCurled = indexTip.confidence < 0.3 || indexTip.location.y < thumbCMC.location.y
-        
-        return thumbExtendedUp && indexCurled
-    }
-    
-    private func detectPeaceSign(observation: VNHumanHandPoseObservation) -> Bool {
-        guard let indexTip = try? observation.recognizedPoint(.indexTip),
               let middleTip = try? observation.recognizedPoint(.middleTip),
               let ringTip = try? observation.recognizedPoint(.ringTip),
               let littleTip = try? observation.recognizedPoint(.littleTip),
               let wrist = try? observation.recognizedPoint(.wrist),
-              indexTip.confidence > 0.3, middleTip.confidence > 0.3 else {
+              thumbTip.confidence > 0.3, thumbCMC.confidence > 0.3, wrist.confidence > 0.3 else {
             return false
         }
         
-        let indexUp = indexTip.location.y > wrist.location.y
-        let middleUp = middleTip.location.y > wrist.location.y
-        let ringDown = ringTip.confidence < 0.3 || ringTip.location.y < wrist.location.y
-        let littleDown = littleTip.confidence < 0.3 || littleTip.location.y < wrist.location.y
+        let thumbExtendedUp = thumbTip.location.y > thumbIP.location.y && thumbTip.location.y > wrist.location.y + 0.15
         
-        return indexUp && middleUp && ringDown && littleDown
+        let indexCurled = indexTip.confidence < 0.4 || indexTip.location.y < wrist.location.y + 0.05
+        let middleCurled = middleTip.confidence < 0.4 || middleTip.location.y < wrist.location.y + 0.05
+        let ringCurled = ringTip.confidence < 0.4 || ringTip.location.y < wrist.location.y + 0.05
+        let littleCurled = littleTip.confidence < 0.4 || littleTip.location.y < wrist.location.y + 0.05
+        
+        let fingersCurled = [indexCurled, middleCurled, ringCurled, littleCurled].filter { $0 }.count >= 3
+        
+        return thumbExtendedUp && fingersCurled
+    }
+    
+    private func detectPeaceSign(observation: VNHumanHandPoseObservation) -> Bool {
+        guard let indexTip = try? observation.recognizedPoint(.indexTip),
+              let indexPIP = try? observation.recognizedPoint(.indexPIP),
+              let middleTip = try? observation.recognizedPoint(.middleTip),
+              let middlePIP = try? observation.recognizedPoint(.middlePIP),
+              let ringTip = try? observation.recognizedPoint(.ringTip),
+              let ringPIP = try? observation.recognizedPoint(.ringPIP),
+              let littleTip = try? observation.recognizedPoint(.littleTip),
+              let thumbTip = try? observation.recognizedPoint(.thumbTip),
+              let wrist = try? observation.recognizedPoint(.wrist),
+              indexTip.confidence > 0.4, middleTip.confidence > 0.4, wrist.confidence > 0.3 else {
+            return false
+        }
+        
+        let indexExtended = indexTip.location.y > indexPIP.location.y && indexTip.location.y > wrist.location.y + 0.1
+        let middleExtended = middleTip.location.y > middlePIP.location.y && middleTip.location.y > wrist.location.y + 0.1
+        
+        let ringCurled = ringTip.confidence < 0.4 || ringTip.location.y < ringPIP.location.y || ringTip.location.y < wrist.location.y + 0.05
+        let littleCurled = littleTip.confidence < 0.4 || littleTip.location.y < wrist.location.y + 0.05
+        let thumbNotExtendedUp = thumbTip.confidence < 0.3 || thumbTip.location.y < wrist.location.y + 0.15
+        
+        let indexMiddleSpread = abs(indexTip.location.x - middleTip.location.x) > 0.03
+        
+        return indexExtended && middleExtended && ringCurled && littleCurled && thumbNotExtendedUp && indexMiddleSpread
     }
     
      private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -747,32 +779,36 @@ public class VisionTrackingModule: Module {
                 
                 for observation in observations {
                     let handPose = self.analyzeHandPose(observation: observation)
+                    var gestureFound = false
                     
                     if triggers.contains("thumbsup") && handPose.isThumbsUp {
                         var result = GestureResult()
                         result.gesture = "thumbsup"
                         result.confidence = max(0.75, handPose.confidence)
                         results.append(result)
+                        gestureFound = true
                     }
                     
-                    if triggers.contains("peace") && handPose.isPeaceSign {
+                    if !gestureFound && triggers.contains("peace") && handPose.isPeaceSign {
                         var result = GestureResult()
                         result.gesture = "peace"
                         result.confidence = max(0.75, handPose.confidence)
                         results.append(result)
+                        gestureFound = true
                     }
                     
-                    if triggers.contains("wave") && handPose.isOpenPalm {
-                        var result = GestureResult()
-                        result.gesture = "wave"
-                        result.confidence = max(0.70, handPose.confidence)
-                        results.append(result)
-                    }
-                    
-                    if triggers.contains("pointing") && handPose.isPointing {
+                    if !gestureFound && triggers.contains("pointing") && handPose.isPointing {
                         var result = GestureResult()
                         result.gesture = "pointing"
                         result.confidence = max(0.75, handPose.confidence)
+                        results.append(result)
+                        gestureFound = true
+                    }
+                    
+                    if !gestureFound && triggers.contains("wave") && handPose.isOpenPalm {
+                        var result = GestureResult()
+                        result.gesture = "wave"
+                        result.confidence = max(0.70, handPose.confidence)
                         results.append(result)
                     }
                 }

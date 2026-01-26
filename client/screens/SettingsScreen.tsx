@@ -11,6 +11,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -408,11 +409,17 @@ export default function SettingsScreen() {
 
         <View style={[styles.apiKeyContainer, { backgroundColor: theme.backgroundDefault }]}>
           <View style={styles.apiKeyHeader}>
-            <View style={[styles.apiKeyIcon, { backgroundColor: theme.primary + "20" }]}>
-              <Feather name="cpu" size={18} color={theme.primary} />
+            <View style={[styles.apiKeyIcon, { backgroundColor: "#FF9500" + "20" }]}>
+              <Feather name="key" size={18} color="#FF9500" />
             </View>
-            <Text style={[styles.apiKeyLabel, { color: theme.text }]}>Moondream API Key</Text>
+            <View style={styles.apiKeyHeaderText}>
+              <Text style={[styles.apiKeyLabel, { color: theme.text }]}>Moondream API Key</Text>
+              <Text style={[styles.apiKeyOptional, { color: theme.textSecondary }]}>
+                Optional - most tools work without it
+              </Text>
+            </View>
           </View>
+
           <View style={styles.apiKeyInputRow}>
             <TextInput
               style={[
@@ -421,7 +428,7 @@ export default function SettingsScreen() {
               ]}
               value={pendingApiKey}
               onChangeText={handleApiKeyChange}
-              placeholder="Enter your API key"
+              placeholder="md-xxxxxxxxxxxxxxxx"
               placeholderTextColor={theme.textSecondary}
               secureTextEntry
               autoCapitalize="none"
@@ -458,6 +465,61 @@ export default function SettingsScreen() {
               API key saved successfully
             </Text>
           ) : null}
+
+          <View style={[styles.apiKeyInstructions, { backgroundColor: theme.backgroundSecondary }]}>
+            <Text style={[styles.apiKeyInstructionsTitle, { color: theme.text }]}>
+              How to get a free API key:
+            </Text>
+            <View style={styles.apiKeyStep}>
+              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
+                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>1</Text>
+              </View>
+              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+                Visit console.moondream.ai
+              </Text>
+            </View>
+            <View style={styles.apiKeyStep}>
+              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
+                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>2</Text>
+              </View>
+              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+                Sign up for a free account
+              </Text>
+            </View>
+            <View style={styles.apiKeyStep}>
+              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
+                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>3</Text>
+              </View>
+              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+                Copy your API key and paste it above
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={() => Linking.openURL("https://console.moondream.ai/")}
+            style={({ pressed }) => [
+              styles.getApiKeyButton,
+              { backgroundColor: "#FF9500", opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Feather name="external-link" size={16} color="#FFFFFF" />
+            <Text style={styles.getApiKeyButtonText}>Get Free API Key</Text>
+          </Pressable>
+
+          <View style={styles.apiKeyUnlocks}>
+            <Text style={[styles.apiKeyUnlocksTitle, { color: theme.textSecondary }]}>
+              API key unlocks:
+            </Text>
+            <View style={styles.apiKeyUnlocksList}>
+              {["Scene descriptions", "Custom object search", "Natural language chat", "Custom photo triggers"].map((feature, i) => (
+                <View key={i} style={styles.apiKeyUnlockItem}>
+                  <Feather name="check" size={12} color={theme.success} />
+                  <Text style={[styles.apiKeyUnlockText, { color: theme.text }]}>{feature}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* About the AI */}
@@ -488,6 +550,53 @@ export default function SettingsScreen() {
               </View>
             </View>
           ))}
+
+          <View style={[styles.learnMoreSection, { borderTopColor: theme.backgroundSecondary }]}>
+            <Text style={[styles.learnMoreTitle, { color: theme.textSecondary }]}>
+              Learn More
+            </Text>
+            <View style={styles.learnMoreLinks}>
+              <Pressable
+                onPress={() => Linking.openURL("https://visualreasoning.ai")}
+                style={({ pressed }) => [
+                  styles.learnMoreLink,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="eye" size={14} color={theme.primary} />
+                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                  visualreasoning.ai
+                </Text>
+                <Feather name="external-link" size={12} color={theme.textSecondary} />
+              </Pressable>
+              <Pressable
+                onPress={() => Linking.openURL("https://ptzoptics.com")}
+                style={({ pressed }) => [
+                  styles.learnMoreLink,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="video" size={14} color={theme.primary} />
+                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                  ptzoptics.com
+                </Text>
+                <Feather name="external-link" size={12} color={theme.textSecondary} />
+              </Pressable>
+              <Pressable
+                onPress={() => Linking.openURL("https://moondream.ai")}
+                style={({ pressed }) => [
+                  styles.learnMoreLink,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="cloud" size={14} color={theme.primary} />
+                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                  moondream.ai
+                </Text>
+                <Feather name="external-link" size={12} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
 
           <Pressable
             onPress={async () => {
@@ -908,18 +1017,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   apiKeyIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: BorderRadius.sm,
     justifyContent: "center",
     alignItems: "center",
   },
+  apiKeyHeaderText: {
+    flex: 1,
+  },
   apiKeyLabel: {
     fontSize: Typography.body.fontSize,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  apiKeyOptional: {
+    fontSize: Typography.small.fontSize,
+    marginTop: 2,
   },
   apiKeyInputRow: {
     flexDirection: "row",
@@ -942,6 +1058,74 @@ const styles = StyleSheet.create({
   savedMessage: {
     fontSize: Typography.small.fontSize,
     marginTop: Spacing.xs,
+  },
+  apiKeyInstructions: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  apiKeyInstructionsTitle: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+    marginBottom: Spacing.sm,
+  },
+  apiKeyStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: 6,
+  },
+  apiKeyStepNumber: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  apiKeyStepNumberText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  apiKeyStepText: {
+    fontSize: Typography.small.fontSize,
+    flex: 1,
+  },
+  getApiKeyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.md,
+  },
+  getApiKeyButtonText: {
+    color: "#FFFFFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  apiKeyUnlocks: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(128, 128, 128, 0.2)",
+  },
+  apiKeyUnlocksTitle: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.xs,
+  },
+  apiKeyUnlocksList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  apiKeyUnlockItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  apiKeyUnlockText: {
+    fontSize: Typography.small.fontSize,
   },
   qualitySelector: {
     flexDirection: "row",
@@ -1074,6 +1258,31 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   replayOnboardingText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  learnMoreSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+  },
+  learnMoreTitle: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.sm,
+  },
+  learnMoreLinks: {
+    gap: Spacing.xs,
+  },
+  learnMoreLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  learnMoreLinkText: {
+    flex: 1,
     fontSize: Typography.body.fontSize,
     fontWeight: "500",
   },

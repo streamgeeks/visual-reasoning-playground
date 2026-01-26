@@ -17,6 +17,7 @@ export interface ToolAIInfo {
   howItWorks: string;
   educationalNote: string;
   requiresApiKey: boolean;
+  benefitsFromApiKey: boolean;
   isOnDevice: boolean;
 }
 
@@ -65,6 +66,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Three-tier system: (1) Vision provides instant scene tags, (2) YOLO adds object counts for structured data, (3) Moondream generates narrative descriptions when API key is available. Vision context is injected into Moondream prompts to ground responses.",
     educationalNote: "This demonstrates tiered AI: start fast and free (Vision), add detail on-device (YOLO), only hit the cloud when you need natural language. Each tier builds on the previous.",
     requiresApiKey: false,
+    benefitsFromApiKey: true,
     isOnDevice: true,
   },
   chat: {
@@ -81,6 +83,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Smart routing: Questions are parsed locally first. 'How many people?' routes to Vision. 'Is there a ball?' routes to YOLO. Complex queries like 'What is the person holding?' go to Moondream. Vision findings are injected as context into cloud queries to prevent hallucinations.",
     educationalNote: "This is an 'orchestrator' pattern - the system picks the cheapest, fastest AI that can answer your question. Only 10-20% of queries actually need cloud AI.",
     requiresApiKey: false,
+    benefitsFromApiKey: true,
     isOnDevice: true,
   },
   photographer: {
@@ -96,6 +99,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Preset triggers (wave, smile, thumbs up, peace, pointing) run on-device using Vision's hand pose and face landmark detection at 30fps - no API key needed. Custom natural language triggers (e.g., 'person wearing red hat') use Moondream cloud API.",
     educationalNote: "This is now a hybrid system! Standard gestures detect instantly on-device. Custom triggers still need cloud AI for flexibility. Watch the smartphone/cloud icons on each trigger.",
     requiresApiKey: false,
+    benefitsFromApiKey: true,
     isOnDevice: true,
   },
   huntfind: {
@@ -111,6 +115,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Three-phase system: (1) Moondream scans the room to find and locate arbitrary objects, (2) Vision's tracker takes over for smooth 30fps frame-to-frame following, (3) A proportional control loop sends PTZ commands to keep the object centered. If tracking is lost, Moondream re-acquires.",
     educationalNote: "Cloud AI finds things (slow but flexible), on-device AI tracks them (fast and smooth). This hybrid approach gives you the best of both: you can find 'the blue coffee mug' but track it at real-time speed.",
     requiresApiKey: false,
+    benefitsFromApiKey: true,
     isOnDevice: true,
   },
   peoplecounter: {
@@ -122,6 +127,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Uses iOS Vision framework's human body detector to find and count all people in each frame. Runs entirely on-device.",
     educationalNote: "This is pure on-device AI - no internet needed. Apple's Vision framework is optimized to run at 30fps on iPhone's Neural Engine.",
     requiresApiKey: false,
+    benefitsFromApiKey: false,
     isOnDevice: true,
   },
   detectall: {
@@ -133,6 +139,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Runs YOLOv8 nano model on-device to detect 80 common object types (people, cars, animals, furniture, etc.) with bounding boxes and confidence scores.",
     educationalNote: "YOLO means 'You Only Look Once' - it processes the entire image in one pass, making it very fast. The 'n' in YOLOv8n means 'nano' - optimized for mobile.",
     requiresApiKey: false,
+    benefitsFromApiKey: false,
     isOnDevice: true,
   },
   colormatcher: {
@@ -144,6 +151,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Samples pixels from the camera frame and converts them to HSL color space to identify dominant colors and find matches.",
     educationalNote: "Not all 'AI' is neural networks! This uses traditional computer vision algorithms for precise color analysis.",
     requiresApiKey: false,
+    benefitsFromApiKey: false,
     isOnDevice: true,
   },
   tracking: {
@@ -160,6 +168,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Tiered detection: People/faces → Vision (best-in-class). Common objects (cars, balls, furniture) → YOLO (80 classes). Custom descriptions ('red mug') → Moondream. Once detected, ALL objects use Vision's VNTrackObjectRequest for smooth 30fps tracking regardless of how they were found.",
     educationalNote: "Key insight: Detection and tracking are separate problems. Use the best detector for each object type, but always use Vision's fast tracker. This avoids calling slow cloud APIs every frame.",
     requiresApiKey: false,
+    benefitsFromApiKey: true,
     isOnDevice: true,
   },
   ptz: {
@@ -171,6 +180,7 @@ export const TOOL_AI_INFO: Record<string, ToolAIInfo> = {
     howItWorks: "Sends VISCA commands over IP to control PTZ camera movement. This is pure hardware control, no AI involved.",
     educationalNote: "Not everything needs AI! Sometimes direct control is best. This tool shows the baseline that AI tools build upon.",
     requiresApiKey: false,
+    benefitsFromApiKey: false,
     isOnDevice: true,
   },
 };
@@ -179,27 +189,47 @@ export function getToolAIInfo(toolId: string): ToolAIInfo | undefined {
   return TOOL_AI_INFO[toolId];
 }
 
-export function getAIBadgeInfo(toolId: string): { label: string; color: string; icon: string } {
+export function getAIBadgeInfo(toolId: string): { label: string; color: string; icon: string; benefitsFromApiKey: boolean } {
   const info = TOOL_AI_INFO[toolId];
-  if (!info) return { label: "Unknown", color: "#888", icon: "help-circle" };
+  if (!info) return { label: "Unknown", color: "#888", icon: "help-circle", benefitsFromApiKey: false };
+
+  const benefitsFromApiKey = info.benefitsFromApiKey;
 
   switch (info.primaryAI) {
     case "vision":
-      return { label: "Vision", color: "#007AFF", icon: "eye" };
+      return { label: "Vision", color: "#007AFF", icon: "eye", benefitsFromApiKey };
     case "yolo":
-      return { label: "YOLO", color: "#34C759", icon: "zap" };
+      return { label: "YOLO", color: "#34C759", icon: "zap", benefitsFromApiKey };
     case "moondream":
-      return { label: "Cloud", color: "#FF9500", icon: "cloud" };
+      return { label: "Cloud", color: "#FF9500", icon: "cloud", benefitsFromApiKey };
     case "hybrid":
-      return { label: "Hybrid", color: "#5856D6", icon: "layers" };
+      return { label: "Hybrid", color: "#5856D6", icon: "layers", benefitsFromApiKey };
     case "custom":
-      return { label: "Custom", color: "#888", icon: "tool" };
+      return { label: "Custom", color: "#888", icon: "tool", benefitsFromApiKey };
     default:
-      return { label: "AI", color: "#888", icon: "cpu" };
+      return { label: "AI", color: "#888", icon: "cpu", benefitsFromApiKey };
   }
 }
 
-export const ONBOARDING_SLIDES = [
+export interface OnboardingSlide {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  examples?: string[];
+  link?: {
+    text: string;
+    url: string;
+  };
+  toolCategories?: {
+    label: string;
+    tools: string[];
+    color: string;
+  }[];
+}
+
+export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: "welcome",
     title: "Welcome to Visual Reasoning",
@@ -230,6 +260,29 @@ export const ONBOARDING_SLIDES = [
     description: "Tools like Chat parse your question locally, then route to Vision (counting), YOLO (objects), or Moondream (complex queries). Most questions never need cloud AI.",
     icon: "layers",
     examples: ["Camera Chat", "Hunt & Find", "Object Tracking"],
+  },
+  {
+    id: "api-key",
+    title: "Moondream API Key",
+    subtitle: "Optional - unlock cloud features",
+    description: "Most tools work fully on-device without an API key. A free Moondream key unlocks advanced features like custom object search and natural language descriptions.",
+    icon: "key",
+    toolCategories: [
+      {
+        label: "Works fully on-device",
+        tools: ["People Counter", "Detect All", "Color Matcher", "PTZ Controls", "Preset Triggers"],
+        color: "#34C759",
+      },
+      {
+        label: "Enhanced with API key",
+        tools: ["Chat", "Describe", "AI Photographer", "Tracking", "Hunt & Find"],
+        color: "#FF9500",
+      },
+    ],
+    link: {
+      text: "Get free API key →",
+      url: "https://console.moondream.ai/",
+    },
   },
   {
     id: "explore",
