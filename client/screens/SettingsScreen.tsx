@@ -9,6 +9,8 @@ import {
   TextInput,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -19,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { CameraCard } from "@/components/CameraCard";
+import { PersonManager } from "@/components/PersonManager";
 import { SettingsRow, SettingsToggle, SettingsInput } from "@/components/SettingsRow";
 import { Button } from "@/components/Button";
 import {
@@ -247,7 +250,11 @@ export default function SettingsScreen() {
           <Feather name="chevron-right" size={20} color={theme.textSecondary} />
         </Pressable>
 
-        {/* Camera Management */}
+        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+          Identity Tracking
+        </ThemedText>
+        <PersonManager onSelectPerson={(person) => console.log("Selected person:", person?.name)} />
+
         <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
           Camera Settings
         </ThemedText>
@@ -482,7 +489,10 @@ export default function SettingsScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddCamera(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
             <View style={styles.modalHeader}>
               <ThemedText type="h4">Add PTZ Camera</ThemedText>
@@ -494,7 +504,11 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
+            <ScrollView 
+              style={styles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 Camera Name
               </Text>
@@ -666,7 +680,7 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Profile Modal */}
@@ -676,7 +690,10 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setShowEditProfile(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Edit Profile
@@ -708,7 +725,7 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

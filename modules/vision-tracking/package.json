@@ -1,0 +1,14 @@
+{
+  "name": "vision-tracking",
+  "version": "1.0.0",
+  "description": "iOS Vision framework integration for object detection and tracking",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "license": "MIT",
+  "author": "Visual Reasoning Playground",
+  "homepage": "https://github.com/example/vision-tracking",
+  "scripts": {},
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

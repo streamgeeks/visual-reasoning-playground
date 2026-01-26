@@ -145,7 +145,7 @@ export function getRtspFrameUrl(cameraId: string): string {
   return `${getBackendUrl()}/api/cameras/${cameraId}/frame`;
 }
 
-export type StreamMode = "rtsp" | "snapshot" | "mjpeg";
+export type StreamMode = "rtsp" | "snapshot" | "mjpeg" | "rtsp-native";
 
 export interface StreamModeInfo {
   mode: StreamMode;

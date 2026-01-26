@@ -8,6 +8,8 @@ import {
   Modal,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -271,7 +273,14 @@ export default function PresetsScreen() {
         animationType="fade"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable 
+            style={styles.modalDismiss} 
+            onPress={() => setShowAddModal(false)}
+          />
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="h4" style={styles.modalTitle}>
               Save Current Position
@@ -290,6 +299,8 @@ export default function PresetsScreen() {
               value={newPresetName}
               onChangeText={setNewPresetName}
               autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleAddPreset}
             />
 
             <View style={styles.modalButtons}>
@@ -321,7 +332,7 @@ export default function PresetsScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -389,6 +400,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: Spacing.xl,
+  },
+  modalDismiss: {
+    ...StyleSheet.absoluteFillObject,
   },
   modalContent: {
     width: "100%",

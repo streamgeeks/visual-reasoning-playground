@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
 const STORAGE_KEYS = {
   CAMERA_PROFILES: "@vrp_camera_profiles",
@@ -10,6 +11,13 @@ const STORAGE_KEYS = {
   SHOW_STATS_BY_DEFAULT: "@vrp_show_stats",
   USER_PROFILE: "@vrp_user_profile",
   TRACKING_SETTINGS: "@vrp_tracking_settings",
+  CUSTOM_OBJECTS: "@vrp_custom_objects",
+  PERSON_PROFILES: "@vrp_person_profiles",
+} as const;
+
+const SECURE_KEYS = {
+  MOONDREAM_API_KEY: "vrp_moondream_api_key",
+  OPENAI_API_KEY: "vrp_openai_api_key",
 } as const;
 
 export type StreamQuality = "high" | "low";
@@ -22,6 +30,7 @@ export interface CameraProfile {
   password: string;
   rtspPort: number;
   httpPort: number;
+  viscaPort?: number;
   streamQuality: StreamQuality;
   createdAt: string;
 }
@@ -59,11 +68,75 @@ export interface AppSettings {
 }
 
 export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
-  ptzSpeed: 24,
+  ptzSpeed: 2,
   pulseDuration: 0,
   deadZone: 0.15,
   continuousMode: true,
 };
+
+export interface SavedCustomObject {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  usageCount: number;
+}
+
+export interface PersonProfile {
+  id: string;
+  name: string;
+  imageUri: string;
+  embedding: number[];
+  createdAt: string;
+}
+
+export type WhiteBalanceMode = "auto" | "indoor" | "outdoor" | "onepush" | "manual" | "var";
+
+export interface CameraImageSettings {
+  whiteBalanceMode: WhiteBalanceMode;
+  colorTemperature: number;
+  redGain: number;
+  blueGain: number;
+  brightness: number;
+  saturation: number;
+  contrast: number;
+  sharpness: number;
+  hue: number;
+}
+
+export interface ColorStylePreset {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  thumbnailImage?: number;
+  settings: Partial<CameraImageSettings>;
+  createdAt: string;
+  isBuiltIn: boolean;
+}
+
+export const DEFAULT_IMAGE_SETTINGS: CameraImageSettings = {
+  whiteBalanceMode: "auto",
+  colorTemperature: 21,
+  redGain: 128,
+  blueGain: 128,
+  brightness: 7,
+  saturation: 7,
+  contrast: 7,
+  sharpness: 7,
+  hue: 7,
+};
+
+export const IMAGE_SETTING_RANGES = {
+  colorTemperature: { min: 0, max: 37, default: 21 },
+  redGain: { min: 0, max: 255, default: 128 },
+  blueGain: { min: 0, max: 255, default: 128 },
+  brightness: { min: 0, max: 14, default: 7 },
+  saturation: { min: 0, max: 14, default: 7 },
+  contrast: { min: 0, max: 14, default: 7 },
+  sharpness: { min: 0, max: 14, default: 7 },
+  hue: { min: 0, max: 14, default: 7 },
+} as const;
 
 // Camera Profiles
 export async function getCameraProfiles(): Promise<CameraProfile[]> {
@@ -148,21 +221,24 @@ export async function deletePreset(id: string): Promise<void> {
 // Settings
 export async function getSettings(): Promise<AppSettings> {
   try {
-    const [duration, showStats, apiKey, trackingData] = await Promise.all([
+    const [duration, showStats, trackingData, secureApiKey, legacyApiKey] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.REPLAY_BUFFER_DURATION),
       AsyncStorage.getItem(STORAGE_KEYS.SHOW_STATS_BY_DEFAULT),
-      AsyncStorage.getItem(STORAGE_KEYS.MOONDREAM_API_KEY),
       AsyncStorage.getItem(STORAGE_KEYS.TRACKING_SETTINGS),
+      SecureStore.getItemAsync(SECURE_KEYS.MOONDREAM_API_KEY).catch(() => null),
+      AsyncStorage.getItem(STORAGE_KEYS.MOONDREAM_API_KEY),
     ]);
     
     const tracking = trackingData 
       ? { ...DEFAULT_TRACKING_SETTINGS, ...JSON.parse(trackingData) }
       : DEFAULT_TRACKING_SETTINGS;
     
+    const apiKey = secureApiKey || legacyApiKey || "";
+    
     return {
       replayBufferDuration: duration ? parseInt(duration, 10) : 30,
       showStatsByDefault: showStats === "true",
-      moondreamApiKey: apiKey || "",
+      moondreamApiKey: apiKey,
       tracking,
     };
   } catch {
@@ -198,7 +274,14 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<void
   
   if (settings.moondreamApiKey !== undefined) {
     promises.push(
-      AsyncStorage.setItem(STORAGE_KEYS.MOONDREAM_API_KEY, settings.moondreamApiKey)
+      (async () => {
+        if (settings.moondreamApiKey) {
+          await SecureStore.setItemAsync(SECURE_KEYS.MOONDREAM_API_KEY, settings.moondreamApiKey);
+        } else {
+          await SecureStore.deleteItemAsync(SECURE_KEYS.MOONDREAM_API_KEY);
+        }
+        await AsyncStorage.removeItem(STORAGE_KEYS.MOONDREAM_API_KEY);
+      })()
     );
   }
   
@@ -228,4 +311,103 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 // Generate unique IDs
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Custom Objects
+export async function getCustomObjects(): Promise<SavedCustomObject[]> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_OBJECTS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveCustomObject(name: string, description: string): Promise<SavedCustomObject> {
+  const objects = await getCustomObjects();
+  
+  const existing = objects.find(
+    (o) => o.description.toLowerCase() === description.toLowerCase()
+  );
+  
+  if (existing) {
+    existing.usageCount++;
+    existing.name = name;
+    await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_OBJECTS, JSON.stringify(objects));
+    return existing;
+  }
+  
+  const newObject: SavedCustomObject = {
+    id: generateId(),
+    name,
+    description,
+    createdAt: new Date().toISOString(),
+    usageCount: 1,
+  };
+  
+  objects.unshift(newObject);
+  
+  if (objects.length > 20) {
+    objects.pop();
+  }
+  
+  await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_OBJECTS, JSON.stringify(objects));
+  return newObject;
+}
+
+export async function deleteCustomObject(id: string): Promise<void> {
+  const objects = await getCustomObjects();
+  const filtered = objects.filter((o) => o.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_OBJECTS, JSON.stringify(filtered));
+}
+
+export async function incrementCustomObjectUsage(id: string): Promise<void> {
+  const objects = await getCustomObjects();
+  const obj = objects.find((o) => o.id === id);
+  if (obj) {
+    obj.usageCount++;
+    await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_OBJECTS, JSON.stringify(objects));
+  }
+}
+
+// Secure Storage for sensitive data
+export async function getSecureApiKey(key: keyof typeof SECURE_KEYS): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(SECURE_KEYS[key]);
+  } catch {
+    return null;
+  }
+}
+
+export async function setSecureApiKey(key: keyof typeof SECURE_KEYS, value: string): Promise<void> {
+  try {
+    if (value) {
+      await SecureStore.setItemAsync(SECURE_KEYS[key], value);
+    } else {
+      await SecureStore.deleteItemAsync(SECURE_KEYS[key]);
+    }
+  } catch (error) {
+    console.error("Failed to save secure key:", error);
+  }
+}
+
+export async function deleteSecureApiKey(key: keyof typeof SECURE_KEYS): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(SECURE_KEYS[key]);
+  } catch (error) {
+    console.error("Failed to delete secure key:", error);
+  }
+}
+
+export async function migrateApiKeyToSecureStorage(): Promise<void> {
+  try {
+    const existingKey = await AsyncStorage.getItem(STORAGE_KEYS.MOONDREAM_API_KEY);
+    if (existingKey) {
+      await setSecureApiKey("MOONDREAM_API_KEY", existingKey);
+      await AsyncStorage.removeItem(STORAGE_KEYS.MOONDREAM_API_KEY);
+      console.log("Migrated Moondream API key to secure storage");
+    }
+  } catch (error) {
+    console.error("Failed to migrate API key:", error);
+  }
 }

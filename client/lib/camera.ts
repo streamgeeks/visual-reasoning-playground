@@ -1,5 +1,23 @@
 import { Platform } from "react-native";
-import { CameraProfile } from "./storage";
+import { 
+  CameraProfile, 
+  CameraImageSettings, 
+  WhiteBalanceMode,
+  DEFAULT_IMAGE_SETTINGS,
+  IMAGE_SETTING_RANGES,
+} from "./storage";
+import { 
+  viscaPanTilt, 
+  viscaZoom, 
+  viscaHome,
+  viscaPresetSave,
+  viscaPresetRecall,
+  viscaAbsolutePosition,
+  viscaZoomDirect,
+  viscaFocus,
+  viscaAutoFocus,
+  viscaOnePushAutoFocus,
+} from "./visca";
 
 export interface CameraConnectionState {
   connected: boolean;
@@ -164,13 +182,19 @@ let previousBlobUrl: string | null = null;
 
 export async function fetchCameraFrame(camera: CameraProfile): Promise<string | null> {
   if (!activeSnapshotConfig) {
-    return null;
+    console.log("[Camera] No active snapshot config, attempting to reconnect...");
+    const result = await testCameraConnection(camera);
+    if (!result.success || !activeSnapshotConfig) {
+      console.error("[Camera] Failed to reconnect:", result.error);
+      throw new Error(`Camera connection failed: ${result.error || "Could not connect to camera"}`);
+    }
+    console.log("[Camera] Reconnected successfully");
   }
   
   const separator = activeSnapshotConfig.url.includes("?") ? "&" : "?";
   const url = `${activeSnapshotConfig.url}${separator}t=${Date.now()}`;
   
-  const timeout = createTimeoutSignal(2000);
+  const timeout = createTimeoutSignal(5000);
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -207,9 +231,13 @@ export async function fetchCameraFrame(camera: CameraProfile): Promise<string | 
     }
     const base64 = btoa(binary);
     return `data:image/jpeg;base64,${base64}`;
-  } catch (error) {
+  } catch (error: any) {
     timeout.clear();
-    return null;
+    const message = error?.name === "AbortError" 
+      ? "Camera request timed out" 
+      : error?.message || "Network request failed";
+    console.error("[Camera] fetchCameraFrame error:", message);
+    throw new Error(message);
   }
 }
 
@@ -268,12 +296,17 @@ function getBasicAuthHeader(camera: CameraProfile): HeadersInit {
 }
 
 export async function sendPtzCommand(camera: CameraProfile, command: string, speed?: number): Promise<boolean> {
-  const timeout = createTimeoutSignal(2000);
+  const timeout = createTimeoutSignal(1000);
   try {
-    // Add speed parameter if provided (PTZOptics uses &speed=1-24)
-    const fullCommand = speed ? `${command}&speed=${speed}` : command;
-    const url = getPtzControlUrl(camera, fullCommand);
     const headers = getBasicAuthHeader(camera);
+    
+    let fullCommand = command;
+    if (speed && speed > 0 && !command.includes("stop")) {
+      fullCommand = `${command}&speed=${speed}`;
+    }
+    
+    const url = getPtzControlUrl(camera, fullCommand);
+    console.log(`[PTZ] Sending command: ${fullCommand} to ${camera.ipAddress}`);
     
     const response = await fetch(url, {
       method: "GET",
@@ -282,10 +315,15 @@ export async function sendPtzCommand(camera: CameraProfile, command: string, spe
     });
     
     timeout.clear();
+    
+    if (!response.ok) {
+      console.log(`[PTZ] Command FAILED: HTTP ${response.status} ${response.statusText}`);
+    }
+    
     return response.ok;
-  } catch (error) {
+  } catch (error: any) {
     timeout.clear();
-    console.log("PTZ command error:", error);
+    console.log(`[PTZ] Command EXCEPTION: ${error?.message || error}`);
     return false;
   }
 }
@@ -307,4 +345,537 @@ export const PTZ_COMMANDS = {
   focusIn: "ptzcmd&focusin",
   focusOut: "ptzcmd&focusout",
   focusStop: "ptzcmd&focusstop",
+  presetSet: (slot: number) => `ptzcmd&preset&set&${slot}`,
+  presetCall: (slot: number) => `ptzcmd&preset&call&${slot}`,
 } as const;
+
+export type PtzDirection = "up" | "down" | "left" | "right" | "upleft" | "upright" | "downleft" | "downright" | "stop";
+
+export async function sendPtzViscaCommand(
+  camera: CameraProfile,
+  direction: PtzDirection,
+  panSpeed: number = 24,
+  tiltSpeed: number = 24
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaPanTilt(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      panSpeed,
+      tiltSpeed,
+      direction
+    );
+    
+    if (result) {
+      return true;
+    }
+    
+    console.log("[VISCA] Failed, falling back to HTTP CGI");
+    return sendPtzCommand(camera, PTZ_COMMANDS[direction], panSpeed);
+  } catch (err: any) {
+    console.error("[VISCA] Exception, falling back to HTTP:", err?.message || err);
+    return sendPtzCommand(camera, PTZ_COMMANDS[direction], panSpeed);
+  }
+}
+
+export async function sendZoomViscaCommand(
+  camera: CameraProfile,
+  direction: "in" | "out" | "stop",
+  speed: number = 7
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaZoom(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      direction,
+      speed
+    );
+    
+    if (result) {
+      return true;
+    }
+    
+    const httpCmd = direction === "in" ? PTZ_COMMANDS.zoomIn 
+      : direction === "out" ? PTZ_COMMANDS.zoomOut 
+      : PTZ_COMMANDS.zoomStop;
+    return sendPtzCommand(camera, httpCmd);
+  } catch (err: any) {
+    console.error("[VISCA] Zoom exception, falling back to HTTP:", err?.message || err);
+    const httpCmd = direction === "in" ? PTZ_COMMANDS.zoomIn 
+      : direction === "out" ? PTZ_COMMANDS.zoomOut 
+      : PTZ_COMMANDS.zoomStop;
+    return sendPtzCommand(camera, httpCmd);
+  }
+}
+
+export async function sendHomeViscaCommand(camera: CameraProfile): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaHome({ ipAddress: camera.ipAddress, port: viscaPort });
+    
+    if (result) {
+      return true;
+    }
+    
+    return sendPtzCommand(camera, PTZ_COMMANDS.home);
+  } catch (err: any) {
+    console.error("[VISCA] Home exception, falling back to HTTP:", err?.message || err);
+    return sendPtzCommand(camera, PTZ_COMMANDS.home);
+  }
+}
+
+export async function sendFocusViscaCommand(
+  camera: CameraProfile,
+  direction: "near" | "far" | "stop",
+  speed: number = 3
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaFocus(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      direction,
+      speed
+    );
+    
+    if (result) {
+      return true;
+    }
+    
+    const httpCmd = direction === "near" ? PTZ_COMMANDS.focusIn 
+      : direction === "far" ? PTZ_COMMANDS.focusOut 
+      : PTZ_COMMANDS.focusStop;
+    return sendPtzCommand(camera, httpCmd);
+  } catch (err: any) {
+    console.error("[VISCA] Focus exception, falling back to HTTP:", err?.message || err);
+    const httpCmd = direction === "near" ? PTZ_COMMANDS.focusIn 
+      : direction === "far" ? PTZ_COMMANDS.focusOut 
+      : PTZ_COMMANDS.focusStop;
+    return sendPtzCommand(camera, httpCmd);
+  }
+}
+
+export async function setAutoFocus(
+  camera: CameraProfile,
+  enabled: boolean
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    return await viscaAutoFocus({ ipAddress: camera.ipAddress, port: viscaPort }, enabled);
+  } catch (err: any) {
+    console.error("[VISCA] Auto focus exception:", err?.message || err);
+    return false;
+  }
+}
+
+export async function triggerOnePushAutoFocus(camera: CameraProfile): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    return await viscaOnePushAutoFocus({ ipAddress: camera.ipAddress, port: viscaPort });
+  } catch (err: any) {
+    console.error("[VISCA] One-push auto focus exception:", err?.message || err);
+    return false;
+  }
+}
+
+export async function savePresetToCamera(
+  camera: CameraProfile,
+  slot: number
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  const clampedSlot = Math.max(0, Math.min(254, slot));
+  
+  try {
+    const result = await viscaPresetSave(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      clampedSlot
+    );
+    
+    if (result) {
+      console.log(`[Camera] Preset saved to slot ${clampedSlot} via VISCA`);
+      return true;
+    }
+    
+    console.log("[Camera] VISCA preset save failed, trying HTTP CGI");
+    return sendPtzCommand(camera, PTZ_COMMANDS.presetSet(clampedSlot));
+  } catch (err: any) {
+    console.error("[Camera] Preset save exception, falling back to HTTP:", err?.message || err);
+    return sendPtzCommand(camera, PTZ_COMMANDS.presetSet(clampedSlot));
+  }
+}
+
+export async function recallPresetFromCamera(
+  camera: CameraProfile,
+  slot: number
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  const clampedSlot = Math.max(0, Math.min(254, slot));
+  
+  try {
+    const result = await viscaPresetRecall(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      clampedSlot
+    );
+    
+    if (result) {
+      console.log(`[Camera] Preset recalled from slot ${clampedSlot} via VISCA`);
+      return true;
+    }
+    
+    console.log("[Camera] VISCA preset recall failed, trying HTTP CGI");
+    return sendPtzCommand(camera, PTZ_COMMANDS.presetCall(clampedSlot));
+  } catch (err: any) {
+    console.error("[Camera] Preset recall exception, falling back to HTTP:", err?.message || err);
+    return sendPtzCommand(camera, PTZ_COMMANDS.presetCall(clampedSlot));
+  }
+}
+
+export async function moveToAbsolutePosition(
+  camera: CameraProfile,
+  panPosition: number,
+  tiltPosition: number,
+  speed: number = 12
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaAbsolutePosition(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      speed,
+      speed,
+      panPosition,
+      tiltPosition
+    );
+    
+    if (result) {
+      console.log(`[Camera] Moved to absolute position pan=${panPosition}, tilt=${tiltPosition}`);
+      return true;
+    }
+    
+    console.log("[Camera] Absolute position move failed");
+    return false;
+  } catch (err: any) {
+    console.error("[Camera] Absolute position exception:", err?.message || err);
+    return false;
+  }
+}
+
+export async function setZoomDirect(
+  camera: CameraProfile,
+  zoomPosition: number
+): Promise<boolean> {
+  const viscaPort = camera.viscaPort || 1259;
+  
+  try {
+    const result = await viscaZoomDirect(
+      { ipAddress: camera.ipAddress, port: viscaPort },
+      zoomPosition
+    );
+    
+    if (result) {
+      console.log(`[Camera] Zoom set to ${zoomPosition}`);
+      return true;
+    }
+    
+    return false;
+  } catch (err: any) {
+    console.error("[Camera] Direct zoom exception:", err?.message || err);
+    return false;
+  }
+}
+
+type ImageSettingParam = 
+  | "wbmode" 
+  | "colortemp" 
+  | "rgain" 
+  | "bgain" 
+  | "BRIGHT" 
+  | "SATURATION" 
+  | "CONTRAST" 
+  | "SHARPNESS" 
+  | "HUE";
+
+async function sendImageSettingCommand(
+  camera: CameraProfile,
+  param: ImageSettingParam,
+  value: string | number
+): Promise<boolean> {
+  const base = `http://${camera.ipAddress}:${camera.httpPort}`;
+  
+  // Try Basic Auth header first
+  const authHeaders: HeadersInit = camera.username && camera.password ? {
+    "Authorization": `Basic ${btoa(`${camera.username}:${camera.password}`)}`,
+  } : {};
+  
+  const urlWithHeader = `${base}/cgi-bin/?post_image_value&${param}&${value}`;
+  
+  try {
+    const { signal, clear } = createTimeoutSignal(3000);
+    const response = await fetch(urlWithHeader, { 
+      method: "GET",
+      headers: authHeaders,
+      signal,
+    });
+    clear();
+    
+    if (response.ok) {
+      console.log(`[Camera] Set ${param}=${value} (header auth)`);
+      return true;
+    }
+    
+    // Fallback to URL-based auth if header auth fails (403/401)
+    if ((response.status === 401 || response.status === 403) && camera.username && camera.password) {
+      console.log(`[Camera] Header auth failed (${response.status}), trying URL auth for ${param}`);
+      
+      const urlWithAuth = `${base}/cgi-bin/?post_image_value&usr=${encodeURIComponent(camera.username)}&pwd=${encodeURIComponent(camera.password)}&${param}&${value}`;
+      
+      const { signal: signal2, clear: clear2 } = createTimeoutSignal(3000);
+      const response2 = await fetch(urlWithAuth, { 
+        method: "GET",
+        signal: signal2,
+      });
+      clear2();
+      
+      if (response2.ok) {
+        console.log(`[Camera] Set ${param}=${value} (URL auth)`);
+        return true;
+      }
+      
+      console.warn(`[Camera] URL auth also failed for ${param}: ${response2.status}`);
+      return false;
+    }
+    
+    console.warn(`[Camera] Failed to set ${param}: ${response.status}`);
+    return false;
+  } catch (err: any) {
+    console.error(`[Camera] Image setting error for ${param}:`, err?.message || err);
+    return false;
+  }
+}
+
+export async function setCameraWhiteBalanceMode(
+  camera: CameraProfile,
+  mode: WhiteBalanceMode
+): Promise<boolean> {
+  return sendImageSettingCommand(camera, "wbmode", mode);
+}
+
+export async function setCameraColorTemperature(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.colorTemperature.min,
+    Math.min(IMAGE_SETTING_RANGES.colorTemperature.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "colortemp", clamped);
+}
+
+export async function setCameraRedGain(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.redGain.min,
+    Math.min(IMAGE_SETTING_RANGES.redGain.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "rgain", clamped);
+}
+
+export async function setCameraBlueGain(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.blueGain.min,
+    Math.min(IMAGE_SETTING_RANGES.blueGain.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "bgain", clamped);
+}
+
+export async function setCameraBrightness(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.brightness.min,
+    Math.min(IMAGE_SETTING_RANGES.brightness.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "BRIGHT", clamped);
+}
+
+export async function setCameraSaturation(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.saturation.min,
+    Math.min(IMAGE_SETTING_RANGES.saturation.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "SATURATION", clamped);
+}
+
+export async function setCameraContrast(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.contrast.min,
+    Math.min(IMAGE_SETTING_RANGES.contrast.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "CONTRAST", clamped);
+}
+
+export async function setCameraSharpness(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.sharpness.min,
+    Math.min(IMAGE_SETTING_RANGES.sharpness.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "SHARPNESS", clamped);
+}
+
+export async function setCameraHue(
+  camera: CameraProfile,
+  value: number
+): Promise<boolean> {
+  const clamped = Math.max(
+    IMAGE_SETTING_RANGES.hue.min,
+    Math.min(IMAGE_SETTING_RANGES.hue.max, Math.round(value))
+  );
+  return sendImageSettingCommand(camera, "HUE", clamped);
+}
+
+export async function applyCameraImageSettings(
+  camera: CameraProfile,
+  settings: Partial<CameraImageSettings>
+): Promise<{ success: boolean; applied: string[]; failed: string[] }> {
+  const applied: string[] = [];
+  const failed: string[] = [];
+  
+  const operations: Array<{ name: string; fn: () => Promise<boolean> }> = [];
+  
+  if (settings.whiteBalanceMode !== undefined) {
+    operations.push({
+      name: "whiteBalanceMode",
+      fn: () => setCameraWhiteBalanceMode(camera, settings.whiteBalanceMode!),
+    });
+  }
+  
+  if (settings.colorTemperature !== undefined) {
+    operations.push({
+      name: "colorTemperature",
+      fn: () => setCameraColorTemperature(camera, settings.colorTemperature!),
+    });
+  }
+  
+  if (settings.redGain !== undefined) {
+    operations.push({
+      name: "redGain",
+      fn: () => setCameraRedGain(camera, settings.redGain!),
+    });
+  }
+  
+  if (settings.blueGain !== undefined) {
+    operations.push({
+      name: "blueGain",
+      fn: () => setCameraBlueGain(camera, settings.blueGain!),
+    });
+  }
+  
+  if (settings.brightness !== undefined) {
+    operations.push({
+      name: "brightness",
+      fn: () => setCameraBrightness(camera, settings.brightness!),
+    });
+  }
+  
+  if (settings.saturation !== undefined) {
+    operations.push({
+      name: "saturation",
+      fn: () => setCameraSaturation(camera, settings.saturation!),
+    });
+  }
+  
+  if (settings.contrast !== undefined) {
+    operations.push({
+      name: "contrast",
+      fn: () => setCameraContrast(camera, settings.contrast!),
+    });
+  }
+  
+  if (settings.sharpness !== undefined) {
+    operations.push({
+      name: "sharpness",
+      fn: () => setCameraSharpness(camera, settings.sharpness!),
+    });
+  }
+  
+  if (settings.hue !== undefined) {
+    operations.push({
+      name: "hue",
+      fn: () => setCameraHue(camera, settings.hue!),
+    });
+  }
+  
+  for (const op of operations) {
+    const result = await op.fn();
+    if (result) {
+      applied.push(op.name);
+    } else {
+      failed.push(op.name);
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  
+  return {
+    success: failed.length === 0,
+    applied,
+    failed,
+  };
+}
+
+export async function resetCameraImageSettings(camera: CameraProfile): Promise<boolean> {
+  const result = await applyCameraImageSettings(camera, DEFAULT_IMAGE_SETTINGS);
+  return result.success;
+}
+
+export async function sendFineTuneMove(
+  camera: CameraProfile,
+  direction: PtzDirection,
+  durationMs: number = 150
+): Promise<boolean> {
+  if (direction === "stop") return true;
+  
+  const lowSpeed = 2;
+  let stopped = false;
+  
+  const ensureStop = async () => {
+    if (!stopped) {
+      stopped = true;
+      await sendPtzViscaCommand(camera, "stop", lowSpeed, lowSpeed);
+    }
+  };
+  
+  try {
+    const started = await sendPtzViscaCommand(camera, direction, lowSpeed, lowSpeed);
+    if (!started) {
+      return false;
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+    await ensureStop();
+    return true;
+  } catch (err: any) {
+    console.error("[Camera] Fine-tune error:", err?.message || err);
+    await ensureStop();
+    return false;
+  }
+}

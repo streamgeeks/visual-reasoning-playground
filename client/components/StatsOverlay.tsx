@@ -5,33 +5,20 @@ import { PerformanceStats } from "@/lib/tracking";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/useTheme";
 
+import { StreamMode } from "@/components/ModelSelector";
+
 interface StatsOverlayProps {
   stats: PerformanceStats;
   cameraName?: string;
   cameraFps?: number;
   cameraConnected?: boolean;
-  streamMode?: "rtsp" | "snapshot" | "mjpeg";
+  streamMode?: StreamMode;
 }
 
 export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected, streamMode }: StatsOverlayProps) {
   const { theme } = useTheme();
   
   const displayFps = cameraConnected && cameraFps !== undefined ? cameraFps : stats.fps;
-  
-  const getModeLabel = () => {
-    if (!streamMode) return "N/A";
-    switch (streamMode) {
-      case "rtsp": return "RTSP (High FPS)";
-      case "mjpeg": return "MJPEG";
-      case "snapshot": return "Snapshot (Low FPS)";
-    }
-  };
-  
-  const getModeColor = () => {
-    if (streamMode === "rtsp") return Colors.dark.success;
-    if (streamMode === "snapshot") return Colors.dark.warning;
-    return Colors.dark.primary;
-  };
 
   return (
     <View style={styles.container}>
@@ -39,11 +26,8 @@ export function StatsOverlay({ stats, cameraName, cameraFps, cameraConnected, st
       {cameraConnected ? (
         <StatRow label="Status" value="LIVE" color={Colors.dark.success} />
       ) : null}
-      {cameraConnected && streamMode ? (
-        <StatRow label="Mode" value={getModeLabel()} color={getModeColor()} />
-      ) : null}
       <StatRow label="Model" value={stats.modelName} />
-      <StatRow label="Stream FPS" value={displayFps.toFixed(1)} color={cameraConnected ? getModeColor() : undefined} />
+      <StatRow label="Stream FPS" value={displayFps.toFixed(1)} color={cameraConnected ? Colors.dark.success : undefined} />
       <StatRow label="Inference" value={`${stats.inferenceTime.toFixed(0)}ms`} />
       <StatRow label="Confidence" value={stats.confidence.toFixed(2)} />
       <StatRow label="Latency" value={`${stats.latency.toFixed(0)}ms`} />

@@ -1,0 +1,13 @@
+{
+  "name": "color-analysis",
+  "version": "1.0.0",
+  "description": "Core Image color analysis for style matching",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "license": "MIT",
+  "author": "Visual Reasoning Playground",
+  "scripts": {},
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

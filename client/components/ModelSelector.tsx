@@ -4,22 +4,33 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { TrackingModel, TRACKING_MODELS, getModelInfo } from "@/lib/tracking";
-import { CameraProfile } from "@/lib/storage";
+import { getYoloStatus, NativeDetectionStatus } from "@/lib/trackingService";
+import { 
+  CameraProfile, 
+  SavedCustomObject, 
+  getCustomObjects, 
+  saveCustomObject, 
+  deleteCustomObject,
+  incrementCustomObjectUsage,
+} from "@/lib/storage";
 import {
   testCameraConnection,
   fetchCameraFrame,
   clearActiveConfig,
-  getMjpegUrl,
+  sendPtzViscaCommand,
+  PtzDirection,
 } from "@/lib/camera";
-import {
-  checkBackendHealth,
-  connectCameraRtsp,
-  disconnectCameraRtsp,
-  fetchRtspFrame,
-  StreamMode,
-} from "@/lib/rtspBackend";
 
-export type { StreamMode };
+// RTSP commented out - using snapshot mode only for simplicity
+// import {
+//   checkBackendHealth,
+//   connectCameraRtsp,
+//   disconnectCameraRtsp,
+//   fetchRtspFrame,
+// } from "@/lib/rtspBackend";
+// import { isNativeRtspAvailable } from "@/components/CameraStream";
+
+export type StreamMode = "snapshot";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 interface CameraConnectionStatus {
@@ -36,6 +47,7 @@ interface ModelSelectorProps {
   onToggleTracking: () => void;
   onShowInfo: () => void;
   camera?: CameraProfile | null;
+  isConnected?: boolean;
   onCameraConnected?: (connected: boolean, mjpegUrl?: string) => void;
   onFrameUpdate?: (frameUri: string) => void;
   onStreamModeChange?: (mode: StreamMode) => void;
@@ -51,6 +63,7 @@ export function ModelSelector({
   onToggleTracking,
   onShowInfo,
   camera,
+  isConnected: parentConnected,
   onCameraConnected,
   onFrameUpdate,
   onStreamModeChange,
@@ -61,28 +74,59 @@ export function ModelSelector({
   const { theme, isDark } = useTheme();
   const modelInfo = getModelInfo(selectedModel);
   
-  const [cameraConnected, setCameraConnected] = useState(false);
+  const [cameraConnected, setCameraConnected] = useState(parentConnected ?? false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [cameraStatus, setCameraStatus] = useState<CameraConnectionStatus | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [previewFrame, setPreviewFrame] = useState<string | null>(null);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
-  const [mjpegUrl, setMjpegUrl] = useState<string | null>(null);
-  const [useMjpeg, setUseMjpeg] = useState(false);
   const [streamMode, setStreamMode] = useState<StreamMode>("snapshot");
-  const [backendAvailable, setBackendAvailable] = useState(false);
+  const [savedObjects, setSavedObjects] = useState<SavedCustomObject[]>([]);
+  const [showSavedObjects, setShowSavedObjects] = useState(false);
+  const [yoloStatus, setYoloStatus] = useState<NativeDetectionStatus | null>(null);
   
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCountRef = useRef(0);
   const fpsStartTimeRef = useRef(0);
   const fpsCountRef = useRef(0);
-  const mjpegFpsRef = useRef(0);
-  const lastMjpegLoadRef = useRef(0);
 
-  // Notify parent when stream mode changes
   useEffect(() => {
     onStreamModeChange?.(streamMode);
   }, [streamMode, onStreamModeChange]);
+
+  useEffect(() => {
+    getCustomObjects().then(setSavedObjects);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      getYoloStatus().then(setYoloStatus);
+    }
+  }, []);
+
+  const handleSaveCustomObject = useCallback(async () => {
+    if (!customObject.trim()) return;
+    const name = customObject.trim().slice(0, 20);
+    const saved = await saveCustomObject(name, customObject.trim());
+    setSavedObjects((prev) => {
+      const filtered = prev.filter((o) => o.id !== saved.id);
+      return [saved, ...filtered].slice(0, 20);
+    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [customObject]);
+
+  const handleSelectSavedObject = useCallback(async (obj: SavedCustomObject) => {
+    onCustomObjectChange?.(obj.description);
+    await incrementCustomObjectUsage(obj.id);
+    setShowSavedObjects(false);
+    Haptics.selectionAsync();
+  }, [onCustomObjectChange]);
+
+  const handleDeleteSavedObject = useCallback(async (id: string) => {
+    await deleteCustomObject(id);
+    setSavedObjects((prev) => prev.filter((o) => o.id !== id));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -96,7 +140,9 @@ export function ModelSelector({
     };
   }, []);
 
-  const startFrameCapture = useCallback((cam: CameraProfile, mode: StreamMode) => {
+  const hasAutoConnectedRef = useRef(false);
+
+  const startFrameCapture = useCallback((cam: CameraProfile) => {
     if (frameIntervalRef.current) {
       if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
         (frameIntervalRef.current as any).stop();
@@ -116,10 +162,7 @@ export function ModelSelector({
       while (isRunning) {
         const frameStart = Date.now();
         try {
-          // Use RTSP backend or direct snapshot based on mode
-          const frame = mode === "rtsp" 
-            ? await fetchRtspFrame(cam.id)
-            : await fetchCameraFrame(cam);
+          const frame = await fetchCameraFrame(cam);
           
           if (frame) {
             consecutiveFailures = 0;
@@ -135,15 +178,14 @@ export function ModelSelector({
                 connected: true,
                 fps,
                 frameCount: frameCountRef.current,
-                mode,
+                mode: "snapshot",
               });
               fpsStartTimeRef.current = Date.now();
               fpsCountRef.current = 0;
             }
             
-            // Yield to UI thread - target ~2-5 FPS for snapshot mode to avoid overwhelming
             const frameTime = Date.now() - frameStart;
-            const targetDelay = mode === "rtsp" ? 33 : 300; // 30 FPS for RTSP, ~3 FPS for snapshot
+            const targetDelay = 300;
             const delay = Math.max(16, targetDelay - frameTime);
             await new Promise(r => setTimeout(r, delay));
           } else {
@@ -175,17 +217,13 @@ export function ModelSelector({
     } as any;
   }, [onCameraConnected, onFrameUpdate]);
 
-  // Handle MJPEG fallback to snapshot - called when MJPEGStream fails
-  const handleMjpegFallback = useCallback(() => {
-    if (cameraConnected && camera) {
-      console.log("MJPEG failed, switching to snapshot mode");
-      setUseMjpeg(false);
-      setMjpegUrl(null);
-      setStreamMode("snapshot");
-      startFrameCapture(camera, "snapshot");
-      onMjpegFallback?.();
+  useEffect(() => {
+    if (parentConnected && camera && !cameraConnected && !hasAutoConnectedRef.current) {
+      hasAutoConnectedRef.current = true;
+      setCameraConnected(true);
+      startFrameCapture(camera);
     }
-  }, [cameraConnected, camera, startFrameCapture, onMjpegFallback]);
+  }, [parentConnected, camera, cameraConnected, startFrameCapture]);
 
   const handleConnect = useCallback(async () => {
     if (!camera) return;
@@ -194,32 +232,12 @@ export function ModelSelector({
     setConnectionError(null);
     
     try {
-      // Step 1: Check if RTSP backend is available (high FPS)
-      const backendStatus = await checkBackendHealth();
-      setBackendAvailable(backendStatus.available);
-      
-      if (backendStatus.available) {
-        // Try RTSP backend first (20-30 FPS)
-        console.log("RTSP backend available, connecting via RTSP...");
-        const rtspResult = await connectCameraRtsp(camera);
-        
-        if (rtspResult.success) {
-          setCameraConnected(true);
-          setStreamMode("rtsp");
-          onCameraConnected?.(true);
-          startFrameCapture(camera, "rtsp");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          return;
-        }
-        console.log("RTSP connection failed, falling back to snapshot...");
-      }
-      
-      // Step 2: Use snapshot mode for reliable streaming
       const result = await testCameraConnection(camera);
       if (result.success) {
         setCameraConnected(true);
         setStreamMode("snapshot");
         onCameraConnected?.(true);
+        startFrameCapture(camera);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setConnectionError(result.error || "Cannot reach camera. Check IP address and network.");
@@ -233,7 +251,7 @@ export function ModelSelector({
     }
   }, [camera, onCameraConnected, startFrameCapture]);
 
-  const handleDisconnect = useCallback(async () => {
+  const handleDisconnect = useCallback(() => {
     if (frameIntervalRef.current) {
       if (typeof frameIntervalRef.current === 'object' && 'stop' in frameIntervalRef.current) {
         (frameIntervalRef.current as any).stop();
@@ -243,26 +261,65 @@ export function ModelSelector({
       frameIntervalRef.current = null;
     }
     
-    // Disconnect from RTSP backend if it was used
-    if (streamMode === "rtsp" && camera) {
-      await disconnectCameraRtsp(camera.id);
-    }
-    
     clearActiveConfig();
     setCameraConnected(false);
     setCameraStatus(null);
     setPreviewFrame(null);
-    setMjpegUrl(null);
-    setUseMjpeg(false);
     setStreamMode("snapshot");
     onCameraConnected?.(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [onCameraConnected, streamMode, camera]);
+  }, [onCameraConnected]);
 
   const handleToggleTracking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onToggleTracking();
   };
+
+  const ptzMoveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ptzActiveDirectionRef = useRef<PtzDirection | null>(null);
+
+  const handlePtzStart = useCallback(async (direction: PtzDirection) => {
+    if (!camera) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    if (ptzMoveTimeoutRef.current) {
+      clearTimeout(ptzMoveTimeoutRef.current);
+      ptzMoveTimeoutRef.current = null;
+    }
+    
+    ptzActiveDirectionRef.current = direction;
+    await sendPtzViscaCommand(camera, direction, 8, 8);
+  }, [camera]);
+
+  const handlePtzStop = useCallback(async () => {
+    if (!camera) return;
+    
+    if (ptzMoveTimeoutRef.current) {
+      clearTimeout(ptzMoveTimeoutRef.current);
+      ptzMoveTimeoutRef.current = null;
+    }
+    
+    if (ptzActiveDirectionRef.current) {
+      ptzActiveDirectionRef.current = null;
+      await sendPtzViscaCommand(camera, "stop", 8, 8);
+    }
+  }, [camera]);
+
+  const handlePtzNudge = useCallback(async (direction: PtzDirection) => {
+    if (!camera) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    if (ptzMoveTimeoutRef.current) {
+      clearTimeout(ptzMoveTimeoutRef.current);
+    }
+    
+    await sendPtzViscaCommand(camera, direction, 8, 8);
+    
+    ptzMoveTimeoutRef.current = setTimeout(async () => {
+      await sendPtzViscaCommand(camera, "stop", 8, 8);
+      ptzMoveTimeoutRef.current = null;
+    }, 150);
+  }, [camera]);
 
   return (
     <View style={styles.outerContainer}>
@@ -271,21 +328,10 @@ export function ModelSelector({
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]}>Camera Source</Text>
           {cameraConnected && cameraStatus ? (
-            <View style={[styles.statusBadge, { 
-              backgroundColor: streamMode === "rtsp" ? theme.success + "20" : theme.warning + "20" 
-            }]}>
-              <View style={[styles.statusDot, { 
-                backgroundColor: streamMode === "rtsp" ? theme.success : theme.warning 
-              }]} />
-              <Text style={[styles.statusText, { 
-                color: streamMode === "rtsp" ? theme.success : theme.warning 
-              }]}>
+            <View style={[styles.statusBadge, { backgroundColor: theme.success + "20" }]}>
+              <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+              <Text style={[styles.statusText, { color: theme.success }]}>
                 {cameraStatus.fps} FPS
-              </Text>
-              <Text style={[styles.modeText, { 
-                color: streamMode === "rtsp" ? theme.success : theme.warning 
-              }]}>
-                {streamMode === "rtsp" ? "RTSP" : streamMode === "mjpeg" ? "MJPEG" : "Snapshot"}
               </Text>
             </View>
           ) : cameraConnected ? (
@@ -350,41 +396,92 @@ export function ModelSelector({
             </View>
           </View>
         ) : cameraConnected ? (
-          <View style={styles.connectedInfo}>
-            {previewFrame ? (
-              <Image 
-                source={{ uri: previewFrame }} 
-                style={styles.previewThumbnail}
-                resizeMode="cover"
-              />
-            ) : null}
-            <View style={[styles.cameraInfo, { backgroundColor: theme.backgroundSecondary, flex: 1 }]}>
-              <View style={styles.cameraDetails}>
-                <Text style={[styles.cameraName, { color: theme.text }]}>{camera.name}</Text>
-                <Text style={[styles.cameraIp, { color: theme.textSecondary }]}>
-                  {camera.ipAddress}:{camera.rtspPort}
-                </Text>
-              </View>
-              {cameraStatus ? (
-                <View style={styles.statsRow}>
-                  <Text style={[styles.statItem, { color: theme.primary }]}>
-                    {cameraStatus.fps} FPS
-                  </Text>
-                  <Text style={[styles.statItem, { color: theme.textSecondary }]}>
-                    {cameraStatus.frameCount} frames
+          <View style={styles.connectedSection}>
+            <View style={styles.connectedInfo}>
+              {previewFrame ? (
+                <Image 
+                  source={{ uri: previewFrame }} 
+                  style={styles.previewThumbnail}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={[styles.cameraInfo, { backgroundColor: theme.backgroundSecondary, flex: 1 }]}>
+                <View style={styles.cameraDetails}>
+                  <Text style={[styles.cameraName, { color: theme.text }]}>{camera.name}</Text>
+                  <Text style={[styles.cameraIp, { color: theme.textSecondary }]}>
+                    {camera.ipAddress}:{camera.rtspPort}
                   </Text>
                 </View>
-              ) : null}
+                {cameraStatus ? (
+                  <View style={styles.statsRow}>
+                    <Text style={[styles.statItem, { color: theme.primary }]}>
+                      {cameraStatus.fps} FPS
+                    </Text>
+                    <Text style={[styles.statItem, { color: theme.textSecondary }]}>
+                      {cameraStatus.frameCount} frames
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Pressable
+                onPress={handleDisconnect}
+                style={({ pressed }) => [
+                  styles.disconnectButton,
+                  { backgroundColor: theme.error, opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Feather name="power" size={16} color="#FFFFFF" />
+              </Pressable>
             </View>
-            <Pressable
-              onPress={handleDisconnect}
-              style={({ pressed }) => [
-                styles.disconnectButton,
-                { backgroundColor: theme.error, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <Feather name="power" size={16} color="#FFFFFF" />
-            </Pressable>
+            
+            <View style={styles.ptzMiniControls}>
+              <Text style={[styles.ptzMiniLabel, { color: theme.textSecondary }]}>Hold to move:</Text>
+              <View style={styles.ptzMiniPad}>
+                <Pressable
+                  onPressIn={() => handlePtzStart("up")}
+                  onPressOut={handlePtzStop}
+                  style={({ pressed }) => [
+                    styles.ptzMiniButton,
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                  ]}
+                >
+                  <Feather name="chevron-up" size={16} color={theme.text} />
+                </Pressable>
+                <View style={styles.ptzMiniRow}>
+                  <Pressable
+                    onPressIn={() => handlePtzStart("left")}
+                    onPressOut={handlePtzStop}
+                    style={({ pressed }) => [
+                      styles.ptzMiniButton,
+                      { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    ]}
+                  >
+                    <Feather name="chevron-left" size={16} color={theme.text} />
+                  </Pressable>
+                  <View style={[styles.ptzMiniButton, { backgroundColor: "transparent" }]} />
+                  <Pressable
+                    onPressIn={() => handlePtzStart("right")}
+                    onPressOut={handlePtzStop}
+                    style={({ pressed }) => [
+                      styles.ptzMiniButton,
+                      { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    ]}
+                  >
+                    <Feather name="chevron-right" size={16} color={theme.text} />
+                  </Pressable>
+                </View>
+                <Pressable
+                  onPressIn={() => handlePtzStart("down")}
+                  onPressOut={handlePtzStop}
+                  style={({ pressed }) => [
+                    styles.ptzMiniButton,
+                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                  ]}
+                >
+                  <Feather name="chevron-down" size={16} color={theme.text} />
+                </Pressable>
+              </View>
+            </View>
           </View>
         ) : (
           <View style={styles.connectSection}>
@@ -397,17 +494,24 @@ export function ModelSelector({
               </View>
             </View>
             <Pressable
-              onPress={() => setShowPermissionPrompt(true)}
+              onPress={handleConnect}
+              disabled={isConnecting}
               style={({ pressed }) => [
                 styles.connectButton,
                 { 
                   backgroundColor: theme.primary,
-                  opacity: pressed ? 0.8 : 1,
+                  opacity: isConnecting ? 0.5 : (pressed ? 0.8 : 1),
                 },
               ]}
             >
-              <Feather name="wifi" size={16} color="#FFFFFF" />
-              <Text style={styles.connectButtonText}>Connect</Text>
+              {isConnecting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Feather name="wifi" size={16} color="#FFFFFF" />
+                  <Text style={styles.connectButtonText}>Connect</Text>
+                </>
+              )}
             </Pressable>
           </View>
         )}
@@ -456,50 +560,151 @@ export function ModelSelector({
         </View>
 
         <View style={styles.controls}>
-          <View style={[styles.modelPicker, { backgroundColor: theme.backgroundSecondary }]}>
-            {TRACKING_MODELS.map((model) => (
-              <Pressable
-                key={model.id}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  onModelChange(model.id);
-                }}
-                style={[
-                  styles.modelOption,
-                  selectedModel === model.id && {
-                    backgroundColor: theme.primary,
-                  },
-                ]}
-              >
-                <Feather
-                  name={model.icon as any}
-                  size={16}
-                  color={selectedModel === model.id ? "#FFFFFF" : theme.textSecondary}
-                />
-              </Pressable>
-            ))}
+          <View style={styles.modelPickerRow}>
+            <View style={[styles.modelPicker, { backgroundColor: theme.backgroundSecondary }]}>
+              {TRACKING_MODELS.map((model) => (
+                <Pressable
+                  key={model.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onModelChange(model.id);
+                  }}
+                  style={[
+                    styles.modelOption,
+                    selectedModel === model.id && {
+                      backgroundColor: theme.primary,
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={model.icon as any}
+                    size={16}
+                    color={selectedModel === model.id ? "#FFFFFF" : theme.textSecondary}
+                  />
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.modelNameContainer}>
+              <Text style={[styles.modelName, { color: theme.textSecondary }]}>
+                {modelInfo.name}
+              </Text>
+              {modelInfo.usesYolo && yoloStatus && !yoloStatus.yoloLoaded ? (
+                <View style={[styles.backendBadge, { backgroundColor: theme.warning + "20" }]}>
+                  <Feather name="alert-circle" size={8} color={theme.warning} style={{ marginRight: 2 }} />
+                  <Text style={[styles.backendBadgeText, { color: theme.warning }]}>
+                    Fallback
+                  </Text>
+                </View>
+              ) : (
+                <View style={[
+                  styles.backendBadge, 
+                  { 
+                    backgroundColor: modelInfo.usesYolo 
+                      ? theme.success + "20" 
+                      : modelInfo.usesVision 
+                        ? theme.primary + "20" 
+                        : theme.warning + "20" 
+                  }
+                ]}>
+                  <Text style={[
+                    styles.backendBadgeText, 
+                    { 
+                      color: modelInfo.usesYolo 
+                        ? theme.success 
+                        : modelInfo.usesVision 
+                          ? theme.primary 
+                          : theme.warning 
+                    }
+                  ]}>
+                    {modelInfo.usesYolo ? "YOLO" : modelInfo.usesVision ? "Vision" : "Cloud"}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
 
-          <Text style={[styles.modelName, { color: theme.textSecondary }]}>
-            {modelInfo.name}
-          </Text>
-
           {selectedModel === "custom" ? (
-            <TextInput
-              style={[
-                styles.customInput,
-                {
-                  backgroundColor: theme.backgroundSecondary,
-                  color: theme.text,
-                  borderColor: theme.primary,
-                },
-              ]}
-              placeholder="Describe object to track..."
-              placeholderTextColor={theme.textSecondary}
-              value={customObject}
-              onChangeText={onCustomObjectChange}
-              editable={!isTracking}
-            />
+            <View style={styles.customObjectSection}>
+              <View style={styles.customInputRow}>
+                <TextInput
+                  style={[
+                    styles.customInput,
+                    {
+                      backgroundColor: theme.backgroundSecondary,
+                      color: theme.text,
+                      borderColor: theme.primary,
+                      flex: 1,
+                    },
+                  ]}
+                  placeholder="Describe object to track..."
+                  placeholderTextColor={theme.textSecondary}
+                  value={customObject}
+                  onChangeText={onCustomObjectChange}
+                  editable={!isTracking}
+                  returnKeyType="done"
+                />
+                {customObject.trim() && !isTracking ? (
+                  <Pressable
+                    onPress={handleSaveCustomObject}
+                    style={({ pressed }) => [
+                      styles.saveObjectButton,
+                      { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Feather name="bookmark" size={14} color="#FFF" />
+                  </Pressable>
+                ) : null}
+                {savedObjects.length > 0 ? (
+                  <Pressable
+                    onPress={() => setShowSavedObjects(!showSavedObjects)}
+                    style={({ pressed }) => [
+                      styles.savedObjectsToggle,
+                      { 
+                        backgroundColor: showSavedObjects ? theme.primary : theme.backgroundSecondary,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <Feather 
+                      name="list" 
+                      size={14} 
+                      color={showSavedObjects ? "#FFF" : theme.text} 
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+              
+              {showSavedObjects && savedObjects.length > 0 ? (
+                <View style={[styles.savedObjectsList, { backgroundColor: theme.backgroundSecondary }]}>
+                  {savedObjects.slice(0, 8).map((obj) => (
+                    <View key={obj.id} style={styles.savedObjectItem}>
+                      <Pressable
+                        onPress={() => handleSelectSavedObject(obj)}
+                        style={({ pressed }) => [
+                          styles.savedObjectButton,
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text 
+                          style={[styles.savedObjectText, { color: theme.text }]} 
+                          numberOfLines={1}
+                        >
+                          {obj.name}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteSavedObject(obj.id)}
+                        hitSlop={8}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 0.6 })}
+                      >
+                        <Feather name="x" size={12} color={theme.textSecondary} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
           ) : null}
 
           <Pressable
@@ -716,6 +921,9 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   controls: {
+    gap: Spacing.sm,
+  },
+  modelPickerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.md,
@@ -732,29 +940,147 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: BorderRadius.xs,
   },
-  modelName: {
+  modelNameContainer: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  modelName: {
     fontSize: Typography.small.fontSize,
+  },
+  backendBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  backendBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
   },
   customInput: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    marginBottom: Spacing.sm,
     fontSize: Typography.body.fontSize,
+  },
+  customObjectSection: {
+    gap: Spacing.xs,
+  },
+  customInputRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    alignItems: "center",
+  },
+  saveObjectButton: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.xs,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  savedObjectsToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.xs,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  savedObjectsList: {
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.xs,
+    gap: 2,
+  },
+  savedObjectItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  savedObjectButton: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.sm,
+  },
+  savedObjectText: {
+    fontSize: 12,
   },
   trackButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: Spacing.xs,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     borderRadius: BorderRadius.sm,
   },
   trackButtonText: {
     color: "#FFFFFF",
     fontSize: Typography.body.fontSize,
     fontWeight: "600",
+  },
+  connectedSection: {
+    gap: Spacing.sm,
+  },
+  streamModeSelector: {
+    flexDirection: "row",
+    borderRadius: BorderRadius.sm,
+    padding: 4,
+  },
+  streamModeOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.xs,
+  },
+  streamModeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  connectButtons: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+  },
+  connectButtonSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    minWidth: 70,
+    justifyContent: "center",
+  },
+  connectButtonSmallText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  ptzMiniControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Spacing.sm,
+  },
+  ptzMiniLabel: {
+    fontSize: 11,
+  },
+  ptzMiniPad: {
+    alignItems: "center",
+  },
+  ptzMiniRow: {
+    flexDirection: "row",
+  },
+  ptzMiniButton: {
+    width: 28,
+    height: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: BorderRadius.xs,
   },
 });

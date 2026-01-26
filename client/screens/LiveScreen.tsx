@@ -7,11 +7,11 @@ import {
   Dimensions,
   Platform,
   Linking,
-  ScrollView,
   Image,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
@@ -24,17 +24,26 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
+  withSpring,
+  runOnJS,
 } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import * as ImageManipulator from "expo-image-manipulator";
 
 import { useTheme } from "@/hooks/useTheme";
 import { StatsOverlay } from "@/components/StatsOverlay";
 import { PTZJoystick } from "@/components/PTZJoystick";
-import { DetectionOverlay } from "@/components/DetectionOverlay";
+import { DetectionOverlay, DetectionBoxOverlay } from "@/components/DetectionOverlay";
+import { AIPhotographer, PhotoCapture, DetectionResult } from "@/components/AIPhotographer";
+import { HuntAndFind } from "@/components/HuntAndFind";
+import { PeopleCounter } from "@/components/PeopleCounter";
+import { ColorMatcher } from "@/components/ColorMatcher";
+import { ToolHeader } from "@/components/ToolHeader";
 import { ModelSelector, StreamMode } from "@/components/ModelSelector";
-import { OptimizedSnapshotStream } from "@/components/OptimizedSnapshotStream";
+import { CameraStream } from "@/components/CameraStream";
 import { StoryDisplay, ResponseLength, CaptureResult } from "@/components/StoryDisplay";
+import { CameraChat } from "@/components/CameraChat";
 import {
   StoryCapture,
   startNewStory,
@@ -58,14 +67,34 @@ import {
   TrackingSettings,
   DEFAULT_TRACKING_SETTINGS,
 } from "@/lib/storage";
-import { getApiUrl } from "@/lib/query-client";
+import { describeScene, detectNumberedPeople } from "@/lib/moondream";
+import { NumberedSelection } from "@/components/NumberedSelection";
+import { ContextBanner } from "@/components/ContextBanner";
+import { PersonManager } from "@/components/PersonManager";
+import {
+  generateVisionDescription,
+  analyzeScene,
+  buildMoondreamContext,
+  type DescriptionSource,
+} from "@/lib/visionDescription";
+import * as VisionTracking from "vision-tracking";
 import {
   TrackingController,
   TrackingState,
   BoundingBox,
   getObjectDescription,
 } from "@/lib/trackingService";
-import { sendPtzCommand, PTZ_COMMANDS, testCameraConnection, fetchCameraFrame } from "@/lib/camera";
+import { 
+  sendPtzCommand, 
+  PTZ_COMMANDS, 
+  testCameraConnection, 
+  fetchCameraFrame,
+  sendPtzViscaCommand,
+  sendZoomViscaCommand,
+  sendHomeViscaCommand,
+  sendFineTuneMove,
+  PtzDirection,
+} from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -81,7 +110,8 @@ export default function LiveScreen({ navigation }: any) {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>("back");
-  const [camera, setCamera] = useState<CameraProfile | null>(null);
+const [camera, setCamera] = useState<CameraProfile | null>(null);
+  const [allCameras, setAllCameras] = useState<CameraProfile[]>([]);
   const [selectedModel, setSelectedModel] = useState<TrackingModel>("person");
   const [customObject, setCustomObject] = useState("");
   const [isTracking, setIsTracking] = useState(false);
@@ -114,8 +144,81 @@ export default function LiveScreen({ navigation }: any) {
   const [autoTrackingState, setAutoTrackingState] = useState<TrackingState | null>(null);
   const trackingControllerRef = useRef<TrackingController | null>(null);
   const latestFrameRef = useRef<string | null>(null);
+  
+  // AI Photographer detection
+  const [aiDetection, setAiDetection] = useState<DetectionResult | null>(null);
+  const [aiFlashEffect, setAiFlashEffect] = useState(false);
+  const aiDetectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Person selection mode state
+  const [selectPersonMode, setSelectPersonMode] = useState(false);
+  const [numberedDetections, setNumberedDetections] = useState<{id: string, box: {x_min: number, y_min: number, x_max: number, y_max: number}}[]>([]);
+  const [selectedEmbedding, setSelectedEmbedding] = useState<number[] | null>(null);
 
   const pulseOpacity = useSharedValue(0.3);
+
+  const videoScale = useSharedValue(1);
+  const videoTranslateX = useSharedValue(0);
+  const videoTranslateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      savedScale.value = videoScale.value;
+    })
+    .onUpdate((event) => {
+      const newScale = Math.min(Math.max(savedScale.value * event.scale, 1), 4);
+      videoScale.value = newScale;
+    })
+    .onEnd(() => {
+      if (videoScale.value < 1.1) {
+        videoScale.value = withSpring(1);
+        videoTranslateX.value = withSpring(0);
+        videoTranslateY.value = withSpring(0);
+      }
+      savedScale.value = videoScale.value;
+    });
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      savedTranslateX.value = videoTranslateX.value;
+      savedTranslateY.value = videoTranslateY.value;
+    })
+    .onUpdate((event) => {
+      if (videoScale.value > 1) {
+        const maxTranslate = (videoScale.value - 1) * VIDEO_WIDTH / 2;
+        const maxTranslateY = (videoScale.value - 1) * VIDEO_HEIGHT / 2;
+        videoTranslateX.value = Math.min(Math.max(savedTranslateX.value + event.translationX, -maxTranslate), maxTranslate);
+        videoTranslateY.value = Math.min(Math.max(savedTranslateY.value + event.translationY, -maxTranslateY), maxTranslateY);
+      }
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (videoScale.value > 1) {
+        videoScale.value = withSpring(1);
+        videoTranslateX.value = withSpring(0);
+        videoTranslateY.value = withSpring(0);
+      } else {
+        videoScale.value = withSpring(2);
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    pinchGesture,
+    Gesture.Race(panGesture, doubleTapGesture)
+  );
+
+  const videoAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: videoTranslateX.value },
+      { translateY: videoTranslateY.value },
+      { scale: videoScale.value },
+    ],
+  }));
 
   useFocusEffect(
     useCallback(() => {
@@ -125,17 +228,21 @@ export default function LiveScreen({ navigation }: any) {
 
   const loadCameraAndSettings = async () => {
     try {
-      const [cameras, currentId, settings] = await Promise.all([
+const [cameras, currentId, settings] = await Promise.all([
         getCameraProfiles(),
         getCurrentCameraId(),
         getSettings(),
       ]);
 
+      setAllCameras(cameras);
+      
       if (currentId) {
         const currentCamera = cameras.find((c) => c.id === currentId);
         if (currentCamera) {
           setCamera(currentCamera);
         }
+      } else if (cameras.length > 0) {
+        setCamera(cameras[0]);
       }
 
       setShowStats(settings.showStatsByDefault);
@@ -228,7 +335,59 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, [isTracking, selectedModel]);
 
-  const handleToggleTracking = useCallback(() => {
+  const startTrackingWithCamera = useCallback((cam: CameraProfile) => {
+    // Helper to start tracking once camera is connected
+    if (!appSettings?.moondreamApiKey) {
+      Alert.alert(
+        "API Key Required",
+        "Please add your Moondream API key in Settings to enable object tracking."
+      );
+      return;
+    }
+    
+    if (selectedModel === "custom" && !customObject.trim()) {
+      Alert.alert("Custom Object Required", "Please enter an object description to track.");
+      return;
+    }
+    
+    const trackingSettings = appSettings?.tracking || { ptzSpeed: 12, pulseDuration: 0, deadZone: 0.15, continuousMode: true };
+    const controller = new TrackingController(
+      cam,
+      appSettings?.moondreamApiKey || "",
+      selectedModel,
+      async () => latestFrameRef.current,
+      (state) => setAutoTrackingState(state),
+      { 
+        updateInterval: selectedModel === "custom" ? 600 : 300,
+        ptzSpeed: trackingSettings.ptzSpeed,
+        pulseDuration: trackingSettings.pulseDuration,
+        deadZone: trackingSettings.deadZone,
+        continuousMode: trackingSettings.continuousMode,
+      },
+      selectedModel === "custom" ? customObject.trim() : undefined
+    );
+    
+    trackingControllerRef.current = controller;
+    controller.start();
+    setIsTracking(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [appSettings, selectedModel, customObject]);
+
+  const handlePtzConnected = useCallback((connected: boolean, mjpegUrl?: string) => {
+    setPtzConnected(connected);
+    if (connected && mjpegUrl) {
+      setPtzMjpegUrl(mjpegUrl);
+    }
+    if (!connected) {
+      setPtzFrame(null);
+      setPtzMjpegUrl(null);
+      setPtzFps(0);
+      ptzFrameCountRef.current = 0;
+      ptzFpsStartTimeRef.current = 0;
+    }
+  }, []);
+
+  const handleToggleTracking = useCallback(async () => {
     if (isTracking) {
       // Stop tracking
       trackingControllerRef.current?.stop();
@@ -238,8 +397,8 @@ export default function LiveScreen({ navigation }: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } else {
       // Start tracking
-      if (!camera || !ptzConnected) {
-        console.log("Cannot start tracking: no PTZ camera connected");
+      if (!camera) {
+        Alert.alert("No Camera", "Please select a camera in Settings first.");
         return;
       }
       
@@ -251,78 +410,85 @@ export default function LiveScreen({ navigation }: any) {
         return;
       }
       
-      // Create tracking controller
-      // For custom mode, require an object description
       if (selectedModel === "custom" && !customObject.trim()) {
         Alert.alert("Custom Object Required", "Please enter an object description to track.");
         return;
       }
       
-      const trackingSettings = appSettings?.tracking || { ptzSpeed: 24, pulseDuration: 0, deadZone: 0.15, continuousMode: true };
-      const controller = new TrackingController(
-        camera,
-        appSettings?.moondreamApiKey || "",
-        selectedModel,
-        async () => latestFrameRef.current,
-        (state) => setAutoTrackingState(state),
-        { 
-          updateInterval: selectedModel === "custom" ? 600 : 300,
-          ptzSpeed: trackingSettings.ptzSpeed,
-          pulseDuration: trackingSettings.pulseDuration,
-          deadZone: trackingSettings.deadZone,
-          continuousMode: trackingSettings.continuousMode,
-        },
-        selectedModel === "custom" ? customObject.trim() : undefined
-      );
+      // Auto-connect if not connected
+      if (!ptzConnected) {
+        console.log("[Tracking] Auto-connecting to camera for tracking...");
+        try {
+          const result = await testCameraConnection(camera);
+          if (result.success) {
+            handlePtzConnected(true);
+            setPtzStreamMode("snapshot");
+            // Start frame capture - we need frames for tracking
+            // The connection will trigger frame updates via ModelSelector's useEffect
+            // Give it a moment to start receiving frames
+            setTimeout(() => {
+              startTrackingWithCamera(camera);
+            }, 500);
+          } else {
+            Alert.alert("Connection Failed", result.error || "Could not connect to camera");
+          }
+        } catch (err: any) {
+          Alert.alert("Connection Error", err.message || "Failed to connect to camera");
+        }
+        return;
+      }
       
-      trackingControllerRef.current = controller;
-      controller.start();
-      setIsTracking(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Already connected, start tracking immediately
+      startTrackingWithCamera(camera);
     }
-  }, [isTracking, camera, ptzConnected, appSettings, selectedModel, customObject]);
+  }, [isTracking, camera, ptzConnected, appSettings, selectedModel, customObject, handlePtzConnected, startTrackingWithCamera]);
 
-  const lastPtzCommand = useRef<string | null>(null);
+  const lastPtzDirection = useRef<PtzDirection | null>(null);
   const lastPtzSpeed = useRef<number>(0);
 
   const handlePTZMove = useCallback(async (pan: number, tilt: number, speed: number) => {
     setPtzPosition({ pan, tilt });
     
-    if (!camera) return;
+    if (!camera) {
+      console.log("[PTZ] No camera configured");
+      return;
+    }
     
-    // Determine command based on joystick position
-    let command: string | null = null;
-    
-    // Deadzone threshold - don't send commands for tiny movements
+    let direction: PtzDirection = "stop";
     const threshold = 15;
     
     if (pan === 0 && tilt === 0 && speed === 0) {
-      // Joystick released - stop movement
-      command = PTZ_COMMANDS.stop;
+      direction = "stop";
     } else if (Math.abs(pan) > threshold || Math.abs(tilt) > threshold) {
-      // Determine direction based on pan/tilt values
       const goingLeft = pan < -threshold;
       const goingRight = pan > threshold;
       const goingUp = tilt > threshold;
       const goingDown = tilt < -threshold;
       
-      if (goingUp && goingLeft) command = PTZ_COMMANDS.upleft;
-      else if (goingUp && goingRight) command = PTZ_COMMANDS.upright;
-      else if (goingDown && goingLeft) command = PTZ_COMMANDS.downleft;
-      else if (goingDown && goingRight) command = PTZ_COMMANDS.downright;
-      else if (goingUp) command = PTZ_COMMANDS.up;
-      else if (goingDown) command = PTZ_COMMANDS.down;
-      else if (goingLeft) command = PTZ_COMMANDS.left;
-      else if (goingRight) command = PTZ_COMMANDS.right;
+      if (goingUp && goingLeft) direction = "upleft";
+      else if (goingUp && goingRight) direction = "upright";
+      else if (goingDown && goingLeft) direction = "downleft";
+      else if (goingDown && goingRight) direction = "downright";
+      else if (goingUp) direction = "up";
+      else if (goingDown) direction = "down";
+      else if (goingLeft) direction = "left";
+      else if (goingRight) direction = "right";
     }
     
-    // Send if command changed OR speed changed significantly (by 3 or more)
-    const speedChanged = Math.abs(speed - lastPtzSpeed.current) >= 3;
-    if (command && (command !== lastPtzCommand.current || speedChanged)) {
-      lastPtzCommand.current = command;
+    const speedChanged = Math.abs(speed - lastPtzSpeed.current) >= 2;
+    if (direction !== lastPtzDirection.current || speedChanged) {
+      lastPtzDirection.current = direction;
       lastPtzSpeed.current = speed;
-      await sendPtzCommand(camera, command, speed > 0 ? speed : undefined);
+      console.log(`[PTZ] Sending VISCA: ${direction} @ speed ${speed} to ${camera.ipAddress}:${camera.viscaPort || 1259}`);
+      const result = await sendPtzViscaCommand(camera, direction, speed, speed);
+      console.log(`[PTZ] VISCA result: ${result ? "OK" : "FAILED"}`);
     }
+  }, [camera]);
+
+  const handleFineTune = useCallback(async (direction: PtzDirection) => {
+    if (!camera) return;
+    console.log(`[PTZ] Fine-tune: ${direction}`);
+    await sendFineTuneMove(camera, direction, 150);
   }, [camera]);
 
   const handleZoom = useCallback(async (zoom: number) => {
@@ -332,12 +498,11 @@ export default function LiveScreen({ navigation }: any) {
     if (!camera) return;
     
     if (zoom > prevZoom) {
-      await sendPtzCommand(camera, PTZ_COMMANDS.zoomIn);
-      // Brief zoom pulse then stop
-      setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 200);
+      await sendZoomViscaCommand(camera, "in", 7);
+      setTimeout(() => sendZoomViscaCommand(camera, "stop"), 150);
     } else if (zoom < prevZoom) {
-      await sendPtzCommand(camera, PTZ_COMMANDS.zoomOut);
-      setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 200);
+      await sendZoomViscaCommand(camera, "out", 7);
+      setTimeout(() => sendZoomViscaCommand(camera, "stop"), 150);
     }
   }, [camera, currentZoom]);
 
@@ -348,17 +513,16 @@ export default function LiveScreen({ navigation }: any) {
       case "home":
         setPtzPosition({ pan: 0, tilt: 0 });
         setCurrentZoom(0);
-        await sendPtzCommand(camera, PTZ_COMMANDS.home);
+        await sendHomeViscaCommand(camera);
         break;
       case "center":
         setPtzPosition({ pan: 0, tilt: 0 });
-        await sendPtzCommand(camera, PTZ_COMMANDS.stop);
+        await sendPtzViscaCommand(camera, "stop");
         break;
       case "wide":
         setCurrentZoom(0);
-        // Zoom out fully
-        await sendPtzCommand(camera, PTZ_COMMANDS.zoomOut);
-        setTimeout(() => sendPtzCommand(camera, PTZ_COMMANDS.zoomStop), 2000);
+        await sendZoomViscaCommand(camera, "out", 7);
+        setTimeout(() => sendZoomViscaCommand(camera, "stop"), 2000);
         break;
     }
   }, [camera]);
@@ -377,23 +541,9 @@ export default function LiveScreen({ navigation }: any) {
     Haptics.selectionAsync();
   }, []);
 
-  const handlePtzConnected = useCallback((connected: boolean, mjpegUrl?: string) => {
-    setPtzConnected(connected);
-    if (connected && mjpegUrl) {
-      setPtzMjpegUrl(mjpegUrl);
-    }
-    if (!connected) {
-      setPtzFrame(null);
-      setPtzMjpegUrl(null);
-      setPtzFps(0);
-      ptzFrameCountRef.current = 0;
-      ptzFpsStartTimeRef.current = 0;
-    }
-  }, []);
-
   const handlePtzFrameUpdate = useCallback((frameUri: string) => {
     setPtzFrame(frameUri);
-    latestFrameRef.current = frameUri; // Store for tracking
+    latestFrameRef.current = frameUri;
     
     ptzFrameCountRef.current++;
     const now = Date.now();
@@ -410,6 +560,126 @@ export default function LiveScreen({ navigation }: any) {
     }
   }, []);
 
+  const handleSelectPerson = useCallback(async (detection: {id: string, box: {x_min: number, y_min: number, x_max: number, y_max: number}}) => {
+    try {
+      let base64Data: string | null = null;
+      
+      if (ptzConnected && latestFrameRef.current) {
+        const frame = latestFrameRef.current;
+        base64Data = frame.includes(",") ? frame.split(",")[1] : frame;
+      } else if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.8 });
+        if (!photo || !photo.base64) return;
+        base64Data = photo.base64;
+      }
+      
+      if (!base64Data) return;
+
+      const frameWidth = Dimensions.get("window").width;
+      const frameHeight = VIDEO_HEIGHT;
+      
+      const cropped = await ImageManipulator.manipulateAsync(
+        `data:image/jpeg;base64,${base64Data}`,
+        [{
+          crop: {
+            originX: detection.box.x_min * frameWidth,
+            originY: detection.box.y_min * frameHeight,
+            width: (detection.box.x_max - detection.box.x_min) * frameWidth,
+            height: (detection.box.y_max - detection.box.y_min) * frameHeight,
+          },
+        }],
+        { base64: true, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      if (!cropped.base64) return;
+
+      const embedding = await VisionTracking.generateFeaturePrint(cropped.base64);
+      setSelectedEmbedding(embedding);
+      
+      if (trackingControllerRef.current) {
+        trackingControllerRef.current.setTargetIdentity(embedding);
+      }
+      
+      setSelectPersonMode(false);
+      setNumberedDetections([]);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Person Locked", 
+        `Now tracking ${detection.id}. Start "Object Tracking" to follow this specific person.`
+      );
+    } catch (error) {
+      console.error("Failed to select person:", error);
+      Alert.alert("Error", "Failed to select person");
+    }
+  }, [ptzConnected]);
+
+  const triggerNumberedDetection = useCallback(async () => {
+    try {
+      let base64Data: string | null = null;
+      
+      if (ptzConnected && latestFrameRef.current) {
+        const frame = latestFrameRef.current;
+        base64Data = frame.includes(",") ? frame.split(",")[1] : frame;
+      } else if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.8 });
+        if (!photo || !photo.base64) return;
+        base64Data = photo.base64;
+      }
+      
+      if (!base64Data) return;
+
+      const apiKey = appSettings?.moondreamApiKey;
+      if (!apiKey) {
+        Alert.alert("API Key Required", "Please set Moondream API key in settings");
+        return;
+      }
+
+      const detections = await detectNumberedPeople(base64Data, apiKey);
+      setNumberedDetections(detections);
+      
+      if (detections.length === 0) {
+        Alert.alert("No People Found", "No people were detected in the current frame");
+        setSelectPersonMode(false);
+      }
+    } catch (error) {
+      console.error("Failed to detect numbered people:", error);
+      setSelectPersonMode(false);
+    }
+  }, [ptzConnected, appSettings?.moondreamApiKey]);
+
+  const captureFrameForAI = useCallback(async (): Promise<string | null> => {
+    if (ptzConnected && latestFrameRef.current) {
+      return latestFrameRef.current;
+    }
+    
+    if (!cameraRef.current) {
+      return null;
+    }
+    
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.3,
+        skipProcessing: true,
+      });
+      
+      if (!photo?.uri) return null;
+      
+      const manipulated = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 512 } }],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      
+      if (!manipulated?.base64) return null;
+      
+      return `data:image/jpeg;base64,${manipulated.base64}`;
+    } catch (err) {
+      console.log("[captureFrameForAI] Error:", err);
+      return null;
+    }
+  }, [ptzConnected]);
+
   const handleOpenSettings = useCallback(async () => {
     if (Platform.OS !== "web") {
       try {
@@ -419,6 +689,11 @@ export default function LiveScreen({ navigation }: any) {
       }
     }
   }, []);
+
+  const handleSetupApiKey = useCallback(() => {
+    navigation.navigate("SettingsTab");
+    Haptics.selectionAsync();
+  }, [navigation]);
 
   const openTool = useCallback((tool: string) => {
     setActiveTool(tool);
@@ -441,62 +716,96 @@ export default function LiveScreen({ navigation }: any) {
     }
   };
 
-  const handleStoryCaptureAndDescribe = useCallback(async (length: ResponseLength): Promise<CaptureResult | null> => {
+  const handleStoryCaptureAndDescribe = useCallback(async (length: ResponseLength, forceVision?: boolean): Promise<CaptureResult | null> => {
     try {
-      if (!appSettings?.moondreamApiKey) {
+      let base64Data: string | null = null;
+      let imageUri: string = "";
+
+      if (ptzConnected && latestFrameRef.current) {
+        const frame = latestFrameRef.current;
+        base64Data = frame.includes(",") ? frame.split(",")[1] : frame;
+        imageUri = frame;
+      } else if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.3,
+          skipProcessing: true,
+        });
+
+        if (!photo?.uri) {
+          console.log("Failed to capture photo");
+          return null;
+        }
+
+        const manipulated = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ resize: { width: 512 } }],
+          { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+
+        if (!manipulated?.base64) {
+          console.log("Failed to process image");
+          return null;
+        }
+
+        base64Data = manipulated.base64;
+        imageUri = manipulated.uri;
+      } else {
+        console.log("No camera source available");
         return null;
       }
 
-      if (!cameraRef.current) {
+      const hasMoondream = Boolean(appSettings?.moondreamApiKey) && !forceVision;
+      let description: string;
+      let source: DescriptionSource;
+
+      if (hasMoondream) {
+        const analysis = VisionTracking.isVisionAvailable
+          ? await analyzeScene(base64Data)
+          : null;
+        const context = analysis ? buildMoondreamContext(analysis) : "";
+        
+        const prompt = context
+          ? `${getPromptForLength(length)}\n\nContext from detection: ${context}`
+          : getPromptForLength(length);
+
+        const result = await describeScene(
+          base64Data,
+          appSettings!.moondreamApiKey,
+          prompt
+        );
+
+        if (result.error) {
+          console.error("Moondream API error:", result.error);
+          if (VisionTracking.isVisionAvailable) {
+            const visionResult = await generateVisionDescription(base64Data);
+            description = visionResult.natural;
+            source = "apple";
+          } else {
+            return null;
+          }
+        } else {
+          description = result.description;
+          source = "moondream";
+        }
+      } else if (VisionTracking.isVisionAvailable) {
+        const visionResult = await generateVisionDescription(base64Data);
+        description = visionResult.natural;
+        source = "apple";
+      } else {
+        console.log("No description service available");
         return null;
       }
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.3,
-        skipProcessing: true,
-      });
-
-      if (!photo?.uri) {
-        return null;
-      }
-
-      // Resize and compress the image to reduce payload size
-      const manipulated = await ImageManipulator.manipulateAsync(
-        photo.uri,
-        [{ resize: { width: 512 } }],
-        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-
-      if (!manipulated?.base64) {
-        return null;
-      }
-
-      const apiUrl = getApiUrl();
-      const response = await fetch(new URL("/api/describe-scene", apiUrl).toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: manipulated.base64,
-          apiKey: appSettings.moondreamApiKey,
-          prompt: getPromptForLength(length),
-        }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
       return {
-        description: data.description || "",
-        imageUri: manipulated.uri,
+        description,
+        imageUri,
+        source,
       };
     } catch (error) {
+      console.error("Scene capture error:", error);
       return null;
     }
-  }, [appSettings]);
+  }, [appSettings, ptzConnected]);
 
   const handleStoryModeStart = useCallback(async (intervalSeconds: number) => {
     await startNewStory(intervalSeconds);
@@ -588,28 +897,31 @@ export default function LiveScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {/* Video Area */}
-      <View style={{ paddingTop: headerHeight }}>
-        <View style={[styles.videoContainer, { backgroundColor: "#000" }]}>
-          {ptzConnected && camera ? (
-            <OptimizedSnapshotStream
-              camera={camera}
-              targetFps={8}
-              style={styles.camera}
-              onFpsUpdate={(stats) => {
-                setPtzFps(stats.fps);
-              }}
-              onFrameUpdate={handlePtzFrameUpdate}
-              onError={(err) => console.log("Stream error:", err)}
-            />
-          ) : (
-            <CameraView
-              ref={cameraRef}
-              style={styles.camera}
-              facing={cameraType}
-              zoom={currentZoom / 100}
-            />
-          )}
+      {/* Video Section - 45% */}
+      <View style={styles.videoSection}>
+        <View style={{ paddingTop: headerHeight }}>
+          <GestureDetector gesture={composedGesture}>
+          <View style={[styles.videoContainer, { backgroundColor: "#000", overflow: "hidden" }]}>
+            <Animated.View style={[styles.zoomableContent, videoAnimatedStyle]}>
+              {ptzConnected && camera ? (
+                <CameraStream
+                  camera={camera}
+                  streamMode={ptzStreamMode}
+                  style={styles.camera}
+                  onFpsUpdate={(stats) => {
+                    setPtzFps(stats.fps);
+                  }}
+                  onFrameUpdate={handlePtzFrameUpdate}
+                  onError={(err) => console.log("Stream error:", err)}
+                />
+              ) : (
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing={cameraType}
+                  zoom={currentZoom / 100}
+                />
+              )}
 
           <View style={styles.overlayContainer} pointerEvents="box-none">
             {/* Deadzone indicator - shows target area for tracking */}
@@ -655,29 +967,35 @@ export default function LiveScreen({ navigation }: any) {
               </Animated.View>
             ) : null}
 
-            {/* Detection bounding box */}
+            {/* Detection bounding box - clean corner markers */}
             {isTracking && autoTrackingState?.lastDetection?.found && 
              autoTrackingState.lastDetection.box ? (
-              <View 
-                style={[
-                  styles.detectionBox, 
-                  { 
-                    left: autoTrackingState.lastDetection.box.x_min * VIDEO_WIDTH,
-                    top: autoTrackingState.lastDetection.box.y_min * VIDEO_HEIGHT,
-                    width: (autoTrackingState.lastDetection.box.x_max - autoTrackingState.lastDetection.box.x_min) * VIDEO_WIDTH,
-                    height: (autoTrackingState.lastDetection.box.y_max - autoTrackingState.lastDetection.box.y_min) * VIDEO_HEIGHT,
-                    borderColor: autoTrackingState.inDeadzone ? theme.success : theme.warning,
-                  }
-                ]} 
-              >
-                <View style={[styles.detectionLabel, { backgroundColor: autoTrackingState.inDeadzone ? theme.success : theme.warning }]}>
-                  <Text style={styles.detectionLabelText}>
+              <DetectionBoxOverlay
+                box={autoTrackingState.lastDetection.box}
+                containerWidth={VIDEO_WIDTH}
+                containerHeight={VIDEO_HEIGHT}
+                isLocked={autoTrackingState.inDeadzone}
+              />
+            ) : null}
+            
+            {/* Detection info badge - bottom of video */}
+            {isTracking && autoTrackingState?.lastDetection?.found ? (
+              <View style={styles.detectionInfoContainer} pointerEvents="none">
+                <Animated.View 
+                  entering={FadeIn.duration(150)}
+                  exiting={FadeOut.duration(150)}
+                  style={[
+                    styles.detectionInfoBadge, 
+                    { backgroundColor: autoTrackingState.inDeadzone ? theme.success : theme.warning }
+                  ]}
+                >
+                  <Text style={styles.detectionInfoText}>
                     {getObjectDescription(selectedModel).toUpperCase()}
                     {autoTrackingState.lastDetection.confidence 
                       ? ` ${Math.round(autoTrackingState.lastDetection.confidence * 100)}%` 
                       : ""}
                   </Text>
-                </View>
+                </Animated.View>
               </View>
             ) : null}
             
@@ -695,21 +1013,66 @@ export default function LiveScreen({ navigation }: any) {
               />
             ) : null}
 
+            {/* Numbered person selection overlay */}
+            <NumberedSelection
+              detections={numberedDetections}
+              onSelectPerson={handleSelectPerson}
+              frameWidth={VIDEO_WIDTH}
+              frameHeight={VIDEO_HEIGHT}
+              visible={selectPersonMode}
+            />
+
             {/* Camera info */}
             <View style={styles.cameraInfoOverlay} pointerEvents="none">
               <Text style={styles.cameraInfoText}>
                 {ptzConnected ? camera?.name : `Phone Camera (${cameraType})`}
               </Text>
-              {ptzConnected ? (
-                <Text style={[styles.cameraInfoText, { color: "#00D9FF" }]}>
-                  {ptzFps} FPS
-                </Text>
-              ) : (
+              {!ptzConnected && (
                 <Text style={styles.cameraInfoText}>
                   P:{ptzPosition.pan} T:{ptzPosition.tilt} Z:{currentZoom}
                 </Text>
               )}
             </View>
+
+            {/* Camera switch button */}
+            {camera && (
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPtzConnected(!ptzConnected);
+                }}
+                style={({ pressed }) => [
+                  styles.cameraSwitchButton,
+                  { 
+                    backgroundColor: ptzConnected ? theme.primary : theme.backgroundSecondary,
+                    opacity: pressed ? 0.7 : 0.9,
+                  }
+                ]}
+              >
+                <Feather 
+                  name={ptzConnected ? "video" : "smartphone"} 
+                  size={16} 
+                  color={ptzConnected ? "#FFF" : theme.text} 
+                />
+                <Text style={[
+                  styles.cameraSwitchText, 
+                  { color: ptzConnected ? "#FFF" : theme.text }
+                ]}>
+                  {ptzConnected ? "PTZ" : "Phone"}
+                </Text>
+              </Pressable>
+            )}
+
+            {/* AI Photographer detection box - zooms with video */}
+            {aiDetection?.box && (
+              <DetectionBoxOverlay
+                box={aiDetection.box}
+                containerWidth={VIDEO_WIDTH}
+                containerHeight={VIDEO_HEIGHT}
+                isLocked={false}
+                color={theme.success}
+              />
+            )}
 
             {/* Stats overlay */}
             {showStats ? (
@@ -727,8 +1090,35 @@ export default function LiveScreen({ navigation }: any) {
                 />
               </Animated.View>
             ) : null}
+          </View>
+            </Animated.View>
 
-            {/* Video controls */}
+            {/* AI Photographer flash effect - fixed position */}
+            {aiFlashEffect && (
+              <Animated.View
+                entering={FadeIn.duration(100)}
+                exiting={FadeOut.duration(200)}
+                style={[styles.aiFlashOverlay, { borderColor: theme.success }]}
+                pointerEvents="none"
+              />
+            )}
+
+            {/* AI Photographer notification badge - fixed position */}
+            {aiDetection && (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                exiting={FadeOut.duration(500)}
+                style={styles.aiDetectionOverlay}
+                pointerEvents="none"
+              >
+                <View style={[styles.aiDetectionBadge, { backgroundColor: theme.success }]}>
+                  <Feather name="camera" size={14} color="#fff" />
+                  <Text style={styles.aiDetectionText}>{aiDetection.triggerName}</Text>
+                </View>
+              </Animated.View>
+            )}
+
+            {/* Video controls - outside zoom area */}
             <View style={styles.videoControls}>
               <Pressable
                 onPress={toggleStats}
@@ -753,15 +1143,27 @@ export default function LiveScreen({ navigation }: any) {
               </Pressable>
             </View>
           </View>
+        </GestureDetector>
         </View>
       </View>
 
-      {/* Tools Area */}
-      <View style={[styles.toolsArea, { paddingBottom: tabBarHeight }]}>
+      <ContextBanner
+        trackingState={autoTrackingState}
+        isTracking={isTracking}
+        cameraName={ptzConnected ? (camera?.name || "PTZ Camera") : `Phone (${cameraType})`}
+        fps={ptzFps}
+        ptzConnected={ptzConnected}
+      />
+
+      {/* Sheet Area */}
+      <View style={[styles.sheetArea, { paddingBottom: tabBarHeight }]}>
         {activeTool === null ? (
-          /* Tool List View */
-          <View style={styles.toolList}>
-            <Pressable
+          <KeyboardAwareScrollViewCompat
+            style={styles.toolListScroll}
+            contentContainerStyle={styles.toolList}
+            showsVerticalScrollIndicator={false}
+          >
+<Pressable
               onPress={() => openTool("describe")}
               style={({ pressed }) => [
                 styles.toolRow,
@@ -775,6 +1177,101 @@ export default function LiveScreen({ navigation }: any) {
                 </Text>
                 <View style={[styles.toolBadge, { backgroundColor: theme.primary + "20" }]}>
                   <Text style={[styles.toolBadgeText, { color: theme.primary }]}>AI</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => openTool("chat")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="message-circle" size={18} color={theme.primary} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Chat
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>Vision</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => openTool("photographer")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="camera" size={18} color={theme.primary} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  AI Photographer
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.primary + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.primary }]}>AI</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => openTool("huntfind")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="search" size={18} color={theme.success} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Hunt & Find
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>AI</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => openTool("peoplecounter")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="users" size={18} color={theme.warning} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  People Counter
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.warning + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.warning }]}>Vision</Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => openTool("colormatcher")}
+              style={({ pressed }) => [
+                styles.toolRow,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={styles.toolRowLeft}>
+                <Feather name="sliders" size={18} color={theme.success} />
+                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                  Color Matcher
+                </Text>
+                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
+                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>PTZ</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color={theme.textSecondary} />
@@ -811,19 +1308,63 @@ export default function LiveScreen({ navigation }: any) {
               </View>
               <Feather name="chevron-right" size={18} color={theme.textSecondary} />
             </Pressable>
-          </View>
+          </KeyboardAwareScrollViewCompat>
         ) : (
           /* Expanded Tool View */
           <View style={styles.toolExpanded}>
-            <Pressable
-              onPress={closeTool}
-              style={[styles.toolBackRow, { borderBottomColor: theme.backgroundDefault }]}
-            >
-              <Feather name="chevron-left" size={18} color={theme.primary} />
-              <Text style={[styles.toolBackText, { color: theme.primary }]}>Back</Text>
-            </Pressable>
+            <ToolHeader
+              title={
+                activeTool === "describe" ? "Describe Scene" :
+                activeTool === "chat" ? "Chat" :
+                activeTool === "photographer" ? "AI Photographer" :
+                activeTool === "huntfind" ? "Hunt & Find" :
+                activeTool === "peoplecounter" ? "People Counter" :
+                activeTool === "colormatcher" ? "Color Matcher" :
+                activeTool === "tracking" ? "Object Tracking" :
+                activeTool === "ptz" ? "Camera Controls" : "Tool"
+              }
+              icon={
+                activeTool === "describe" ? "message-square" :
+                activeTool === "chat" ? "message-circle" :
+                activeTool === "photographer" ? "aperture" :
+                activeTool === "huntfind" ? "search" :
+                activeTool === "peoplecounter" ? "users" :
+                activeTool === "colormatcher" ? "sliders" :
+                activeTool === "tracking" ? "target" :
+                activeTool === "ptz" ? "move" : "tool"
+              }
+              iconColor={
+                activeTool === "describe" ? theme.primary :
+                activeTool === "chat" ? theme.primary :
+                activeTool === "photographer" ? theme.warning :
+                activeTool === "huntfind" ? theme.success :
+                activeTool === "peoplecounter" ? theme.warning :
+                activeTool === "colormatcher" ? theme.success :
+                activeTool === "tracking" ? theme.primary :
+                activeTool === "ptz" ? theme.primary : theme.primary
+              }
+              badge={
+                activeTool === "describe" ? "AI" :
+                activeTool === "chat" ? "Vision" :
+                activeTool === "photographer" ? "AI" :
+                activeTool === "huntfind" ? "AI" :
+                activeTool === "peoplecounter" ? "Vision" :
+                activeTool === "colormatcher" ? "PTZ" :
+                undefined
+              }
+              badgeColor={
+                activeTool === "describe" ? theme.primary :
+                activeTool === "chat" ? theme.success :
+                activeTool === "photographer" ? theme.warning :
+                activeTool === "huntfind" ? theme.success :
+                activeTool === "peoplecounter" ? theme.warning :
+                activeTool === "colormatcher" ? theme.success :
+                undefined
+              }
+              onBack={closeTool}
+            />
 
-            <ScrollView
+            <KeyboardAwareScrollViewCompat
               style={styles.toolContent}
               contentContainerStyle={styles.toolContentInner}
               showsVerticalScrollIndicator={false}
@@ -835,9 +1376,63 @@ export default function LiveScreen({ navigation }: any) {
                   onStoryModeStart={handleStoryModeStart}
                   onStoryModeEnd={handleStoryModeEnd}
                   onCaptureToStory={handleCaptureToStory}
+                  onSetupApiKey={handleSetupApiKey}
+                />
+              ) : activeTool === "chat" ? (
+                <CameraChat
+                  camera={camera}
+                  apiKey={appSettings?.moondreamApiKey || ""}
+                  isConnected={true}
+                  getFrame={captureFrameForAI}
+                  ptzConnected={ptzConnected}
+                  onConnectPtz={camera ? async () => {
+                    const result = await testCameraConnection(camera);
+                    if (result.success) {
+                      handlePtzConnected(true);
+                      setPtzStreamMode("snapshot");
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } else {
+                      Alert.alert("Connection Failed", result.error || "Could not connect to camera");
+                    }
+                  } : undefined}
+                />
+              ) : activeTool === "photographer" ? (
+                <AIPhotographer
+                  hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+                  apiKey={appSettings?.moondreamApiKey || ""}
+                  getFrame={captureFrameForAI}
+                  onCapture={(photo) => {
+                    console.log("[AIPhotographer] Captured:", photo.trigger);
+                  }}
+                  onDetection={(result) => {
+                    if (aiDetectionTimeoutRef.current) {
+                      clearTimeout(aiDetectionTimeoutRef.current);
+                    }
+                    setAiDetection(result);
+                    if (!result.box) {
+                      setAiFlashEffect(true);
+                      setTimeout(() => setAiFlashEffect(false), 300);
+                    }
+                    aiDetectionTimeoutRef.current = setTimeout(() => {
+                      setAiDetection(null);
+                    }, 2500);
+                  }}
                 />
               ) : activeTool === "tracking" ? (
                 <View>
+                  <PersonManager
+                    onSelectPerson={(person) => {
+                      if (person && trackingControllerRef.current) {
+                        trackingControllerRef.current.setTargetIdentity(person.embedding);
+                        setSelectedEmbedding(person.embedding);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      } else if (trackingControllerRef.current) {
+                        trackingControllerRef.current.clearTargetIdentity();
+                        setSelectedEmbedding(null);
+                      }
+                    }}
+                  />
+                  
                   <ModelSelector
                     selectedModel={selectedModel}
                     isTracking={isTracking}
@@ -845,6 +1440,7 @@ export default function LiveScreen({ navigation }: any) {
                     onToggleTracking={handleToggleTracking}
                     onShowInfo={handleShowModelInfo}
                     camera={camera}
+                    isConnected={ptzConnected}
                     onCameraConnected={handlePtzConnected}
                     onFrameUpdate={handlePtzFrameUpdate}
                     onStreamModeChange={setPtzStreamMode}
@@ -904,7 +1500,7 @@ export default function LiveScreen({ navigation }: any) {
                       <View style={styles.settingRow}>
                         <Text style={[styles.settingLabel, { color: theme.text }]}>Speed: {localTrackingSettings.ptzSpeed}</Text>
                         <View style={styles.speedButtons}>
-                          {[12, 18, 24].map((speed) => (
+                          {[2, 4, 8].map((speed) => (
                             <Pressable
                               key={speed}
                               onPress={() => handleUpdateTrackingSetting("ptzSpeed", speed)}
@@ -916,7 +1512,7 @@ export default function LiveScreen({ navigation }: any) {
                               ]}
                             >
                               <Text style={[styles.speedButtonText, { color: localTrackingSettings.ptzSpeed === speed ? "#FFF" : theme.textSecondary }]}>
-                                {speed === 12 ? "Slow" : speed === 18 ? "Med" : "Fast"}
+                                {speed === 2 ? "Slow" : speed === 4 ? "Med" : "Fast"}
                               </Text>
                             </Pressable>
                           ))}
@@ -947,36 +1543,56 @@ export default function LiveScreen({ navigation }: any) {
                     </View>
                   ) : null}
                 </View>
+              ) : activeTool === "huntfind" ? (
+                <HuntAndFind
+                  camera={camera}
+                  cameras={allCameras}
+                  apiKey={appSettings?.moondreamApiKey || ""}
+                  hasApiKey={Boolean(appSettings?.moondreamApiKey)}
+                  isConnected={ptzConnected}
+                  streamMode={ptzStreamMode}
+                  onCameraSelect={setCamera}
+                  onConnect={handlePtzConnected}
+                  onStreamModeChange={setPtzStreamMode}
+                />
+              ) : activeTool === "peoplecounter" ? (
+                <PeopleCounter
+                  getFrame={captureFrameForAI}
+                  isConnected={ptzConnected || (permission?.granted ?? false)}
+                />
+              ) : activeTool === "colormatcher" ? (
+                <ColorMatcher
+                  camera={camera}
+                  isConnected={ptzConnected}
+                  getFrame={captureFrameForAI}
+                />
               ) : activeTool === "ptz" ? (
                 <View>
-                  {/* Camera Connection for PTZ */}
                   {!ptzConnected && camera ? (
-                    <Pressable
-                      onPress={async () => {
-                        const result = await testCameraConnection(camera);
-                        if (result.success) {
-                          handlePtzConnected(true);
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                          // Start frame capture loop
-                          const captureFrames = async () => {
-                            while (true) {
-                              const frame = await fetchCameraFrame(camera);
-                              if (frame) {
-                                handlePtzFrameUpdate(frame);
-                              }
-                              await new Promise(r => setTimeout(r, 150));
-                            }
-                          };
-                          captureFrames();
-                        } else {
-                          Alert.alert("Connection Failed", result.error || "Could not connect to camera");
-                        }
-                      }}
-                      style={[styles.connectButton, { backgroundColor: theme.primary }]}
-                    >
-                      <Feather name="video" size={18} color="#FFF" />
-                      <Text style={styles.connectButtonText}>Connect to {camera.name}</Text>
-                    </Pressable>
+                    <View style={styles.ptzConnectSection}>
+                      <Text style={[styles.ptzConnectLabel, { color: theme.text }]}>
+                        {camera.name}
+                      </Text>
+                      <Text style={[styles.ptzConnectSubLabel, { color: theme.textSecondary }]}>
+                        {camera.ipAddress}:{camera.rtspPort}
+                      </Text>
+                      <Pressable
+                        onPress={async () => {
+                          const result = await testCameraConnection(camera);
+                          if (result.success) {
+                            handlePtzConnected(true);
+                            setPtzStreamMode("snapshot");
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          } else {
+                            Alert.alert("Connection Failed", result.error || "Could not connect to camera");
+                          }
+                        }}
+                        style={[styles.ptzConnectButton, { backgroundColor: theme.primary }]}
+                      >
+                        <Feather name="wifi" size={16} color="#FFF" />
+                        <Text style={styles.ptzConnectButtonText}>Connect</Text>
+                      </Pressable>
+                    </View>
                   ) : !camera ? (
                     <View style={[styles.noCameraMessage, { backgroundColor: theme.backgroundSecondary }]}>
                       <Feather name="alert-circle" size={20} color={theme.warning} />
@@ -985,11 +1601,22 @@ export default function LiveScreen({ navigation }: any) {
                       </Text>
                     </View>
                   ) : (
-                    <View style={[styles.connectedBadge, { backgroundColor: theme.success + "20" }]}>
-                      <View style={[styles.connectedDot, { backgroundColor: theme.success }]} />
-                      <Text style={[styles.connectedText, { color: theme.success }]}>
-                        Connected to {camera.name}
-                      </Text>
+                    <View style={styles.ptzConnectedSection}>
+                      <View style={[styles.connectedBadge, { backgroundColor: theme.success + "20" }]}>
+                        <View style={[styles.connectedDot, { backgroundColor: theme.success }]} />
+                        <Text style={[styles.connectedText, { color: theme.success }]}>
+                          {camera.name}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          handlePtzConnected(false);
+                          setPtzStreamMode("snapshot");
+                        }}
+                        style={[styles.ptzDisconnectButton, { backgroundColor: theme.error }]}
+                      >
+                        <Feather name="power" size={14} color="#FFF" />
+                      </Pressable>
                     </View>
                   )}
                   
@@ -997,11 +1624,12 @@ export default function LiveScreen({ navigation }: any) {
                     onMove={handlePTZMove}
                     onZoom={handleZoom}
                     onQuickAction={handleQuickAction}
+                    onFineTune={handleFineTune}
                     currentZoom={currentZoom}
                   />
                 </View>
               ) : null}
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         )}
       </View>
@@ -1072,23 +1700,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: "transparent",
   },
-  detectionBox: {
+  detectionInfoContainer: {
     position: "absolute",
-    borderWidth: 2,
-    borderStyle: "solid",
-    backgroundColor: "transparent",
-  },
-  detectionLabel: {
-    position: "absolute",
-    top: -20,
+    bottom: Spacing.md,
     left: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    right: 0,
+    alignItems: "center",
   },
-  detectionLabelText: {
+  detectionInfoBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  detectionInfoText: {
     color: "#000",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
   },
   recordingIndicator: {
@@ -1125,6 +1751,21 @@ const styles = StyleSheet.create({
     fontSize: Typography.caption.fontSize,
     fontFamily: Platform.select({ ios: "ui-monospace", default: "monospace" }),
   },
+  cameraSwitchButton: {
+    position: "absolute",
+    top: Spacing.md,
+    left: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.lg,
+    gap: 4,
+  },
+  cameraSwitchText: {
+    fontSize: Typography.caption.fontSize,
+    fontWeight: "600",
+  },
   statsContainer: {
     position: "absolute",
     top: Spacing.md,
@@ -1144,7 +1785,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  videoSection: {
+    backgroundColor: "#000",
+  },
+  sheetArea: {
+    flex: 1,
+  },
   toolsArea: {
+    flex: 1,
+  },
+  toolListScroll: {
     flex: 1,
   },
   toolList: {
@@ -1350,5 +2000,75 @@ const styles = StyleSheet.create({
   speedButtonText: {
     fontSize: Typography.small.fontSize,
     fontWeight: "600",
+  },
+  ptzConnectSection: {
+    marginBottom: Spacing.lg,
+    alignItems: "center",
+  },
+  ptzConnectLabel: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  ptzConnectSubLabel: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.md,
+  },
+  ptzConnectButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  ptzConnectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+  },
+  ptzConnectButtonText: {
+    color: "#FFFFFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  ptzConnectedSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.lg,
+  },
+  ptzDisconnectButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  aiDetectionOverlay: {
+    position: "absolute",
+    top: Spacing.lg,
+    right: Spacing.lg,
+  },
+  aiDetectionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  aiDetectionText: {
+    color: "#fff",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  aiFlashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 4,
+    borderRadius: BorderRadius.md,
+  },
+  zoomableContent: {
+    width: "100%",
+    height: "100%",
   },
 });

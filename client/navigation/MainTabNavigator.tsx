@@ -2,8 +2,6 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 
-
-
 import LiveStackNavigator from "@/navigation/LiveStackNavigator";
 import GalleryStackNavigator from "@/navigation/GalleryStackNavigator";
 import ReplayStackNavigator from "@/navigation/ReplayStackNavigator";
@@ -44,7 +42,7 @@ export default function MainTabNavigator() {
         headerShown: false,
       }}
     >
-      <Tab.Screen
+<Tab.Screen
         name="LiveTab"
         component={LiveStackNavigator}
         options={{

@@ -11,21 +11,26 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
+import { FineTuneRing } from "./FineTuneRing";
+import { PtzDirection } from "@/lib/camera";
 
 interface PTZJoystickProps {
   onMove: (pan: number, tilt: number, speed: number) => void;
   onZoom: (zoom: number) => void;
   onQuickAction: (action: "home" | "center" | "wide") => void;
+  onFineTune?: (direction: PtzDirection) => void;
   currentZoom: number;
 }
 
-const JOYSTICK_SIZE = 220;
-const HANDLE_SIZE = 64;
+const JOYSTICK_SIZE = 180;
+const HANDLE_SIZE = 56;
 const MAX_OFFSET = (JOYSTICK_SIZE - HANDLE_SIZE) / 2;
 const MIN_SPEED = 6;
 const MAX_SPEED = 24;
+const RING_SIZE = 260;
+const RING_INNER_RADIUS = JOYSTICK_SIZE / 2 + 8;
 
-export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJoystickProps) {
+export function PTZJoystick({ onMove, onZoom, onQuickAction, onFineTune, currentZoom }: PTZJoystickProps) {
   const { theme, isDark } = useTheme();
   const [isDragging, setIsDragging] = useState(false);
   const [currentSpeed, setCurrentSpeed] = useState(0);
@@ -109,38 +114,47 @@ export function PTZJoystick({ onMove, onZoom, onQuickAction, currentZoom }: PTZJ
   return (
     <View style={[styles.container, { backgroundColor: theme.surfaceOverlay }]}>
       <View style={styles.controlsRow}>
-        {/* Joystick */}
-        <View style={styles.joystickContainer}>
-          <View style={[styles.joystickTrack, { borderColor: theme.textSecondary }]}>
-            {/* Speed zone rings */}
-            <View style={[styles.speedZone, styles.speedZoneSlow, { borderColor: theme.success + "40" }]} />
-            <View style={[styles.speedZone, styles.speedZoneMed, { borderColor: theme.warning + "40" }]} />
-            <View style={[styles.speedZone, styles.speedZoneFast, { borderColor: theme.error + "40" }]} />
-            
-            {/* Crosshair lines */}
-            <View style={[styles.crosshairH, { backgroundColor: theme.textSecondary }]} />
-            <View style={[styles.crosshairV, { backgroundColor: theme.textSecondary }]} />
-            
-            {/* Handle */}
-            <GestureDetector gesture={panGesture}>
-              <Animated.View
-                style={[
-                  styles.joystickHandle,
-                  { backgroundColor: isDragging ? (currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success) : theme.primary },
-                  handleAnimatedStyle,
-                ]}
-              />
-            </GestureDetector>
-          </View>
-          
-          {/* Speed indicator */}
-          {isDragging ? (
-            <View style={[styles.speedIndicator, { backgroundColor: theme.backgroundDefault }]}>
-              <Text style={[styles.speedText, { color: currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success }]}>
-                Speed: {currentSpeed}
-              </Text>
+        <View style={styles.joystickWrapper}>
+          {onFineTune && (
+            <FineTuneRing
+              size={RING_SIZE}
+              innerRadius={RING_INNER_RADIUS}
+              onFineTune={onFineTune}
+              disabled={isDragging}
+            />
+          )}
+          <View style={styles.joystickContainer}>
+            <View style={[styles.joystickTrack, { borderColor: theme.textSecondary }]}>
+              {/* Speed zone rings */}
+              <View style={[styles.speedZone, styles.speedZoneSlow, { borderColor: theme.success + "40" }]} />
+              <View style={[styles.speedZone, styles.speedZoneMed, { borderColor: theme.warning + "40" }]} />
+              <View style={[styles.speedZone, styles.speedZoneFast, { borderColor: theme.error + "40" }]} />
+              
+              {/* Crosshair lines */}
+              <View style={[styles.crosshairH, { backgroundColor: theme.textSecondary }]} />
+              <View style={[styles.crosshairV, { backgroundColor: theme.textSecondary }]} />
+              
+              {/* Handle */}
+              <GestureDetector gesture={panGesture}>
+                <Animated.View
+                  style={[
+                    styles.joystickHandle,
+                    { backgroundColor: isDragging ? (currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success) : theme.primary },
+                    handleAnimatedStyle,
+                  ]}
+                />
+              </GestureDetector>
             </View>
-          ) : null}
+            
+            {/* Speed indicator */}
+            {isDragging ? (
+              <View style={[styles.speedIndicator, { backgroundColor: theme.backgroundDefault }]}>
+                <Text style={[styles.speedText, { color: currentSpeed > 18 ? theme.error : currentSpeed > 12 ? theme.warning : theme.success }]}>
+                  Speed: {currentSpeed}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {/* Zoom Controls */}
@@ -226,7 +240,13 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  joystickWrapper: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    justifyContent: "center",
+    alignItems: "center",
   },
   joystickContainer: {
     width: JOYSTICK_SIZE,

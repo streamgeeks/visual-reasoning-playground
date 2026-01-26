@@ -1,0 +1,13 @@
+{
+  "name": "camera-controls",
+  "version": "1.0.0",
+  "description": "Native iOS camera hardware control (White Balance, Exposure, ISO)",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "license": "MIT",
+  "author": "Visual Reasoning Playground",
+  "scripts": {},
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

@@ -1,4 +1,8 @@
-export type TrackingModel = "person" | "ball" | "face" | "multi-object" | "custom";
+export type TrackingModel = 
+  | "person" | "ball" | "face" | "multi-object" | "custom"
+  | "car" | "dog" | "cat" | "bird" | "sports-ball";
+
+export type VisionRequestType = "human" | "face" | "animal" | null;
 
 export interface TrackingModelInfo {
   id: TrackingModel;
@@ -6,43 +10,117 @@ export interface TrackingModelInfo {
   description: string;
   icon: string;
   usesYolo: boolean;
+  usesVision: boolean;
+  visionRequest: VisionRequestType;
+  yoloLabel?: string;
+  fallbackVision?: VisionRequestType;
+  fallbackMoondream?: string;
 }
 
 export const TRACKING_MODELS: TrackingModelInfo[] = [
   {
     id: "person",
     name: "Person Tracker",
-    description: "Optimized for tracking individual people. Best for interviews, presentations, and single-subject scenarios.",
+    description: "Optimized for tracking individual people using iOS Vision. Fast, native, works offline.",
     icon: "user",
     usesYolo: false,
-  },
-  {
-    id: "ball",
-    name: "Ball Tracker",
-    description: "Specialized for tracking sports balls in motion. Ideal for basketball, soccer, tennis, and other ball sports.",
-    icon: "circle",
-    usesYolo: false,
+    usesVision: true,
+    visionRequest: "human",
+    yoloLabel: "person",
   },
   {
     id: "face",
     name: "Face Tracker",
-    description: "High-precision face detection and tracking. Perfect for close-up shots, video conferencing, and portrait framing.",
+    description: "High-precision face detection using iOS Vision. Native, fast, perfect for portraits.",
     icon: "smile",
     usesYolo: false,
+    usesVision: true,
+    visionRequest: "face",
+  },
+  {
+    id: "car",
+    name: "Car Tracker",
+    description: "Track vehicles using on-device YOLO. Falls back to AI cloud if YOLO unavailable.",
+    icon: "truck",
+    usesYolo: true,
+    usesVision: false,
+    visionRequest: null,
+    yoloLabel: "car",
+    fallbackMoondream: "car or vehicle",
+  },
+  {
+    id: "dog",
+    name: "Dog Tracker",
+    description: "Track dogs using on-device YOLO. Falls back to Vision animal detection.",
+    icon: "heart",
+    usesYolo: true,
+    usesVision: false,
+    visionRequest: null,
+    yoloLabel: "dog",
+    fallbackVision: "animal",
+    fallbackMoondream: "dog",
+  },
+  {
+    id: "cat",
+    name: "Cat Tracker",
+    description: "Track cats using on-device YOLO. Falls back to Vision animal detection.",
+    icon: "gitlab",
+    usesYolo: true,
+    usesVision: false,
+    visionRequest: null,
+    yoloLabel: "cat",
+    fallbackVision: "animal",
+    fallbackMoondream: "cat",
+  },
+  {
+    id: "sports-ball",
+    name: "Sports Ball",
+    description: "Track sports balls using on-device YOLO. Falls back to AI cloud.",
+    icon: "circle",
+    usesYolo: true,
+    usesVision: false,
+    visionRequest: null,
+    yoloLabel: "sports ball",
+    fallbackMoondream: "ball or sports ball",
+  },
+  {
+    id: "bird",
+    name: "Bird Tracker",
+    description: "Track birds using on-device YOLO. Falls back to Vision animal detection.",
+    icon: "twitter",
+    usesYolo: true,
+    usesVision: false,
+    visionRequest: null,
+    yoloLabel: "bird",
+    fallbackVision: "animal",
+    fallbackMoondream: "bird",
+  },
+  {
+    id: "ball",
+    name: "Ball (Moondream)",
+    description: "Specialized for tracking balls using Moondream AI cloud detection.",
+    icon: "target",
+    usesYolo: false,
+    usesVision: false,
+    visionRequest: null,
   },
   {
     id: "multi-object",
     name: "Multi-Object",
-    description: "General-purpose object detection. Best for complex scenes with multiple subjects.",
+    description: "General-purpose object detection using Moondream AI.",
     icon: "grid",
     usesYolo: false,
+    usesVision: false,
+    visionRequest: null,
   },
   {
     id: "custom",
     name: "Custom Object",
-    description: "Track any object you describe! Type anything - people, objects, colors, even abstract concepts.",
+    description: "Track any object you describe! Uses Moondream AI for flexible detection.",
     icon: "edit-3",
     usesYolo: false,
+    usesVision: false,
+    visionRequest: null,
   },
 ];
 
@@ -68,6 +146,19 @@ export interface PerformanceStats {
 
 export function getModelInfo(modelId: TrackingModel): TrackingModelInfo {
   return TRACKING_MODELS.find((m) => m.id === modelId) || TRACKING_MODELS[0];
+}
+
+export function getYoloLabel(modelId: TrackingModel): string | undefined {
+  const info = getModelInfo(modelId);
+  return info?.yoloLabel;
+}
+
+export function getYoloModels(): TrackingModelInfo[] {
+  return TRACKING_MODELS.filter((m) => m.usesYolo);
+}
+
+export function getVisionModels(): TrackingModelInfo[] {
+  return TRACKING_MODELS.filter((m) => m.usesVision);
 }
 
 // Simulated stats for demo purposes

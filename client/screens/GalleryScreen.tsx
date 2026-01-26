@@ -6,7 +6,7 @@ import {
   FlatList,
   Pressable,
   Modal,
-  ScrollView,
+  Alert,
 } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -17,28 +17,53 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Story, StoryCapture, getStories, deleteStory } from "@/lib/gallery";
+import { AICapture, getAICaptures, deleteAICapture } from "@/lib/aiPhotographer";
+
+type GalleryTab = "stories" | "captures";
 
 export function GalleryScreen() {
   const { theme } = useTheme();
   const headerHeight = useHeaderHeight();
+  const [activeTab, setActiveTab] = useState<GalleryTab>("captures");
   const [stories, setStories] = useState<Story[]>([]);
+  const [aiCaptures, setAiCaptures] = useState<AICapture[]>([]);
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
+  const [selectedCapture, setSelectedCapture] = useState<AICapture | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      loadStories();
+      loadData();
     }, [])
   );
 
-  const loadStories = async () => {
-    const items = await getStories();
-    setStories(items);
+  const loadData = async () => {
+    const [storiesData, capturesData] = await Promise.all([
+      getStories(),
+      getAICaptures(),
+    ]);
+    setStories(storiesData);
+    setAiCaptures(capturesData);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteStory = async (id: string) => {
     await deleteStory(id);
     setStories((prev) => prev.filter((story) => story.id !== id));
     setSelectedStory(null);
+  };
+
+  const handleDeleteCapture = async (id: string) => {
+    Alert.alert("Delete Capture", "Remove this photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteAICapture(id);
+          setAiCaptures((prev) => prev.filter((c) => c.id !== id));
+          setSelectedCapture(null);
+        },
+      },
+    ]);
   };
 
   const formatDate = (dateString: string) => {
@@ -131,32 +156,171 @@ export function GalleryScreen() {
     </View>
   );
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {stories.length === 0 ? (
-        <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl }]}>
+  const renderAICaptureCard = ({ item }: { item: AICapture }) => (
+    <Pressable
+      onPress={() => setSelectedCapture(item)}
+      style={({ pressed }) => [
+        styles.aiCaptureCard,
+        { opacity: pressed ? 0.8 : 1 },
+      ]}
+    >
+      <Image
+        source={{ uri: item.imageUri }}
+        style={styles.aiCaptureImage}
+        contentFit="cover"
+      />
+      <View style={[styles.aiCaptureBadge, { backgroundColor: theme.success }]}>
+        <Text style={styles.aiCaptureBadgeText}>{item.trigger}</Text>
+      </View>
+    </Pressable>
+  );
+
+  const renderEmptyState = () => {
+    if (activeTab === "captures") {
+      return (
+        <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl + 60 }]}>
           <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundDefault }]}>
-            <Feather name="book-open" size={48} color={theme.textSecondary} />
+            <Feather name="camera" size={48} color={theme.textSecondary} />
           </View>
           <Text style={[styles.emptyTitle, { color: theme.text }]}>
-            No Stories Yet
+            No AI Captures Yet
           </Text>
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Enable Story Mode from the Live view to start recording your visual journey
+            Use AI Photographer from the Live view to auto-capture moments
           </Text>
         </View>
+      );
+    }
+    return (
+      <View style={[styles.emptyState, { paddingTop: headerHeight + Spacing.xl + 60 }]}>
+        <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundDefault }]}>
+          <Feather name="book-open" size={48} color={theme.textSecondary} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>
+          No Stories Yet
+        </Text>
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+          Enable Story Mode from the Live view to start recording your visual journey
+          </Text>
+        </View>
+      );
+  };
+
+  const currentData = activeTab === "captures" ? aiCaptures : stories;
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.tabBar, { paddingTop: headerHeight, backgroundColor: theme.backgroundDefault }]}>
+        <Pressable
+          onPress={() => setActiveTab("captures")}
+          style={[
+            styles.tab,
+            activeTab === "captures" && { borderBottomColor: theme.primary, borderBottomWidth: 2 },
+          ]}
+        >
+          <Feather 
+            name="camera" 
+            size={16} 
+            color={activeTab === "captures" ? theme.primary : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: activeTab === "captures" ? theme.primary : theme.textSecondary },
+          ]}>
+            AI Captures
+          </Text>
+          {aiCaptures.length > 0 && (
+            <View style={[styles.tabBadge, { backgroundColor: theme.primary }]}>
+              <Text style={styles.tabBadgeText}>{aiCaptures.length}</Text>
+            </View>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={() => setActiveTab("stories")}
+          style={[
+            styles.tab,
+            activeTab === "stories" && { borderBottomColor: theme.primary, borderBottomWidth: 2 },
+          ]}
+        >
+          <Feather 
+            name="book-open" 
+            size={16} 
+            color={activeTab === "stories" ? theme.primary : theme.textSecondary} 
+          />
+          <Text style={[
+            styles.tabText,
+            { color: activeTab === "stories" ? theme.primary : theme.textSecondary },
+          ]}>
+            Stories
+          </Text>
+          {stories.length > 0 && (
+            <View style={[styles.tabBadge, { backgroundColor: theme.primary }]}>
+              <Text style={styles.tabBadgeText}>{stories.length}</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
+
+      {currentData.length === 0 ? (
+        renderEmptyState()
+      ) : activeTab === "captures" ? (
+        <FlatList
+          data={aiCaptures}
+          renderItem={renderAICaptureCard}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          contentContainerStyle={styles.capturesGrid}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
         <FlatList
           data={stories}
           renderItem={renderStoryCard}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingTop: headerHeight + Spacing.md },
-          ]}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* AI Capture Detail Modal */}
+      <Modal
+        visible={selectedCapture !== null}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedCapture(null)}
+      >
+        <Pressable 
+          style={styles.captureModalOverlay} 
+          onPress={() => setSelectedCapture(null)}
+        >
+          <View style={[styles.captureModalContent, { backgroundColor: theme.backgroundDefault }]}>
+            {selectedCapture && (
+              <>
+                <Image
+                  source={{ uri: selectedCapture.imageUri }}
+                  style={styles.captureModalImage}
+                  contentFit="contain"
+                />
+                <View style={styles.captureModalInfo}>
+                  <View style={[styles.captureModalBadge, { backgroundColor: theme.success }]}>
+                    <Text style={styles.captureModalBadgeText}>{selectedCapture.trigger}</Text>
+                  </View>
+                  <Text style={[styles.captureModalTime, { color: theme.textSecondary }]}>
+                    {formatDate(selectedCapture.capturedAt)}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => handleDeleteCapture(selectedCapture.id)}
+                  style={[styles.captureModalDelete, { backgroundColor: theme.error + "20" }]}
+                >
+                  <Feather name="trash-2" size={18} color={theme.error} />
+                  <Text style={[styles.captureModalDeleteText, { color: theme.error }]}>Delete</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Story Detail Modal */}
       <Modal
@@ -184,7 +348,7 @@ export function GalleryScreen() {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => handleDelete(selectedStory.id)}
+                  onPress={() => handleDeleteStory(selectedStory.id)}
                   style={styles.deleteBtn}
                 >
                   <Feather name="trash-2" size={20} color={theme.error} />
@@ -373,5 +537,112 @@ const styles = StyleSheet.create({
   captureDescription: {
     fontSize: Typography.body.fontSize,
     lineHeight: 24,
+  },
+  tabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+  },
+  tabText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+  },
+  tabBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  capturesGrid: {
+    padding: Spacing.xs,
+    paddingBottom: 100,
+  },
+  aiCaptureCard: {
+    flex: 1 / 3,
+    aspectRatio: 1,
+    padding: Spacing.xs,
+  },
+  aiCaptureImage: {
+    flex: 1,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "#000",
+  },
+  aiCaptureBadge: {
+    position: "absolute",
+    bottom: Spacing.sm,
+    left: Spacing.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  aiCaptureBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  captureModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.lg,
+  },
+  captureModalContent: {
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: BorderRadius.lg,
+    overflow: "hidden",
+  },
+  captureModalImage: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: "#000",
+  },
+  captureModalInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: Spacing.md,
+  },
+  captureModalBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  captureModalBadgeText: {
+    color: "#FFFFFF",
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  captureModalTime: {
+    fontSize: Typography.small.fontSize,
+  },
+  captureModalDelete: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
+  },
+  captureModalDeleteText: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
   },
 });

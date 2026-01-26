@@ -1,24 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Text, Pressable, Switch } from "react-native";
+import { View, StyleSheet, Text, Pressable, Switch, Linking } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 
 export type ResponseLength = "short" | "medium" | "long";
+export type DescriptionSource = "apple" | "moondream";
 
 export interface CaptureResult {
   description: string;
   imageUri: string;
+  source: DescriptionSource;
 }
 
+export type DescriptionMode = "auto" | "vision" | "moondream";
+
 interface StoryDisplayProps {
-  onCapture: (length: ResponseLength) => Promise<CaptureResult | null>;
+  onCapture: (length: ResponseLength, forceVision?: boolean) => Promise<CaptureResult | null>;
   hasApiKey: boolean;
   onStoryModeStart?: (intervalSeconds: number) => void;
   onStoryModeEnd?: () => void;
   onCaptureToStory?: (imageUri: string, description: string, length: ResponseLength) => void;
+  onSetupApiKey?: () => void;
 }
 
 const LENGTH_OPTIONS: { key: ResponseLength; label: string }[] = [
@@ -47,6 +52,7 @@ export function StoryDisplay({
   onStoryModeStart,
   onStoryModeEnd,
   onCaptureToStory,
+  onSetupApiKey,
 }: StoryDisplayProps) {
   const { theme } = useTheme();
   const [displayedWords, setDisplayedWords] = useState<string[]>([]);
@@ -56,25 +62,27 @@ export function StoryDisplay({
   const [storyMode, setStoryMode] = useState(false);
   const [selectedInterval, setSelectedInterval] = useState(30);
   const [captureCount, setCaptureCount] = useState(0);
+  const [lastSource, setLastSource] = useState<DescriptionSource | null>(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [useVisionOnly, setUseVisionOnly] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const wordIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const captureAndDescribe = useCallback(async () => {
-    if (!hasApiKey) {
-      setError("Add Moondream API key in Settings");
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await onCapture(selectedLength);
+      const result = await onCapture(selectedLength, useVisionOnly);
       if (result) {
+        setLastSource(result.source);
         animateWords(result.description);
         if (storyMode && onCaptureToStory) {
           onCaptureToStory(result.imageUri, result.description, selectedLength);
           setCaptureCount((prev) => prev + 1);
+        }
+        if (result.source === "apple" && !hasApiKey) {
+          setTimeout(() => setShowUpgradePrompt(true), 2000);
         }
       } else {
         setError("Could not analyze scene");
@@ -84,7 +92,7 @@ export function StoryDisplay({
     } finally {
       setIsLoading(false);
     }
-  }, [hasApiKey, onCapture, selectedLength, storyMode, onCaptureToStory]);
+  }, [onCapture, selectedLength, storyMode, onCaptureToStory, hasApiKey, useVisionOnly]);
 
   const animateWords = (text: string) => {
     const words = text.split(" ");
@@ -154,16 +162,6 @@ export function StoryDisplay({
     setStoryMode((prev) => !prev);
   };
 
-  if (!hasApiKey) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
-          Add Moondream API key in Settings
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.wrapper}>
       {/* Compact controls row */}
@@ -206,15 +204,51 @@ export function StoryDisplay({
             disabled={isLoading}
             style={[
               styles.captureBtn,
-              { backgroundColor: isLoading ? theme.backgroundDefault : theme.primary },
+              { backgroundColor: isLoading ? theme.backgroundDefault : "#10B981" },
             ]}
           >
+            <Feather name="eye" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
             <Text style={styles.captureBtnText}>
               {isLoading ? "..." : "Describe"}
             </Text>
           </Pressable>
         ) : null}
       </View>
+
+      {/* Mode toggle - only show when API key exists */}
+      {hasApiKey && (
+        <View style={[styles.modeRow, { backgroundColor: theme.backgroundDefault }]}>
+          <Text style={[styles.modeLabel, { color: theme.textSecondary }]}>Mode:</Text>
+          <Pressable
+            onPress={() => setUseVisionOnly(false)}
+            style={[
+              styles.modeOption,
+              {
+                backgroundColor: !useVisionOnly ? theme.accent : "transparent",
+                borderColor: theme.accent,
+              },
+            ]}
+          >
+            <Text style={[styles.modeOptionText, { color: !useVisionOnly ? "#FFFFFF" : theme.accent }]}>
+              🧠 Enhanced
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setUseVisionOnly(true)}
+            style={[
+              styles.modeOption,
+              {
+                backgroundColor: useVisionOnly ? theme.primary : "transparent",
+                borderColor: theme.primary,
+              },
+            ]}
+          >
+            <Text style={[styles.modeOptionText, { color: useVisionOnly ? "#FFFFFF" : theme.primary }]}>
+              ⚡ Instant
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Story Mode - compact */}
       <View style={[styles.storyRow, { backgroundColor: theme.backgroundDefault }]}>
@@ -280,6 +314,20 @@ export function StoryDisplay({
 
       {/* Description display - compact */}
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+        {lastSource && displayedWords.length > 0 && (
+          <View style={styles.sourceIndicator}>
+            <Text
+              style={[
+                styles.sourceText,
+                {
+                  color: lastSource === "moondream" ? theme.accent : theme.primary,
+                },
+              ]}
+            >
+              {lastSource === "moondream" ? "🧠 Enhanced" : "⚡ Instant"}
+            </Text>
+          </View>
+        )}
         {isLoading && displayedWords.length === 0 ? (
           <View style={styles.loadingContainer}>
             <View style={[styles.loadingDot, { backgroundColor: theme.primary }]} />
@@ -303,10 +351,47 @@ export function StoryDisplay({
           </Text>
         ) : (
           <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
-            Tap camera to describe
+            Tap Describe to analyze scene
           </Text>
         )}
       </View>
+
+      {/* Upgrade prompt */}
+      {showUpgradePrompt && !hasApiKey && (
+        <Animated.View
+          entering={FadeInDown.duration(300)}
+          style={[styles.upgradePrompt, { backgroundColor: theme.accent + "15", borderColor: theme.accent + "30" }]}
+        >
+          <View style={styles.upgradeHeader}>
+            <Feather name="zap" size={14} color={theme.accent} />
+            <Text style={[styles.upgradeTitle, { color: theme.text }]}>
+              Want more detailed descriptions?
+            </Text>
+            <Pressable onPress={() => setShowUpgradePrompt(false)} hitSlop={8}>
+              <Feather name="x" size={16} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+          <Text style={[styles.upgradeDescription, { color: theme.textSecondary }]}>
+            Add a Moondream API key for rich, natural language scene descriptions.
+          </Text>
+          <View style={styles.upgradeButtons}>
+            {onSetupApiKey && (
+              <Pressable
+                onPress={onSetupApiKey}
+                style={[styles.upgradeBtn, { backgroundColor: theme.accent }]}
+              >
+                <Text style={styles.upgradeBtnText}>Add API Key</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => Linking.openURL("https://moondream.ai")}
+              style={[styles.learnMoreBtn, { backgroundColor: theme.backgroundDefault }]}
+            >
+              <Text style={[styles.learnMoreText, { color: theme.textSecondary }]}>Learn More</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -335,10 +420,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  captureBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: BorderRadius.xs,
+captureBtn: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -439,5 +525,80 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 28,
     fontWeight: "300",
+  },
+  sourceIndicator: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+  },
+  sourceText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  upgradePrompt: {
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  upgradeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  upgradeTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  upgradeDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  upgradeButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  upgradeBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.xs,
+  },
+  upgradeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  learnMoreBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.xs,
+  },
+  learnMoreText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  modeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  modeLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  modeOption: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+  },
+  modeOptionText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
 });
