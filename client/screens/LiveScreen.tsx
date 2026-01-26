@@ -97,6 +97,8 @@ import {
   PtzDirection,
 } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { getAIBadgeInfo, getToolAIInfo, ToolAIInfo } from "@/lib/aiInfo";
+import { ToolInfoModal } from "@/components/ToolInfoModal";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const VIDEO_ASPECT_RATIO = 16 / 9;
@@ -152,6 +154,9 @@ const [camera, setCamera] = useState<CameraProfile | null>(null);
   const aiDetectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [detectAllDetections, setDetectAllDetections] = useState<LabeledDetection[]>([]);
+
+  const [toolInfoModalVisible, setToolInfoModalVisible] = useState(false);
+  const [selectedToolInfo, setSelectedToolInfo] = useState<ToolAIInfo | null>(null);
 
   // Person selection mode state
   const [selectPersonMode, setSelectPersonMode] = useState(false);
@@ -713,6 +718,15 @@ const [cameras, currentId, settings] = await Promise.all([
     Haptics.selectionAsync();
   }, []);
 
+  const showToolInfo = useCallback((toolId: string) => {
+    const info = getToolAIInfo(toolId);
+    if (info) {
+      setSelectedToolInfo(info);
+      setToolInfoModalVisible(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, []);
+
   const getPromptForLength = (length: ResponseLength): string => {
     switch (length) {
       case "short":
@@ -1177,230 +1191,81 @@ const [cameras, currentId, settings] = await Promise.all([
             contentContainerStyle={styles.toolList}
             showsVerticalScrollIndicator={false}
           >
-<Pressable
-              onPress={() => openTool("describe")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="eye" size={18} color={theme.primary} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Describe Scene
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.primary + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.primary }]}>AI</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("chat")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="message-circle" size={18} color={theme.primary} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Chat
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>Vision</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("photographer")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="camera" size={18} color={theme.primary} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  AI Photographer
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.primary + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.primary }]}>AI</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("huntfind")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="search" size={18} color={theme.success} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Hunt & Find
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>AI</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("peoplecounter")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="users" size={18} color={theme.warning} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  People Counter
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.warning + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.warning }]}>Vision</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("detectall")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="grid" size={18} color={theme.success} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Detect All Objects
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>YOLO</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("colormatcher")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="sliders" size={18} color={theme.success} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Color Matcher
-                </Text>
-                <View style={[styles.toolBadge, { backgroundColor: theme.success + "20" }]}>
-                  <Text style={[styles.toolBadgeText, { color: theme.success }]}>PTZ</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("tracking")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="target" size={18} color={theme.primary} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Object Tracking
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openTool("ptz")}
-              style={({ pressed }) => [
-                styles.toolRow,
-                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              <View style={styles.toolRowLeft}>
-                <Feather name="move" size={18} color={theme.primary} />
-                <Text style={[styles.toolRowTitle, { color: theme.text }]}>
-                  Camera Controls
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </Pressable>
+{[
+              { id: "describe", icon: "eye" as const, title: "Describe Scene" },
+              { id: "chat", icon: "message-circle" as const, title: "Chat" },
+              { id: "photographer", icon: "camera" as const, title: "AI Photographer" },
+              { id: "huntfind", icon: "search" as const, title: "Hunt & Find" },
+              { id: "peoplecounter", icon: "users" as const, title: "People Counter" },
+              { id: "detectall", icon: "grid" as const, title: "Detect All Objects" },
+              { id: "colormatcher", icon: "sliders" as const, title: "Color Matcher" },
+              { id: "tracking", icon: "target" as const, title: "Object Tracking" },
+              { id: "ptz", icon: "move" as const, title: "Camera Controls" },
+            ].map((tool) => {
+              const badge = getAIBadgeInfo(tool.id);
+              return (
+                <Pressable
+                  key={tool.id}
+                  onPress={() => openTool(tool.id)}
+                  style={({ pressed }) => [
+                    styles.toolRow,
+                    { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <View style={styles.toolRowLeft}>
+                    <Feather name={tool.icon} size={18} color={badge.color} />
+                    <Text style={[styles.toolRowTitle, { color: theme.text }]}>
+                      {tool.title}
+                    </Text>
+                    <View style={[styles.toolBadge, { backgroundColor: badge.color + "20" }]}>
+                      <Text style={[styles.toolBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                    </View>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+                </Pressable>
+              );
+            })}
           </KeyboardAwareScrollViewCompat>
         ) : (
           /* Expanded Tool View */
           <View style={styles.toolExpanded}>
-            <ToolHeader
-              title={
-                activeTool === "describe" ? "Describe Scene" :
-                activeTool === "chat" ? "Chat" :
-                activeTool === "photographer" ? "AI Photographer" :
-                activeTool === "huntfind" ? "Hunt & Find" :
-                activeTool === "peoplecounter" ? "People Counter" :
-                activeTool === "detectall" ? "Detect All Objects" :
-                activeTool === "colormatcher" ? "Color Matcher" :
-                activeTool === "tracking" ? "Object Tracking" :
-                activeTool === "ptz" ? "Camera Controls" : "Tool"
-              }
-              icon={
-                activeTool === "describe" ? "message-square" :
-                activeTool === "chat" ? "message-circle" :
-                activeTool === "photographer" ? "aperture" :
-                activeTool === "huntfind" ? "search" :
-                activeTool === "peoplecounter" ? "users" :
-                activeTool === "detectall" ? "grid" :
-                activeTool === "colormatcher" ? "sliders" :
-                activeTool === "tracking" ? "target" :
-                activeTool === "ptz" ? "move" : "tool"
-              }
-              iconColor={
-                activeTool === "describe" ? theme.primary :
-                activeTool === "chat" ? theme.primary :
-                activeTool === "photographer" ? theme.warning :
-                activeTool === "huntfind" ? theme.success :
-                activeTool === "peoplecounter" ? theme.warning :
-                activeTool === "detectall" ? theme.success :
-                activeTool === "colormatcher" ? theme.success :
-                activeTool === "tracking" ? theme.primary :
-                activeTool === "ptz" ? theme.primary : theme.primary
-              }
-              badge={
-                activeTool === "describe" ? "AI" :
-                activeTool === "chat" ? "Vision" :
-                activeTool === "photographer" ? "AI" :
-                activeTool === "huntfind" ? "AI" :
-                activeTool === "peoplecounter" ? "Vision" :
-                activeTool === "detectall" ? "YOLO" :
-                activeTool === "colormatcher" ? "PTZ" :
-                undefined
-              }
-              badgeColor={
-                activeTool === "describe" ? theme.primary :
-                activeTool === "chat" ? theme.success :
-                activeTool === "photographer" ? theme.warning :
-                activeTool === "huntfind" ? theme.success :
-                activeTool === "peoplecounter" ? theme.warning :
-                activeTool === "detectall" ? theme.success :
-                activeTool === "colormatcher" ? theme.success :
-                undefined
-              }
-              onBack={closeTool}
-            />
+            {(() => {
+              const toolId = activeTool || "";
+              const badge = getAIBadgeInfo(toolId);
+              const toolTitles: Record<string, string> = {
+                describe: "Describe Scene",
+                chat: "Chat",
+                photographer: "AI Photographer",
+                huntfind: "Hunt & Find",
+                peoplecounter: "People Counter",
+                detectall: "Detect All Objects",
+                colormatcher: "Color Matcher",
+                tracking: "Object Tracking",
+                ptz: "Camera Controls",
+              };
+              const toolIcons: Record<string, keyof typeof Feather.glyphMap> = {
+                describe: "message-square",
+                chat: "message-circle",
+                photographer: "aperture",
+                huntfind: "search",
+                peoplecounter: "users",
+                detectall: "grid",
+                colormatcher: "sliders",
+                tracking: "target",
+                ptz: "move",
+              };
+              return (
+                <ToolHeader
+                  title={toolTitles[toolId] || "Tool"}
+                  icon={toolIcons[toolId] || "tool"}
+                  iconColor={badge.color}
+                  badge={badge.label}
+                  badgeColor={badge.color}
+                  onBack={closeTool}
+                  onInfoPress={() => showToolInfo(toolId)}
+                />
+              );
+            })()}
 
             <KeyboardAwareScrollViewCompat
               style={styles.toolContent}
@@ -1680,6 +1545,12 @@ const [cameras, currentId, settings] = await Promise.all([
           </View>
         )}
       </View>
+
+      <ToolInfoModal
+        visible={toolInfoModalVisible}
+        onClose={() => setToolInfoModalVisible(false)}
+        toolInfo={selectedToolInfo}
+      />
     </View>
   );
 }

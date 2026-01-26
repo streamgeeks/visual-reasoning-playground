@@ -44,6 +44,8 @@ import {
 } from "@/lib/storage";
 import { testCameraConnection, sendPtzCommand, PTZ_COMMANDS } from "@/lib/camera";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
+import { AI_TECHNOLOGIES } from "@/lib/aiInfo";
+import { setHasSeenOnboarding } from "@/lib/storage";
 
 export default function SettingsScreen() {
   const { theme } = useTheme();
@@ -456,6 +458,52 @@ export default function SettingsScreen() {
               API key saved successfully
             </Text>
           ) : null}
+        </View>
+
+        {/* About the AI */}
+        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+          About the AI
+        </ThemedText>
+
+        <View style={[styles.aiTechSection, { backgroundColor: theme.backgroundDefault }]}>
+          <Text style={[styles.aiTechIntro, { color: theme.textSecondary }]}>
+            This app uses multiple AI technologies to understand and process camera footage:
+          </Text>
+          
+          {Object.entries(AI_TECHNOLOGIES).map(([key, tech]) => (
+            <View key={key} style={styles.aiTechRow}>
+              <View style={[styles.aiTechIcon, { backgroundColor: tech.color + "20" }]}>
+                <Feather name={tech.icon as any} size={18} color={tech.color} />
+              </View>
+              <View style={styles.aiTechInfo}>
+                <View style={styles.aiTechHeader}>
+                  <Text style={[styles.aiTechName, { color: theme.text }]}>{tech.name}</Text>
+                  <View style={[styles.aiTechBadge, { backgroundColor: tech.type === "on-device" ? theme.success + "20" : theme.warning + "20" }]}>
+                    <Text style={[styles.aiTechBadgeText, { color: tech.type === "on-device" ? theme.success : theme.warning }]}>
+                      {tech.type === "on-device" ? "On-Device" : "Cloud"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.aiTechDesc, { color: theme.textSecondary }]}>{tech.description}</Text>
+              </View>
+            </View>
+          ))}
+
+          <Pressable
+            onPress={async () => {
+              await setHasSeenOnboarding(false);
+              Alert.alert("Onboarding Reset", "The AI onboarding will show again when you restart the app.");
+            }}
+            style={({ pressed }) => [
+              styles.replayOnboardingButton,
+              { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="play-circle" size={18} color={theme.primary} />
+            <Text style={[styles.replayOnboardingText, { color: theme.text }]}>
+              Replay AI Onboarding
+            </Text>
+          </Pressable>
         </View>
 
         {/* About */}
@@ -967,6 +1015,66 @@ const styles = StyleSheet.create({
   },
   zoomText: {
     fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+  },
+  aiTechSection: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+  },
+  aiTechIntro: {
+    fontSize: Typography.small.fontSize,
+    lineHeight: 20,
+    marginBottom: Spacing.lg,
+  },
+  aiTechRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  aiTechIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  aiTechInfo: {
+    flex: 1,
+  },
+  aiTechHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: 4,
+  },
+  aiTechName: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  aiTechBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  aiTechBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  aiTechDesc: {
+    fontSize: Typography.small.fontSize,
+    lineHeight: 18,
+  },
+  replayOnboardingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.md,
+  },
+  replayOnboardingText: {
+    fontSize: Typography.body.fontSize,
     fontWeight: "500",
   },
 });

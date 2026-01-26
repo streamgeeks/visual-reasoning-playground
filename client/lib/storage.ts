@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
   TRACKING_SETTINGS: "@vrp_tracking_settings",
   CUSTOM_OBJECTS: "@vrp_custom_objects",
   PERSON_PROFILES: "@vrp_person_profiles",
+  HAS_SEEN_ONBOARDING: "@vrp_has_seen_onboarding",
 } as const;
 
 const SECURE_KEYS = {
@@ -412,4 +413,18 @@ export async function migrateApiKeyToSecureStorage(): Promise<void> {
   } catch (error) {
     console.error("Failed to migrate API key:", error);
   }
+}
+
+// Onboarding
+export async function getHasSeenOnboarding(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(STORAGE_KEYS.HAS_SEEN_ONBOARDING);
+    return value === "true";
+  } catch {
+    return false;
+  }
+}
+
+export async function setHasSeenOnboarding(seen: boolean): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEYS.HAS_SEEN_ONBOARDING, seen ? "true" : "false");
 }

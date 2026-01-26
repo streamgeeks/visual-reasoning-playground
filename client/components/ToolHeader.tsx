@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
@@ -14,6 +13,7 @@ interface ToolHeaderProps {
   badge?: string;
   badgeColor?: string;
   onBack: () => void;
+  onInfoPress?: () => void;
 }
 
 export function ToolHeader({
@@ -23,13 +23,18 @@ export function ToolHeader({
   badge,
   badgeColor,
   onBack,
+  onInfoPress,
 }: ToolHeaderProps) {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
 
   const handleBack = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onBack();
+  };
+
+  const handleInfo = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onInfoPress?.();
   };
 
   return (
@@ -82,7 +87,20 @@ export function ToolHeader({
         )}
       </View>
 
-      <View style={styles.rightSpacer} />
+      {onInfoPress ? (
+        <Pressable
+          onPress={handleInfo}
+          style={({ pressed }) => [
+            styles.infoButton,
+            { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.6 : 1 },
+          ]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="info" size={18} color={theme.textSecondary} />
+        </Pressable>
+      ) : (
+        <View style={styles.rightSpacer} />
+      )}
     </View>
   );
 }
@@ -125,5 +143,12 @@ const styles = StyleSheet.create({
   },
   rightSpacer: {
     width: 36,
+  },
+  infoButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

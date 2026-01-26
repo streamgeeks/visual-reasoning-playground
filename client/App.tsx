@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -12,9 +12,26 @@ import { queryClient } from "@/lib/query-client";
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LocalLLMProvider } from "@/lib/localLLM";
+import { AIOnboarding } from "@/components/AIOnboarding";
+import { getHasSeenOnboarding, setHasSeenOnboarding } from "@/lib/storage";
 
 export default function App() {
-return (
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  useEffect(() => {
+    getHasSeenOnboarding().then((seen) => {
+      setShowOnboarding(!seen);
+      setOnboardingChecked(true);
+    });
+  }, []);
+
+  const handleOnboardingComplete = async () => {
+    await setHasSeenOnboarding(true);
+    setShowOnboarding(false);
+  };
+
+  return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <LocalLLMProvider>
@@ -25,6 +42,12 @@ return (
                   <RootStackNavigator />
                 </NavigationContainer>
                 <StatusBar style="auto" />
+                {onboardingChecked && (
+                  <AIOnboarding
+                    visible={showOnboarding}
+                    onComplete={handleOnboardingComplete}
+                  />
+                )}
               </KeyboardProvider>
             </GestureHandlerRootView>
           </SafeAreaProvider>
