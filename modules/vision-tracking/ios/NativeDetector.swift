@@ -388,7 +388,7 @@ class NativeDetector {
         
         // Tokenize text (simplified - real implementation needs proper tokenizer)
         let tokens = tokenizeText(text)
-        let tokenArray = try MLMultiArray(shape: [1, 77], dataType: .int32)
+        let tokenArray = try MLMultiArray(shape: [NSNumber(value: 1), NSNumber(value: 77)], dataType: .int32)
         for (i, token) in tokens.enumerated() {
             tokenArray[i] = NSNumber(value: token)
         }
