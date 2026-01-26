@@ -283,10 +283,10 @@ class NativeDetector {
             guard bestScore >= confidenceThreshold else { continue }
             
             // Convert from center format to corner format, normalized 0-1
-            let x = (cx - w / 2) / 640.0
-            let y = (cy - h / 2) / 640.0
-            let width = w / 640.0
-            let height = h / 640.0
+            let x = CGFloat(cx - w / 2) / 640.0
+            let y = CGFloat(cy - h / 2) / 640.0
+            let width = CGFloat(w) / 640.0
+            let height = CGFloat(h) / 640.0
             
             // Clamp to valid range
             let clampedX = max(0, min(1, x))
