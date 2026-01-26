@@ -25,6 +25,22 @@ struct YOLODetection {
     let boundingBox: CGRect  // Normalized 0-1, top-left origin
 }
 
+/// Gesture detection result
+struct GestureDetection {
+    let gesture: String
+    let confidence: Float
+    let boundingBox: CGRect?
+}
+
+/// Supported gestures for AI Photographer
+enum DetectableGesture: String, CaseIterable {
+    case thumbsUp = "thumbs_up"
+    case peace = "peace"
+    case wave = "wave"
+    case pointing = "pointing"
+    case smile = "smile"
+}
+
 /// Native detector using YOLO + MobileCLIP
 class NativeDetector {
     
@@ -627,5 +643,198 @@ class NativeDetector {
     private func multiArrayToFloatArray(_ multiArray: MLMultiArray) -> [Float] {
         let pointer = multiArray.dataPointer.bindMemory(to: Float.self, capacity: multiArray.count)
         return Array(UnsafeBufferPointer(start: pointer, count: multiArray.count))
+    }
+    
+    // MARK: - Gesture Detection (Vision Hand Pose + Face Landmarks)
+    
+    @available(iOS 14.0, *)
+    func detectGestures(image: UIImage, gestureTypes: [DetectableGesture] = DetectableGesture.allCases) async throws -> [GestureDetection] {
+        guard let cgImage = image.cgImage else {
+            throw NSError(domain: "NativeDetector", code: 10,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid image"])
+        }
+        
+        var detections: [GestureDetection] = []
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        
+        let handGestures: Set<DetectableGesture> = [.thumbsUp, .peace, .wave, .pointing]
+        let needsHandPose = !gestureTypes.filter { handGestures.contains($0) }.isEmpty
+        let needsFace = gestureTypes.contains(.smile)
+        
+        if needsHandPose {
+            let handDetections = try await detectHandGestures(handler: handler, gestureTypes: gestureTypes)
+            detections.append(contentsOf: handDetections)
+        }
+        
+        if needsFace {
+            let smileDetections = try await detectSmile(handler: handler)
+            detections.append(contentsOf: smileDetections)
+        }
+        
+        return detections
+    }
+    
+    @available(iOS 14.0, *)
+    private func detectHandGestures(handler: VNImageRequestHandler, gestureTypes: [DetectableGesture]) async throws -> [GestureDetection] {
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectHumanHandPoseRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                var detections: [GestureDetection] = []
+                
+                guard let observations = request.results as? [VNHumanHandPoseObservation] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                for observation in observations {
+                    if let gesture = self.classifyHandGesture(observation, allowedGestures: gestureTypes) {
+                        detections.append(gesture)
+                    }
+                }
+                
+                continuation.resume(returning: detections)
+            }
+            
+            request.maximumHandCount = 2
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    @available(iOS 14.0, *)
+    private func classifyHandGesture(_ observation: VNHumanHandPoseObservation, allowedGestures: [DetectableGesture]) -> GestureDetection? {
+        do {
+            let thumbTip = try observation.recognizedPoint(.thumbTip)
+            let thumbIP = try observation.recognizedPoint(.thumbIP)
+            let thumbMP = try observation.recognizedPoint(.thumbMP)
+            let indexTip = try observation.recognizedPoint(.indexTip)
+            let indexPIP = try observation.recognizedPoint(.indexPIP)
+            let indexMCP = try observation.recognizedPoint(.indexMCP)
+            let middleTip = try observation.recognizedPoint(.middleTip)
+            let middlePIP = try observation.recognizedPoint(.middlePIP)
+            let ringTip = try observation.recognizedPoint(.ringTip)
+            let ringPIP = try observation.recognizedPoint(.ringPIP)
+            let littleTip = try observation.recognizedPoint(.littleTip)
+            let littlePIP = try observation.recognizedPoint(.littlePIP)
+            let wrist = try observation.recognizedPoint(.wrist)
+            
+            let minConfidence: Float = 0.3
+            guard thumbTip.confidence > minConfidence,
+                  indexTip.confidence > minConfidence,
+                  middleTip.confidence > minConfidence else {
+                return nil
+            }
+            
+            let thumbExtended = isFingerExtended(tip: thumbTip, pip: thumbIP, mcp: thumbMP)
+            let indexExtended = isFingerExtended(tip: indexTip, pip: indexPIP, mcp: indexMCP)
+            let middleExtended = isFingerExtended(tip: middleTip, pip: middlePIP, mcp: indexMCP)
+            let ringExtended = isFingerExtended(tip: ringTip, pip: ringPIP, mcp: indexMCP)
+            let littleExtended = isFingerExtended(tip: littleTip, pip: littlePIP, mcp: indexMCP)
+            
+            let thumbUp = thumbTip.location.y > thumbMP.location.y && thumbTip.location.y > wrist.location.y
+            
+            if allowedGestures.contains(.thumbsUp) && thumbExtended && thumbUp && !indexExtended && !middleExtended && !ringExtended {
+                return GestureDetection(gesture: DetectableGesture.thumbsUp.rawValue, confidence: 0.85, boundingBox: nil)
+            }
+            
+            if allowedGestures.contains(.peace) && indexExtended && middleExtended && !ringExtended && !littleExtended && !thumbExtended {
+                return GestureDetection(gesture: DetectableGesture.peace.rawValue, confidence: 0.85, boundingBox: nil)
+            }
+            
+            if allowedGestures.contains(.wave) && indexExtended && middleExtended && ringExtended && littleExtended {
+                return GestureDetection(gesture: DetectableGesture.wave.rawValue, confidence: 0.80, boundingBox: nil)
+            }
+            
+            if allowedGestures.contains(.pointing) && indexExtended && !middleExtended && !ringExtended && !littleExtended {
+                return GestureDetection(gesture: DetectableGesture.pointing.rawValue, confidence: 0.85, boundingBox: nil)
+            }
+            
+        } catch {
+            print("[NativeDetector] Hand pose classification error: \(error)")
+        }
+        
+        return nil
+    }
+    
+    private func isFingerExtended(tip: VNRecognizedPoint, pip: VNRecognizedPoint, mcp: VNRecognizedPoint) -> Bool {
+        let tipToMcp = distance(tip.location, mcp.location)
+        let pipToMcp = distance(pip.location, mcp.location)
+        return tipToMcp > pipToMcp * 1.2
+    }
+    
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2))
+    }
+    
+    private func detectSmile(handler: VNImageRequestHandler) async throws -> [GestureDetection] {
+        return try await withCheckedThrowingContinuation { continuation in
+            let faceRequest = VNDetectFaceLandmarksRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                var detections: [GestureDetection] = []
+                
+                guard let observations = request.results as? [VNFaceObservation] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                for observation in observations {
+                    if let landmarks = observation.landmarks,
+                       let outerLips = landmarks.outerLips {
+                        let points = outerLips.normalizedPoints
+                        if self.isSmiling(lipPoints: points) {
+                            let box = observation.boundingBox
+                            let flippedBox = CGRect(x: box.origin.x, y: 1 - box.origin.y - box.height, 
+                                                   width: box.width, height: box.height)
+                            detections.append(GestureDetection(
+                                gesture: DetectableGesture.smile.rawValue,
+                                confidence: 0.80,
+                                boundingBox: flippedBox
+                            ))
+                        }
+                    }
+                }
+                
+                continuation.resume(returning: detections)
+            }
+            
+            do {
+                try handler.perform([faceRequest])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    private func isSmiling(lipPoints: [CGPoint]) -> Bool {
+        guard lipPoints.count >= 6 else { return false }
+        
+        let leftCorner = lipPoints[0]
+        let rightCorner = lipPoints[lipPoints.count / 2]
+        let topCenter = lipPoints[lipPoints.count / 4]
+        let bottomCenter = lipPoints[(lipPoints.count * 3) / 4]
+        
+        let mouthWidth = abs(rightCorner.x - leftCorner.x)
+        let mouthHeight = abs(topCenter.y - bottomCenter.y)
+        
+        let widthToHeightRatio = mouthWidth / max(mouthHeight, 0.001)
+        
+        let leftCornerY = leftCorner.y
+        let rightCornerY = rightCorner.y
+        let centerY = (topCenter.y + bottomCenter.y) / 2
+        let cornerLift = ((leftCornerY + rightCornerY) / 2) - centerY
+        
+        return widthToHeightRatio > 2.5 && cornerLift > 0.01
     }
 }

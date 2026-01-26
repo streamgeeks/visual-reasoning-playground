@@ -29,6 +29,10 @@ import {
   deleteCustomTrigger,
   generateId,
 } from "@/lib/aiPhotographer";
+import {
+  detectPresetGestures,
+  isPresetTrigger,
+} from "@/lib/nativeDetection";
 
 export interface PhotoCapture {
   id: string;
@@ -122,50 +126,88 @@ export function AIPhotographer({
     const activeTriggers = allTriggers.filter(t => selectedTriggers.includes(t.id));
     if (activeTriggers.length === 0) return null;
     
+    const presetTriggers = activeTriggers.filter(t => isPresetTrigger(t.id));
+    const customTriggers = activeTriggers.filter(t => !isPresetTrigger(t.id));
+    
     try {
-      const triggerNames = activeTriggers.map(t => t.name.toLowerCase());
-      const triggerList = triggerNames.join(", ");
-      
-      const prompt = `Look at this image carefully. Which ONE of these gestures/expressions is the person CURRENTLY and CLEARLY making: ${triggerList}? 
-Only answer with the exact gesture name if you are confident (>80% sure) you see it being performed RIGHT NOW. 
-If none are clearly visible or you're not confident, answer "none".
-Answer with just the gesture name or "none", nothing else.`;
-      
-      const result = await describeScene(imageBase64, apiKey, prompt);
-      
-      if (result.error) {
-        console.log(`[AIPhotographer] Error:`, result.error);
-        return null;
-      }
-      
-      const answer = result.description.toLowerCase().trim();
-      console.log(`[AIPhotographer] AI response: "${answer}"`);
-      
-      if (answer === "none" || answer.includes("none")) {
-        return null;
-      }
-      
-      const matchedTrigger = activeTriggers.find(t => 
-        answer.includes(t.name.toLowerCase()) || 
-        t.name.toLowerCase().includes(answer.replace(/[^a-z\s]/g, "").trim())
-      );
-      
-      if (!matchedTrigger) {
-        console.log(`[AIPhotographer] No trigger matched for: "${answer}"`);
-        return null;
-      }
-      
-      console.log(`[AIPhotographer] Matched trigger: ${matchedTrigger.name}`);
-      
-      if (matchedTrigger.detectQuery) {
-        const detectResult = await detectObject(imageBase64, apiKey, matchedTrigger.detectQuery);
-        if (detectResult.found && detectResult.box) {
-          console.log(`[AIPhotographer] Got bounding box for ${matchedTrigger.name}`);
-          return { triggerName: matchedTrigger.name, box: detectResult.box };
+      if (presetTriggers.length > 0) {
+        const presetIds = presetTriggers.map(t => t.id);
+        console.log(`[AIPhotographer] Trying on-device detection for: ${presetIds.join(", ")}`);
+        
+        const gestureResults = await detectPresetGestures(imageBase64, presetIds);
+        
+        if (gestureResults.length > 0) {
+          const detected = gestureResults[0];
+          const matchedTrigger = presetTriggers.find(t => 
+            t.id.toLowerCase() === detected.gesture.toLowerCase() ||
+            t.name.toLowerCase() === detected.gesture.toLowerCase()
+          );
+          
+          if (matchedTrigger && detected.confidence > 0.6) {
+            console.log(`[AIPhotographer] On-device detected: ${matchedTrigger.name} (${(detected.confidence * 100).toFixed(0)}%)`);
+            
+            if (detected.boundingBox) {
+              return {
+                triggerName: matchedTrigger.name,
+                box: {
+                  x_min: detected.boundingBox.x,
+                  y_min: detected.boundingBox.y,
+                  x_max: detected.boundingBox.x + detected.boundingBox.width,
+                  y_max: detected.boundingBox.y + detected.boundingBox.height,
+                },
+              };
+            }
+            return { triggerName: matchedTrigger.name };
+          }
         }
       }
       
-      return { triggerName: matchedTrigger.name };
+      if (customTriggers.length > 0 && apiKey) {
+        const triggerNames = customTriggers.map(t => t.name.toLowerCase());
+        const triggerList = triggerNames.join(", ");
+        
+        const prompt = `Look at this image carefully. Which ONE of these gestures/expressions is the person CURRENTLY and CLEARLY making: ${triggerList}? 
+Only answer with the exact gesture name if you are confident (>80% sure) you see it being performed RIGHT NOW. 
+If none are clearly visible or you're not confident, answer "none".
+Answer with just the gesture name or "none", nothing else.`;
+        
+        const result = await describeScene(imageBase64, apiKey, prompt);
+        
+        if (result.error) {
+          console.log(`[AIPhotographer] Moondream error:`, result.error);
+          return null;
+        }
+        
+        const answer = result.description.toLowerCase().trim();
+        console.log(`[AIPhotographer] Moondream response: "${answer}"`);
+        
+        if (answer === "none" || answer.includes("none")) {
+          return null;
+        }
+        
+        const matchedTrigger = customTriggers.find(t => 
+          answer.includes(t.name.toLowerCase()) || 
+          t.name.toLowerCase().includes(answer.replace(/[^a-z\s]/g, "").trim())
+        );
+        
+        if (!matchedTrigger) {
+          console.log(`[AIPhotographer] No custom trigger matched for: "${answer}"`);
+          return null;
+        }
+        
+        console.log(`[AIPhotographer] Moondream matched: ${matchedTrigger.name}`);
+        
+        if (matchedTrigger.detectQuery) {
+          const detectResult = await detectObject(imageBase64, apiKey, matchedTrigger.detectQuery);
+          if (detectResult.found && detectResult.box) {
+            return { triggerName: matchedTrigger.name, box: detectResult.box };
+          }
+        }
+        
+        return { triggerName: matchedTrigger.name };
+      }
+      
+      return null;
     } catch (err) {
       console.log(`[AIPhotographer] Error:`, err);
       return null;
@@ -238,14 +280,17 @@ Answer with just the gesture name or "none", nothing else.`;
     setStatus("idle");
   }, [getFrame, capturePhoto, cooldownSeconds]);
 
+  const hasOnlyPresetTriggers = selectedTriggers.every(id => isPresetTrigger(id));
+  const canStart = selectedTriggers.length > 0 && (hasApiKey || hasOnlyPresetTriggers);
+
   const startWatching = useCallback(() => {
-    if (!hasApiKey || selectedTriggers.length === 0) return;
+    if (!canStart) return;
     watchingRef.current = true;
     setIsWatching(true);
     setStatus("watching");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     watchLoop();
-  }, [hasApiKey, selectedTriggers, watchLoop]);
+  }, [canStart, watchLoop]);
 
   const stopWatching = useCallback(() => {
     watchingRef.current = false;
@@ -301,21 +346,7 @@ Answer with just the gesture name or "none", nothing else.`;
     };
   }, []);
 
-  if (!hasApiKey) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
-        <View style={styles.noApiKey}>
-          <Feather name="key" size={32} color={theme.textSecondary} />
-          <Text style={[styles.noApiKeyTitle, { color: theme.text }]}>
-            API Key Required
-          </Text>
-          <Text style={[styles.noApiKeyText, { color: theme.textSecondary }]}>
-            Add your Moondream API key in Settings.
-          </Text>
-        </View>
-      </View>
-    );
-  }
+
 
   return (
     <View style={styles.container}>
@@ -356,6 +387,11 @@ Answer with just the gesture name or "none", nothing else.`;
                 ]}>
                   {trigger.name}
                 </Text>
+                {isPresetTrigger(trigger.id) ? (
+                  <Feather name="smartphone" size={12} color={isSelected ? "#fff" : theme.success} />
+                ) : (
+                  <Feather name="cloud" size={12} color={isSelected ? "#fff" : theme.warning} />
+                )}
                 {isSelected && (
                   <Feather name="check" size={14} color="#fff" />
                 )}
@@ -424,12 +460,12 @@ Answer with just the gesture name or "none", nothing else.`;
         
         <Pressable
           onPress={isWatching ? stopWatching : startWatching}
-          disabled={selectedTriggers.length === 0}
+          disabled={!canStart}
           style={({ pressed }) => [
             styles.mainButton,
             {
               backgroundColor: isWatching ? theme.error : theme.success,
-              opacity: selectedTriggers.length === 0 ? 0.5 : (pressed ? 0.85 : 1),
+              opacity: !canStart ? 0.5 : (pressed ? 0.85 : 1),
             },
           ]}
         >
@@ -442,6 +478,12 @@ Answer with just the gesture name or "none", nothing else.`;
             {isWatching ? "Stop" : "Start Watching"}
           </Text>
         </Pressable>
+        
+        {!hasApiKey && !hasOnlyPresetTriggers && selectedTriggers.length > 0 && (
+          <Text style={[styles.apiKeyHint, { color: theme.warning }]}>
+            Custom triggers need Moondream API key
+          </Text>
+        )}
       </View>
 
       {captures.length > 0 && !showGallery && (
@@ -697,6 +739,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: Typography.body.fontSize,
     fontWeight: "600",
+  },
+  apiKeyHint: {
+    fontSize: Typography.small.fontSize,
+    textAlign: "center",
   },
   galleryPreviewHeader: {
     flexDirection: "row",

@@ -48,6 +48,15 @@ export interface HandPoseResult {
   wristY: number;
 }
 
+export interface GestureResult {
+  gesture: string;
+  confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export const isVisionAvailable: boolean;
 
 export function isYOLOAvailable(): Promise<boolean>;
@@ -65,6 +74,7 @@ export function clipSimilarity(embedding1: number[], embedding2: number[]): Prom
 export function classifyScene(imageBase64: string, maxResults?: number): Promise<ClassificationResult[]>;
 export function detectBodyPoses(imageBase64: string): Promise<PoseAnalysisResult[]>;
 export function detectHandPoses(imageBase64: string): Promise<HandPoseResult[]>;
+export function detectGesturesForTriggers(imageBase64: string, triggers: string[]): Promise<GestureResult[]>;
 
 export function startTracking(
   x: number,

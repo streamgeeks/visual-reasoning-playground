@@ -58,6 +58,16 @@ struct HandPoseResult: Record {
     @Field var wristY: Double = 0
 }
 
+/// Gesture detection result for AI Photographer
+struct GestureResult: Record {
+    @Field var gesture: String = ""
+    @Field var confidence: Double = 0
+    @Field var x: Double = 0
+    @Field var y: Double = 0
+    @Field var width: Double = 0
+    @Field var height: Double = 0
+}
+
 public class VisionTrackingModule: Module {
     /// Active tracking sessions: trackingId -> (observation, sequenceHandler)
     private var trackingSessions: [String: (VNDetectedObjectObservation, VNSequenceRequestHandler)] = [:]
@@ -114,6 +124,13 @@ public class VisionTrackingModule: Module {
                  throw NSError(domain: "VisionTracking", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid image data"])
              }
              return try await self.performHandPoseDetection(image: image)
+         }
+         
+         AsyncFunction("detectGesturesForTriggers") { (imageBase64: String, triggers: [String]) -> [GestureResult] in
+             guard let image = self.imageFromBase64(imageBase64) else {
+                 throw NSError(domain: "VisionTracking", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid image data"])
+             }
+             return try await self.detectGesturesForTriggers(image: image, triggers: Set(triggers))
          }
          
          // MARK: - Native YOLO Detection
@@ -688,6 +705,150 @@ public class VisionTrackingModule: Module {
      private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
          return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2))
      }
+     
+    private func detectGesturesForTriggers(image: UIImage, triggers: Set<String>) async throws -> [GestureResult] {
+        guard let cgImage = image.cgImage else {
+            throw NSError(domain: "VisionTracking", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not get CGImage"])
+        }
+        
+        var results: [GestureResult] = []
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        
+        let handTriggers = Set(["wave", "thumbsup", "peace", "pointing"])
+        let needsHands = !triggers.intersection(handTriggers).isEmpty
+        let needsSmile = triggers.contains("smile")
+        
+        if needsHands {
+            let handResults = try await detectHandGesturesForTriggers(handler: handler, triggers: triggers)
+            results.append(contentsOf: handResults)
+        }
+        
+        if needsSmile {
+            let smileResults = try await detectSmileForTrigger(handler: handler)
+            results.append(contentsOf: smileResults)
+        }
+        
+        return results
+    }
+    
+    private func detectHandGesturesForTriggers(handler: VNImageRequestHandler, triggers: Set<String>) async throws -> [GestureResult] {
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectHumanHandPoseRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                var results: [GestureResult] = []
+                guard let observations = request.results as? [VNHumanHandPoseObservation] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                for observation in observations {
+                    let handPose = self.analyzeHandPose(observation: observation)
+                    
+                    if triggers.contains("thumbsup") && handPose.isThumbsUp {
+                        var result = GestureResult()
+                        result.gesture = "thumbsup"
+                        result.confidence = max(0.75, handPose.confidence)
+                        results.append(result)
+                    }
+                    
+                    if triggers.contains("peace") && handPose.isPeaceSign {
+                        var result = GestureResult()
+                        result.gesture = "peace"
+                        result.confidence = max(0.75, handPose.confidence)
+                        results.append(result)
+                    }
+                    
+                    if triggers.contains("wave") && handPose.isOpenPalm {
+                        var result = GestureResult()
+                        result.gesture = "wave"
+                        result.confidence = max(0.70, handPose.confidence)
+                        results.append(result)
+                    }
+                    
+                    if triggers.contains("pointing") && handPose.isPointing {
+                        var result = GestureResult()
+                        result.gesture = "pointing"
+                        result.confidence = max(0.75, handPose.confidence)
+                        results.append(result)
+                    }
+                }
+                
+                continuation.resume(returning: results)
+            }
+            
+            request.maximumHandCount = 2
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    private func detectSmileForTrigger(handler: VNImageRequestHandler) async throws -> [GestureResult] {
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectFaceLandmarksRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                var results: [GestureResult] = []
+                guard let observations = request.results as? [VNFaceObservation] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                for observation in observations {
+                    if let landmarks = observation.landmarks,
+                       let outerLips = landmarks.outerLips {
+                        let points = outerLips.normalizedPoints
+                        if self.isSmiling(lipPoints: points) {
+                            let box = observation.boundingBox
+                            var result = GestureResult()
+                            result.gesture = "smile"
+                            result.confidence = 0.80
+                            result.x = box.origin.x
+                            result.y = 1 - box.origin.y - box.height
+                            result.width = box.width
+                            result.height = box.height
+                            results.append(result)
+                        }
+                    }
+                }
+                
+                continuation.resume(returning: results)
+            }
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    private func isSmiling(lipPoints: [CGPoint]) -> Bool {
+        guard lipPoints.count >= 6 else { return false }
+        
+        let leftCorner = lipPoints[0]
+        let rightCorner = lipPoints[lipPoints.count / 2]
+        let topCenter = lipPoints[lipPoints.count / 4]
+        let bottomCenter = lipPoints[(lipPoints.count * 3) / 4]
+        
+        let mouthWidth = abs(rightCorner.x - leftCorner.x)
+        let mouthHeight = abs(topCenter.y - bottomCenter.y)
+        
+        let widthToHeightRatio = mouthWidth / max(mouthHeight, 0.001)
+        let cornerLift = ((leftCorner.y + rightCorner.y) / 2) - ((topCenter.y + bottomCenter.y) / 2)
+        
+        return widthToHeightRatio > 2.5 && cornerLift > 0.01
+    }
      
      @available(iOS 13.0, *)
      private func performFeaturePrintGeneration(image: UIImage) async throws -> [NSNumber] {

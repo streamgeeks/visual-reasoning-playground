@@ -53,6 +53,14 @@ export async function detectHandPoses(imageBase64) {
   return NativeModule.detectHandPoses(imageBase64);
 }
 
+export async function detectGesturesForTriggers(imageBase64, triggers) {
+  if (!NativeModule) {
+    console.warn("VisionTracking: Not available on this platform");
+    return [];
+  }
+  return NativeModule.detectGesturesForTriggers(imageBase64, triggers);
+}
+
 export function startTracking(x, y, width, height) {
   if (!NativeModule) {
     console.warn("VisionTracking: Not available on this platform");

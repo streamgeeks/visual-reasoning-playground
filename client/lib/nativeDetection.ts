@@ -6,7 +6,9 @@ import {
   embedImageCLIP,
   embedTextCLIP,
   clipSimilarity,
+  detectGesturesForTriggers,
   DetectionResult,
+  GestureResult,
 } from "../../modules/vision-tracking/src";
 import { Platform } from "react-native";
 
@@ -153,4 +155,69 @@ function toNativeResult(detection: DetectionResult): NativeDetectionResult {
       height: detection.height,
     },
   };
+}
+
+export interface GestureDetectionResult {
+  gesture: string;
+  confidence: number;
+  boundingBox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+const PRESET_TRIGGER_MAP: Record<string, string> = {
+  wave: "wave",
+  smile: "smile",
+  thumbsup: "thumbsup",
+  "thumbs up": "thumbsup",
+  peace: "peace",
+  "peace sign": "peace",
+  pointing: "pointing",
+};
+
+export function isPresetTrigger(triggerId: string): boolean {
+  const normalized = triggerId.toLowerCase().replace(/[^a-z]/g, "");
+  return normalized in PRESET_TRIGGER_MAP || Object.values(PRESET_TRIGGER_MAP).includes(normalized);
+}
+
+export function normalizeTriggerId(triggerId: string): string {
+  const normalized = triggerId.toLowerCase().replace(/[^a-z]/g, "");
+  return PRESET_TRIGGER_MAP[normalized] || normalized;
+}
+
+export async function detectPresetGestures(
+  imageBase64: string,
+  triggerIds: string[]
+): Promise<GestureDetectionResult[]> {
+  if (Platform.OS !== "ios") {
+    return [];
+  }
+
+  const normalizedTriggers = triggerIds
+    .filter(isPresetTrigger)
+    .map(normalizeTriggerId);
+
+  if (normalizedTriggers.length === 0) {
+    return [];
+  }
+
+  try {
+    const results = await detectGesturesForTriggers(imageBase64, normalizedTriggers);
+    return results.map((r: GestureResult) => ({
+      gesture: r.gesture,
+      confidence: r.confidence,
+      boundingBox: r.width > 0 ? {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+      } : undefined,
+    }));
+  } catch (error) {
+    console.warn("[NativeDetection] Gesture detection failed:", error);
+    return [];
+  }
 }
