@@ -7,12 +7,13 @@ import {
   Pressable,
   Dimensions,
   Linking,
+  Image,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import Animated, { 
-  FadeIn, 
-  FadeOut, 
-  SlideInRight, 
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInRight,
   SlideOutLeft,
   useAnimatedStyle,
   withSpring,
@@ -59,11 +60,18 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
 
   const getIconColor = (slideId: string) => {
     switch (slideId) {
-      case "on-device": return "#34C759";
-      case "cloud-ai": return "#FF9500";
-      case "hybrid": return "#5856D6";
-      case "api-key": return "#AF52DE";
-      default: return theme.primary;
+      case "ptzoptics":
+        return "#0066CC";
+      case "on-device":
+        return "#34C759";
+      case "cloud-ai":
+        return "#FF9500";
+      case "hybrid":
+        return "#5856D6";
+      case "api-key":
+        return "#AF52DE";
+      default:
+        return theme.primary;
     }
   };
 
@@ -74,47 +82,93 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
-      <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
+      <View
+        style={[styles.container, { backgroundColor: theme.backgroundDefault }]}
+      >
         <View style={styles.progressContainer}>
-          <View style={[styles.progressBg, { backgroundColor: theme.backgroundSecondary }]}>
-            <Animated.View 
-              style={[styles.progressFill, { backgroundColor: theme.primary }, progressStyle]} 
+          <View
+            style={[
+              styles.progressBg,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.progressFill,
+                { backgroundColor: theme.primary },
+                progressStyle,
+              ]}
             />
           </View>
           <Pressable onPress={handleSkip} style={styles.skipButton}>
-            <Text style={[styles.skipText, { color: theme.textSecondary }]}>Skip</Text>
+            <Text style={[styles.skipText, { color: theme.textSecondary }]}>
+              Skip
+            </Text>
           </Pressable>
         </View>
 
         <View style={styles.slideContainer}>
-          <Animated.View 
+          <Animated.View
             key={currentSlide}
             entering={SlideInRight.duration(300)}
             exiting={SlideOutLeft.duration(300)}
             style={styles.slide}
           >
-            <View style={[styles.iconContainer, { backgroundColor: getIconColor(slide.id) + "20" }]}>
-              <Feather name={slide.icon as any} size={48} color={getIconColor(slide.id)} />
-            </View>
+            {slide.image ? (
+              <View style={styles.imageContainer}>
+                <Image
+                  source={slide.image}
+                  style={styles.slideImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: getIconColor(slide.id) + "20" },
+                ]}
+              >
+                <Feather
+                  name={slide.icon as any}
+                  size={48}
+                  color={getIconColor(slide.id)}
+                />
+              </View>
+            )}
 
-            <Text style={[styles.title, { color: theme.text }]}>{slide.title}</Text>
-            <Text style={[styles.subtitle, { color: theme.primary }]}>{slide.subtitle}</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              {slide.title}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.primary }]}>
+              {slide.subtitle}
+            </Text>
             <Text style={[styles.description, { color: theme.textSecondary }]}>
               {slide.description}
             </Text>
 
             {slide.examples && (
               <View style={styles.examplesContainer}>
-                <Text style={[styles.examplesLabel, { color: theme.textSecondary }]}>
+                <Text
+                  style={[styles.examplesLabel, { color: theme.textSecondary }]}
+                >
                   Examples:
                 </Text>
                 <View style={styles.examplesList}>
                   {slide.examples.map((example, index) => (
-                    <View 
-                      key={index} 
-                      style={[styles.exampleChip, { backgroundColor: getIconColor(slide.id) + "20" }]}
+                    <View
+                      key={index}
+                      style={[
+                        styles.exampleChip,
+                        { backgroundColor: getIconColor(slide.id) + "20" },
+                      ]}
                     >
-                      <Text style={[styles.exampleText, { color: getIconColor(slide.id) }]}>
+                      <Text
+                        style={[
+                          styles.exampleText,
+                          { color: getIconColor(slide.id) },
+                        ]}
+                      >
                         {example}
                       </Text>
                     </View>
@@ -128,22 +182,37 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
                 {slide.toolCategories.map((category, catIndex) => (
                   <View key={catIndex} style={styles.categorySection}>
                     <View style={styles.categoryHeader}>
-                      <Feather 
-                        name={category.color === "#34C759" ? "smartphone" : "cloud"} 
-                        size={14} 
-                        color={category.color} 
+                      <Feather
+                        name={
+                          category.color === "#34C759" ? "smartphone" : "cloud"
+                        }
+                        size={14}
+                        color={category.color}
                       />
-                      <Text style={[styles.categoryLabel, { color: category.color }]}>
+                      <Text
+                        style={[
+                          styles.categoryLabel,
+                          { color: category.color },
+                        ]}
+                      >
                         {category.label}
                       </Text>
                     </View>
                     <View style={styles.categoryTools}>
                       {category.tools.map((tool, toolIndex) => (
-                        <View 
-                          key={toolIndex} 
-                          style={[styles.categoryToolChip, { backgroundColor: category.color + "15" }]}
+                        <View
+                          key={toolIndex}
+                          style={[
+                            styles.categoryToolChip,
+                            { backgroundColor: category.color + "15" },
+                          ]}
                         >
-                          <Text style={[styles.categoryToolText, { color: theme.text }]}>
+                          <Text
+                            style={[
+                              styles.categoryToolText,
+                              { color: theme.text },
+                            ]}
+                          >
                             {tool}
                           </Text>
                         </View>
@@ -159,7 +228,10 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
                 onPress={() => handleLinkPress(slide.link!.url)}
                 style={({ pressed }) => [
                   styles.linkButton,
-                  { backgroundColor: getIconColor(slide.id), opacity: pressed ? 0.8 : 1 },
+                  {
+                    backgroundColor: getIconColor(slide.id),
+                    opacity: pressed ? 0.8 : 1,
+                  },
                 ]}
               >
                 <Text style={styles.linkButtonText}>{slide.link.text}</Text>
@@ -176,7 +248,10 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: index === currentSlide ? theme.primary : theme.backgroundSecondary,
+                    backgroundColor:
+                      index === currentSlide
+                        ? theme.primary
+                        : theme.backgroundSecondary,
                     width: index === currentSlide ? 24 : 8,
                   },
                 ]}
@@ -194,10 +269,10 @@ export function AIOnboarding({ visible, onComplete }: AIOnboardingProps) {
             <Text style={styles.nextButtonText}>
               {isLastSlide ? "Get Started" : "Next"}
             </Text>
-            <Feather 
-              name={isLastSlide ? "check" : "arrow-right"} 
-              size={18} 
-              color="#FFF" 
+            <Feather
+              name={isLastSlide ? "check" : "arrow-right"}
+              size={18}
+              color="#FFF"
             />
           </Pressable>
         </View>
@@ -251,6 +326,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Spacing.xl,
+  },
+  imageContainer: {
+    width: SCREEN_WIDTH * 0.7,
+    height: 180,
+    marginBottom: Spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  slideImage: {
+    width: "100%",
+    height: "100%",
   },
   title: {
     fontSize: 28,
