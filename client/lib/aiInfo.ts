@@ -301,7 +301,6 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
     description:
       "AI-powered robotics and much more. Connect your PTZOptics camera to unlock intelligent tracking, automation, and color matching.",
     icon: "video",
-    image: require("@/assets/images/ptzoptics-camera.png"),
   },
   {
     id: "welcome",
