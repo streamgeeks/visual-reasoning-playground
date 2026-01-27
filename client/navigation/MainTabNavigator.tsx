@@ -3,15 +3,15 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 
 import LiveStackNavigator from "@/navigation/LiveStackNavigator";
+import ChatStackNavigator from "@/navigation/ChatStackNavigator";
 import GalleryStackNavigator from "@/navigation/GalleryStackNavigator";
-import ReplayStackNavigator from "@/navigation/ReplayStackNavigator";
 import SettingsStackNavigator from "@/navigation/SettingsStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 
 export type MainTabParamList = {
   LiveTab: undefined;
+  ChatTab: undefined;
   GalleryTab: undefined;
-  ReplayTab: undefined;
   SettingsTab: undefined;
 };
 
@@ -42,7 +42,7 @@ export default function MainTabNavigator() {
         headerShown: false,
       }}
     >
-<Tab.Screen
+      <Tab.Screen
         name="LiveTab"
         component={LiveStackNavigator}
         options={{
@@ -53,22 +53,22 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen
+        name="ChatTab"
+        component={ChatStackNavigator}
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="message-circle" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="GalleryTab"
         component={GalleryStackNavigator}
         options={{
           title: "Gallery",
           tabBarIcon: ({ color, size }) => (
             <Feather name="image" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="ReplayTab"
-        component={ReplayStackNavigator}
-        options={{
-          title: "Replay",
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="rotate-ccw" size={size} color={color} />
           ),
         }}
       />

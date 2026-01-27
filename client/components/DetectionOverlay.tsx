@@ -1,8 +1,8 @@
 import React from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Text } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { DetectionBox } from "@/lib/tracking";
-import { Colors } from "@/constants/theme";
+import { Colors, BorderRadius } from "@/constants/theme";
 
 interface DetectionOverlayProps {
   detections: DetectionBox[];
@@ -16,6 +16,7 @@ interface DetectionBoxOverlayProps {
   containerHeight: number;
   color?: string;
   isLocked?: boolean;
+  label?: string;
 }
 
 const CORNER_SIZE = 12;
@@ -27,6 +28,7 @@ export function DetectionBoxOverlay({
   containerHeight,
   color = Colors.dark.warning,
   isLocked = false,
+  label,
 }: DetectionBoxOverlayProps) {
   const left = box.x_min * containerWidth;
   const top = box.y_min * containerHeight;
@@ -41,21 +43,74 @@ export function DetectionBoxOverlay({
       style={[styles.boxContainer, { left, top, width, height }]}
       pointerEvents="none"
     >
-      <View style={[styles.lineH, { top: 0, left: 0, backgroundColor: activeColor }]} />
-      <View style={[styles.lineV, { top: 0, left: 0, backgroundColor: activeColor }]} />
-      
-      <View style={[styles.lineH, { top: 0, right: 0, backgroundColor: activeColor }]} />
-      <View style={[styles.lineV, { top: 0, right: 0, backgroundColor: activeColor }]} />
-      
-      <View style={[styles.lineH, { bottom: 0, left: 0, backgroundColor: activeColor }]} />
-      <View style={[styles.lineV, { bottom: 0, left: 0, backgroundColor: activeColor }]} />
-      
-      <View style={[styles.lineH, { bottom: 0, right: 0, backgroundColor: activeColor }]} />
-      <View style={[styles.lineV, { bottom: 0, right: 0, backgroundColor: activeColor }]} />
-      
-      {isLocked && (
+      <View
+        style={[
+          styles.lineH,
+          { top: 0, left: 0, backgroundColor: activeColor },
+        ]}
+      />
+      <View
+        style={[
+          styles.lineV,
+          { top: 0, left: 0, backgroundColor: activeColor },
+        ]}
+      />
+
+      <View
+        style={[
+          styles.lineH,
+          { top: 0, right: 0, backgroundColor: activeColor },
+        ]}
+      />
+      <View
+        style={[
+          styles.lineV,
+          { top: 0, right: 0, backgroundColor: activeColor },
+        ]}
+      />
+
+      <View
+        style={[
+          styles.lineH,
+          { bottom: 0, left: 0, backgroundColor: activeColor },
+        ]}
+      />
+      <View
+        style={[
+          styles.lineV,
+          { bottom: 0, left: 0, backgroundColor: activeColor },
+        ]}
+      />
+
+      <View
+        style={[
+          styles.lineH,
+          { bottom: 0, right: 0, backgroundColor: activeColor },
+        ]}
+      />
+      <View
+        style={[
+          styles.lineV,
+          { bottom: 0, right: 0, backgroundColor: activeColor },
+        ]}
+      />
+
+      {isLocked && !label && (
         <View style={styles.centerMarker}>
           <View style={[styles.centerDot, { backgroundColor: activeColor }]} />
+        </View>
+      )}
+
+      {label && (
+        <View
+          style={[
+            styles.labelContainer,
+            { backgroundColor: activeColor, maxWidth: 75 },
+          ]}
+        >
+          <Text style={styles.labelText} numberOfLines={3} ellipsizeMode="tail">
+            {label}
+          </Text>
         </View>
       )}
     </Animated.View>
@@ -119,5 +174,20 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  labelContainer: {
+    position: "absolute",
+    bottom: -44,
+    left: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.xs,
+  },
+  labelText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "capitalize",
+    lineHeight: 13,
   },
 });

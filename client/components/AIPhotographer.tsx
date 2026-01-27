@@ -10,7 +10,17 @@ import {
   Modal,
   Alert,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { 
+  FadeIn, 
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withSpring,
+  cancelAnimation,
+} from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
@@ -81,11 +91,47 @@ export function AIPhotographer({
   const [newTriggerName, setNewTriggerName] = useState("");
   const [newTriggerPrompt, setNewTriggerPrompt] = useState("");
   const [newTriggerEmoji, setNewTriggerEmoji] = useState("📸");
+  const [detectionMode, setDetectionMode] = useState<"fast" | "enhanced">("fast");
   
   const watchingRef = useRef(false);
   const cooldownRef = useRef(false);
   const lastCaptureTimeRef = useRef(0);
   const checkForTriggersRef = useRef<((imageBase64: string) => Promise<DetectionResult | null>) | null>(null);
+  
+  const statusPulse = useSharedValue(1);
+  const flashOpacity = useSharedValue(0);
+  
+  const statusAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: statusPulse.value }],
+    opacity: 0.3 + (statusPulse.value - 0.8) * 3.5,
+  }));
+  
+  const flashAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: flashOpacity.value,
+  }));
+  
+  React.useEffect(() => {
+    if (status === "watching") {
+      statusPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.3, { duration: 600 }),
+          withTiming(0.8, { duration: 600 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      cancelAnimation(statusPulse);
+      statusPulse.value = withTiming(1, { duration: 200 });
+    }
+  }, [status]);
+  
+  const triggerFlash = React.useCallback(() => {
+    flashOpacity.value = withSequence(
+      withTiming(1, { duration: 100 }),
+      withTiming(0, { duration: 400 })
+    );
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -127,12 +173,52 @@ export function AIPhotographer({
     if (activeTriggers.length === 0) return null;
     
     const presetTriggers = activeTriggers.filter(t => isPresetTrigger(t.id));
-    const customTriggers = activeTriggers.filter(t => !isPresetTrigger(t.id));
+    const customTriggersList = activeTriggers.filter(t => !isPresetTrigger(t.id));
     
     try {
+      if (detectionMode === "enhanced" && apiKey) {
+        const triggerNames = activeTriggers.map(t => t.name.toLowerCase());
+        const triggerList = triggerNames.join(", ");
+        
+        console.log(`[AIPhotographer] Enhanced mode - checking via Moondream: ${triggerList}`);
+        
+        const prompt = `Look at this image carefully. Which ONE of these gestures/expressions is the person CURRENTLY and CLEARLY making: ${triggerList}? 
+Only answer with the exact gesture name if you are confident (>80% sure) you see it being performed RIGHT NOW. 
+If none are clearly visible or you're not confident, answer "none".
+Answer with just the gesture name or "none", nothing else.`;
+        
+        const result = await describeScene(imageBase64, apiKey, prompt);
+        
+        if (result.error) {
+          console.log(`[AIPhotographer] Moondream error, falling back to on-device:`, result.error);
+        } else {
+          const answer = result.description.toLowerCase().trim();
+          console.log(`[AIPhotographer] Enhanced mode response: "${answer}"`);
+          
+          if (answer !== "none" && !answer.includes("none")) {
+            const matchedTrigger = activeTriggers.find(t => 
+              answer.includes(t.name.toLowerCase()) || 
+              t.name.toLowerCase().includes(answer.replace(/[^a-z\s]/g, "").trim())
+            );
+            
+            if (matchedTrigger) {
+              console.log(`[AIPhotographer] Enhanced mode matched: ${matchedTrigger.name}`);
+              
+              const detectQuery = matchedTrigger.detectQuery || matchedTrigger.name;
+              const detectResult = await detectObject(imageBase64, apiKey, detectQuery);
+              if (detectResult.found && detectResult.box) {
+                return { triggerName: matchedTrigger.name, box: detectResult.box };
+              }
+              return { triggerName: matchedTrigger.name };
+            }
+          }
+          return null;
+        }
+      }
+      
       if (presetTriggers.length > 0) {
         const presetIds = presetTriggers.map(t => t.id);
-        console.log(`[AIPhotographer] Trying on-device detection for: ${presetIds.join(", ")}`);
+        console.log(`[AIPhotographer] Fast mode - on-device detection for: ${presetIds.join(", ")}`);
         
         const gestureResults = await detectPresetGestures(imageBase64, presetIds);
         
@@ -162,8 +248,8 @@ export function AIPhotographer({
         }
       }
       
-      if (customTriggers.length > 0 && apiKey) {
-        const triggerNames = customTriggers.map(t => t.name.toLowerCase());
+      if (customTriggersList.length > 0 && apiKey) {
+        const triggerNames = customTriggersList.map(t => t.name.toLowerCase());
         const triggerList = triggerNames.join(", ");
         
         const prompt = `Look at this image carefully. Which ONE of these gestures/expressions is the person CURRENTLY and CLEARLY making: ${triggerList}? 
@@ -185,7 +271,7 @@ Answer with just the gesture name or "none", nothing else.`;
           return null;
         }
         
-        const matchedTrigger = customTriggers.find(t => 
+        const matchedTrigger = customTriggersList.find(t => 
           answer.includes(t.name.toLowerCase()) || 
           t.name.toLowerCase().includes(answer.replace(/[^a-z\s]/g, "").trim())
         );
@@ -212,7 +298,7 @@ Answer with just the gesture name or "none", nothing else.`;
       console.log(`[AIPhotographer] Error:`, err);
       return null;
     }
-  }, [apiKey, allTriggers, selectedTriggers]);
+  }, [apiKey, allTriggers, selectedTriggers, detectionMode]);
 
   // Keep ref updated so watchLoop always uses latest checkForTriggers
   useEffect(() => {
@@ -220,6 +306,8 @@ Answer with just the gesture name or "none", nothing else.`;
   }, [checkForTriggers]);
 
   const capturePhoto = useCallback(async (imageUri: string, detection: DetectionResult) => {
+    triggerFlash();
+    
     const capture: AICapture = {
       id: generateId(),
       imageUri,
@@ -235,7 +323,7 @@ Answer with just the gesture name or "none", nothing else.`;
     onDetection?.(detection);
     
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [onCapture, onDetection]);
+  }, [onCapture, onDetection, triggerFlash]);
 
   const watchLoop = useCallback(async () => {
     while (watchingRef.current) {
@@ -350,6 +438,13 @@ Answer with just the gesture name or "none", nothing else.`;
 
   return (
     <View style={styles.container}>
+      <Animated.View 
+        style={[
+          styles.flashOverlay,
+          flashAnimatedStyle,
+        ]} 
+        pointerEvents="none"
+      />
       <View style={[styles.section, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Triggers</Text>
@@ -404,6 +499,66 @@ Answer with just the gesture name or "none", nothing else.`;
       <View style={[styles.section, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.settingsRow}>
           <Text style={[styles.settingLabel, { color: theme.text }]}>
+            Detection
+          </Text>
+          <View style={styles.modeButtons}>
+            <Pressable
+              onPress={() => setDetectionMode("fast")}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor: detectionMode === "fast" 
+                    ? theme.success 
+                    : theme.backgroundSecondary,
+                },
+              ]}
+            >
+              <Feather name="smartphone" size={12} color={detectionMode === "fast" ? "#fff" : theme.textSecondary} />
+              <Text style={[
+                styles.modeButtonText,
+                { color: detectionMode === "fast" ? "#fff" : theme.textSecondary },
+              ]}>
+                Fast
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => hasApiKey && setDetectionMode("enhanced")}
+              disabled={!hasApiKey}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor: detectionMode === "enhanced" 
+                    ? theme.accent 
+                    : theme.backgroundSecondary,
+                  opacity: hasApiKey ? 1 : 0.5,
+                },
+              ]}
+            >
+              <Feather name="zap" size={12} color={detectionMode === "enhanced" ? "#fff" : theme.textSecondary} />
+              <Text style={[
+                styles.modeButtonText,
+                { color: detectionMode === "enhanced" ? "#fff" : theme.textSecondary },
+              ]}>
+                Enhanced
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+        {detectionMode === "enhanced" && (
+          <Text style={[styles.modeHint, { color: theme.accent }]}>
+            Cloud AI for more reliable detection
+          </Text>
+        )}
+        {!hasApiKey && (
+          <Text style={[styles.modeHint, { color: theme.textSecondary }]}>
+            Add API key for Enhanced mode
+          </Text>
+        )}
+      </View>
+
+      <View style={[styles.section, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.settingsRow}>
+          <Text style={[styles.settingLabel, { color: theme.text }]}>
             Cooldown
           </Text>
           <View style={styles.cooldownButtons}>
@@ -434,13 +589,14 @@ Answer with just the gesture name or "none", nothing else.`;
 
       <View style={[styles.controlSection, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.statusRow}>
-          <View style={[
+          <Animated.View style={[
             styles.statusIndicator,
             {
               backgroundColor: status === "watching" ? theme.warning
                 : status === "detected" ? theme.success
                 : theme.textSecondary,
             },
+            status === "watching" && statusAnimatedStyle,
           ]} />
           <Text style={[styles.statusText, { color: theme.text }]}>
             {status === "idle" && "Ready to watch"}
@@ -627,6 +783,11 @@ const styles = StyleSheet.create({
   container: {
     gap: Spacing.md,
   },
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#fff",
+    zIndex: 100,
+  },
   section: {
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
@@ -693,6 +854,26 @@ const styles = StyleSheet.create({
   cooldownButtonText: {
     fontSize: Typography.small.fontSize,
     fontWeight: "600",
+  },
+  modeButtons: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+  },
+  modeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+  },
+  modeButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "600",
+  },
+  modeHint: {
+    fontSize: Typography.caption.fontSize,
+    marginTop: Spacing.xs,
   },
   controlSection: {
     padding: Spacing.md,

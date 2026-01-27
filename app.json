@@ -59,9 +59,11 @@
       "expo-web-browser",
       "expo-libvlc-player",
       [
-        "expo-camera",
+        "react-native-vision-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for AI visual analysis."
+          "cameraPermissionText": "Allow $(PRODUCT_NAME) to access your camera for AI visual analysis and color matching.",
+          "enableMicrophonePermission": true,
+          "microphonePermissionText": "Allow $(PRODUCT_NAME) to use the microphone for voice commands."
         }
       ],
       [

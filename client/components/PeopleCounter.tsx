@@ -14,16 +14,20 @@ import Animated, {
   withSpring,
   withSequence,
   withTiming,
+  withRepeat,
+  cancelAnimation,
 } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { detectHumans, isVisionAvailable, DetectionResult } from "vision-tracking";
+import { detectNumberedPeople } from "@/lib/moondream";
 
 interface PeopleCounterProps {
   getFrame: () => Promise<string | null>;
   isConnected: boolean;
+  apiKey?: string;
 }
 
 interface CountHistory {
@@ -31,7 +35,7 @@ interface CountHistory {
   timestamp: number;
 }
 
-export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
+export function PeopleCounter({ getFrame, isConnected, apiKey }: PeopleCounterProps) {
   const { theme } = useTheme();
   
   const [isActive, setIsActive] = useState(false);
@@ -44,16 +48,45 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [fps, setFps] = useState(0);
+  const [detectionMode, setDetectionMode] = useState<"on-device" | "cloud">(
+    isVisionAvailable ? "on-device" : "cloud"
+  );
   
   const activeRef = useRef(false);
   const frameCountRef = useRef(0);
   const fpsStartTimeRef = useRef(0);
   
+  const canUseOnDevice = isVisionAvailable;
+  const canUseCloud = Boolean(apiKey);
+  const canStart = canUseOnDevice || canUseCloud;
+  
   const countScale = useSharedValue(1);
+  const dotPulse = useSharedValue(1);
   
   const countAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: countScale.value }],
   }));
+  
+  const dotPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: dotPulse.value }],
+    opacity: 0.5 + dotPulse.value * 0.5,
+  }));
+  
+  React.useEffect(() => {
+    if (isActive) {
+      dotPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.4, { duration: 500 }),
+          withTiming(1, { duration: 500 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      cancelAnimation(dotPulse);
+      dotPulse.value = 1;
+    }
+  }, [isActive]);
 
   const animateCount = useCallback(() => {
     countScale.value = withSequence(
@@ -74,7 +107,22 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
         return;
       }
       
-      const detections = await detectHumans(frame);
+      let detections: DetectionResult[] = [];
+      
+      if (detectionMode === "on-device" && canUseOnDevice) {
+        detections = await detectHumans(frame);
+      } else if (detectionMode === "cloud" && apiKey) {
+        const base64Data = frame.includes(",") ? frame.split(",")[1] : frame;
+        const cloudResults = await detectNumberedPeople(base64Data, apiKey);
+        detections = cloudResults.map((p) => ({
+          label: p.id,
+          confidence: 0.8,
+          x: p.box.x_min,
+          y: p.box.y_min,
+          width: p.box.x_max - p.box.x_min,
+          height: p.box.y_max - p.box.y_min,
+        }));
+      }
       
       if (!activeRef.current) {
         setIsProcessing(false);
@@ -117,10 +165,10 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
         setTimeout(processFrame, intervalMs);
       }
     }
-  }, [getFrame, intervalMs, animateCount]);
+  }, [getFrame, intervalMs, animateCount, detectionMode, canUseOnDevice, apiKey]);
 
   const startCounting = useCallback(() => {
-    if (!isVisionAvailable) {
+    if (!canStart) {
       return;
     }
     
@@ -136,7 +184,7 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
     
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     processFrame();
-  }, [processFrame]);
+  }, [processFrame, canStart]);
 
   const stopCounting = useCallback(() => {
     activeRef.current = false;
@@ -200,12 +248,12 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
     );
   };
 
-  if (!isVisionAvailable) {
+  if (!canStart) {
     return (
       <View style={[styles.unavailableContainer, { backgroundColor: theme.backgroundSecondary }]}>
         <Feather name="alert-circle" size={24} color={theme.warning} />
         <Text style={[styles.unavailableText, { color: theme.textSecondary }]}>
-          People Counter requires iOS with Vision framework
+          People Counter requires iOS Vision framework or Moondream API key
         </Text>
       </View>
     );
@@ -231,7 +279,7 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
             exiting={FadeOut.duration(200)}
             style={[styles.processingIndicator, { backgroundColor: theme.success + "20" }]}
           >
-            <View style={[styles.processingDot, { backgroundColor: theme.success }]} />
+            <Animated.View style={[styles.processingDot, { backgroundColor: theme.success }, dotPulseStyle]} />
             <Text style={[styles.processingText, { color: theme.success }]}>
               {isProcessing ? "Analyzing..." : "Live"} ({fps} fps)
             </Text>
@@ -284,6 +332,83 @@ export function PeopleCounter({ getFrame, isConnected }: PeopleCounterProps) {
               </Text>
             </View>
           ))}
+        </View>
+      )}
+
+      {/* Detection Mode Toggle */}
+      {(canUseOnDevice || canUseCloud) && (
+        <View style={styles.modeSection}>
+          <Text style={[styles.modeLabel, { color: theme.text }]}>
+            Detection Mode
+          </Text>
+          <View style={styles.modeButtons}>
+            <Pressable
+              onPress={() => {
+                if (canUseOnDevice && !isActive) {
+                  setDetectionMode("on-device");
+                  Haptics.selectionAsync();
+                }
+              }}
+              disabled={!canUseOnDevice || isActive}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor: detectionMode === "on-device" ? theme.success : theme.backgroundSecondary,
+                  opacity: !canUseOnDevice || isActive ? 0.5 : 1,
+                },
+              ]}
+            >
+              <Feather 
+                name="smartphone" 
+                size={14} 
+                color={detectionMode === "on-device" ? "#FFF" : theme.textSecondary} 
+              />
+              <Text style={[
+                styles.modeButtonText,
+                { color: detectionMode === "on-device" ? "#FFF" : theme.textSecondary },
+              ]}>
+                On-Device
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (canUseCloud && !isActive) {
+                  setDetectionMode("cloud");
+                  Haptics.selectionAsync();
+                }
+              }}
+              disabled={!canUseCloud || isActive}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor: detectionMode === "cloud" ? theme.accent : theme.backgroundSecondary,
+                  opacity: !canUseCloud || isActive ? 0.5 : 1,
+                },
+              ]}
+            >
+              <Feather 
+                name="cloud" 
+                size={14} 
+                color={detectionMode === "cloud" ? "#FFF" : theme.textSecondary} 
+              />
+              <Text style={[
+                styles.modeButtonText,
+                { color: detectionMode === "cloud" ? "#FFF" : theme.textSecondary },
+              ]}>
+                Cloud AI
+              </Text>
+            </Pressable>
+          </View>
+          {!canUseOnDevice && (
+            <Text style={[styles.modeHint, { color: theme.textSecondary }]}>
+              On-device requires iOS Vision framework
+            </Text>
+          )}
+          {!canUseCloud && (
+            <Text style={[styles.modeHint, { color: theme.textSecondary }]}>
+              Cloud AI requires Moondream API key
+            </Text>
+          )}
         </View>
       )}
 
@@ -481,6 +606,34 @@ const styles = StyleSheet.create({
   },
   detectionText: {
     fontSize: Typography.small.fontSize,
+  },
+  modeSection: {
+    gap: Spacing.xs,
+  },
+  modeLabel: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+  },
+  modeButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  modeButtonText: {
+    fontSize: Typography.small.fontSize,
+    fontWeight: "500",
+  },
+  modeHint: {
+    fontSize: Typography.caption.fontSize,
+    marginTop: 2,
   },
   intervalSection: {
     gap: Spacing.xs,

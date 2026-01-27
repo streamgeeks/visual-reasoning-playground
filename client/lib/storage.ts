@@ -70,7 +70,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_TRACKING_SETTINGS: TrackingSettings = {
-  ptzSpeed: 2,
+  ptzSpeed: 6,
   pulseDuration: 0,
   deadZone: 0.15,
   continuousMode: true,

@@ -16,7 +16,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { SettingsStackParamList } from "@/navigation/SettingsStackNavigator";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
@@ -48,11 +51,14 @@ import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { AI_TECHNOLOGIES } from "@/lib/aiInfo";
 import { setHasSeenOnboarding } from "@/lib/storage";
 
+type SettingsNavProp = NativeStackNavigationProp<SettingsStackParamList, "Settings">;
+
 export default function SettingsScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const navigation = useNavigation<SettingsNavProp>();
 
   const [cameras, setCameras] = useState<CameraProfile[]>([]);
   const [currentCameraId, setCurrentCameraIdState] = useState<string | null>(null);
@@ -625,6 +631,18 @@ export default function SettingsScreen() {
           label="Version"
           value="1.0.0"
           showChevron={false}
+        />
+
+        <SettingsRow
+          icon="cpu"
+          label="Device Compatibility"
+          onPress={() => navigation.navigate("DeviceCompatibility")}
+        />
+
+        <SettingsRow
+          icon="shield"
+          label="Privacy & Licenses"
+          onPress={() => navigation.navigate("PrivacyLicenses")}
         />
 
         <SettingsRow

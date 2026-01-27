@@ -22,6 +22,15 @@ import {
   calculatePtzDirection,
   getPtzDirectionFromPanTilt,
 } from "@/lib/trackingService";
+import {
+  InlineAction,
+  getMovementResponse,
+  getDetectionResponse,
+  isHelpRequest,
+  getHelpResponse,
+  conversationMemory,
+  getRandomOpener,
+} from "@/lib/chatPersonality";
 
 let activeTrackingCancelled = false;
 let activeTrackingInProgress = false;
@@ -53,13 +62,27 @@ function storeLastCommand(command: CommandIntent): void {
   }
 }
 
-export type IntentType = "question" | "command" | "search" | "track" | "unknown";
+export type IntentType =
+  | "question"
+  | "command"
+  | "search"
+  | "track"
+  | "detect"
+  | "camera_setting"
+  | "unknown";
 
 export interface ParsedIntent {
   type: IntentType;
   confidence: number;
   raw: string;
-  details: QuestionIntent | CommandIntent | SearchIntent | TrackIntent | null;
+  details:
+    | QuestionIntent
+    | CommandIntent
+    | SearchIntent
+    | TrackIntent
+    | DetectIntent
+    | CameraSettingIntent
+    | null;
   needsAIClassification?: boolean;
 }
 
@@ -68,7 +91,17 @@ export interface QuestionIntent {
 }
 
 export interface CommandIntent {
-  action: "pan" | "tilt" | "zoom" | "move" | "stop" | "home" | "preset" | "save_preset" | "focus" | "autofocus";
+  action:
+    | "pan"
+    | "tilt"
+    | "zoom"
+    | "move"
+    | "stop"
+    | "home"
+    | "preset"
+    | "save_preset"
+    | "focus"
+    | "autofocus";
   direction?: "left" | "right" | "up" | "down" | "in" | "out" | "near" | "far";
   speed?: number;
   amount?: "little" | "some" | "lot";
@@ -86,6 +119,18 @@ export interface TrackIntent {
   zoomLevel: "medium" | "tight" | "close";
 }
 
+export interface DetectIntent {
+  detectType: "all_objects" | "people" | "faces" | "animals" | "specific";
+  specificObject?: string;
+  showBoxes: boolean;
+}
+
+export interface CameraSettingIntent {
+  setting: "brightness" | "warmth" | "exposure" | "reset";
+  direction: "up" | "down" | "auto";
+  amount: "little" | "some" | "lot";
+}
+
 export interface FollowUpOption {
   label: string;
   command: string;
@@ -94,16 +139,38 @@ export interface FollowUpOption {
 
 export interface AIResponse {
   message: string;
-  action?: "moved_camera" | "captured_image" | "found_object" | "tracking_started" | "none";
+  action?:
+    | "moved_camera"
+    | "captured_image"
+    | "found_object"
+    | "tracking_started"
+    | "show_detections"
+    | "adjusted_camera"
+    | "none";
   imageUri?: string;
   object?: DetectedObject;
   source?: "vision" | "moondream";
   followUpOptions?: FollowUpOption[];
+  inlineActions?: InlineAction[];
   isActiveProcess?: boolean;
   processType?: "tracking" | "centering";
+  detections?: Array<{
+    label: string;
+    box: { x: number; y: number; width: number; height: number };
+    confidence: number;
+  }>;
+  detectType?: "all_objects" | "people" | "faces" | "animals";
 }
 
-export type VisionQuestionType = "count_people" | "count_faces" | "count_animals" | "anyone_there" | "describe" | "activity" | "gestures" | null;
+export type VisionQuestionType =
+  | "count_people"
+  | "count_faces"
+  | "count_animals"
+  | "anyone_there"
+  | "describe"
+  | "activity"
+  | "gestures"
+  | null;
 
 const QUESTION_PATTERNS = [
   /^what('s| is| are)/i,
@@ -126,8 +193,14 @@ const SEARCH_PATTERNS = [
   /^look at\s+(the\s+)?(.+)/i,
 ];
 
-const TRACK_PATTERNS: Array<{ pattern: RegExp; zoomLevel: TrackIntent["zoomLevel"] }> = [
-  { pattern: /^zoom\s+(in\s+)?(on|into|to)\s+(the\s+)?(.+)/i, zoomLevel: "tight" },
+const TRACK_PATTERNS: Array<{
+  pattern: RegExp;
+  zoomLevel: TrackIntent["zoomLevel"];
+}> = [
+  {
+    pattern: /^zoom\s+(in\s+)?(on|into|to)\s+(the\s+)?(.+)/i,
+    zoomLevel: "tight",
+  },
   { pattern: /^focus\s+(on|in\s+on)\s+(the\s+)?(.+)/i, zoomLevel: "tight" },
   { pattern: /^(track|follow)\s+(the\s+)?(.+)/i, zoomLevel: "medium" },
   { pattern: /^center\s+(on\s+)?(the\s+)?(.+)/i, zoomLevel: "medium" },
@@ -136,21 +209,83 @@ const TRACK_PATTERNS: Array<{ pattern: RegExp; zoomLevel: TrackIntent["zoomLevel
   { pattern: /^close\s*up\s+(on\s+)?(the\s+)?(.+)/i, zoomLevel: "close" },
 ];
 
-const COMMAND_PATTERNS: Array<{ pattern: RegExp; action: CommandIntent["action"]; direction?: CommandIntent["direction"] }> = [
-  { pattern: /pan(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?left/i, action: "pan", direction: "left" },
-  { pattern: /pan(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?right/i, action: "pan", direction: "right" },
-  { pattern: /(go|move|turn|swing|rotate)(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?left/i, action: "pan", direction: "left" },
-  { pattern: /(go|move|turn|swing|rotate)(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?right/i, action: "pan", direction: "right" },
-  { pattern: /left(\s+a\s+(little|bit|lot))?$/i, action: "pan", direction: "left" },
-  { pattern: /right(\s+a\s+(little|bit|lot))?$/i, action: "pan", direction: "right" },
-  { pattern: /tilt(\s+(the\s+)?(camera|it|view))?\s*(up|upward)/i, action: "tilt", direction: "up" },
-  { pattern: /tilt(\s+(the\s+)?(camera|it|view))?\s*(down|downward)/i, action: "tilt", direction: "down" },
-  { pattern: /(go|move|look|point)(\s+(the\s+)?(camera|it|view))?\s*up/i, action: "tilt", direction: "up" },
-  { pattern: /(go|move|look|point)(\s+(the\s+)?(camera|it|view))?\s*down/i, action: "tilt", direction: "down" },
-  { pattern: /^up(\s+a\s+(little|bit|lot))?$/i, action: "tilt", direction: "up" },
-  { pattern: /^down(\s+a\s+(little|bit|lot))?$/i, action: "tilt", direction: "down" },
-  { pattern: /zoom(\s+(the\s+)?(camera|it|view))?\s*(in|closer)/i, action: "zoom", direction: "in" },
-  { pattern: /zoom(\s+(the\s+)?(camera|it|view))?\s*(out|back|wider)/i, action: "zoom", direction: "out" },
+const COMMAND_PATTERNS: Array<{
+  pattern: RegExp;
+  action: CommandIntent["action"];
+  direction?: CommandIntent["direction"];
+}> = [
+  {
+    pattern: /pan(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?left/i,
+    action: "pan",
+    direction: "left",
+  },
+  {
+    pattern: /pan(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?right/i,
+    action: "pan",
+    direction: "right",
+  },
+  {
+    pattern:
+      /(go|move|turn|swing|rotate)(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?left/i,
+    action: "pan",
+    direction: "left",
+  },
+  {
+    pattern:
+      /(go|move|turn|swing|rotate)(\s+(the\s+)?(camera|it|view))?\s*(to\s+(the\s+)?)?right/i,
+    action: "pan",
+    direction: "right",
+  },
+  {
+    pattern: /left(\s+a\s+(little|bit|lot))?$/i,
+    action: "pan",
+    direction: "left",
+  },
+  {
+    pattern: /right(\s+a\s+(little|bit|lot))?$/i,
+    action: "pan",
+    direction: "right",
+  },
+  {
+    pattern: /tilt(\s+(the\s+)?(camera|it|view))?\s*(up|upward)/i,
+    action: "tilt",
+    direction: "up",
+  },
+  {
+    pattern: /tilt(\s+(the\s+)?(camera|it|view))?\s*(down|downward)/i,
+    action: "tilt",
+    direction: "down",
+  },
+  {
+    pattern: /(go|move|look|point)(\s+(the\s+)?(camera|it|view))?\s*up/i,
+    action: "tilt",
+    direction: "up",
+  },
+  {
+    pattern: /(go|move|look|point)(\s+(the\s+)?(camera|it|view))?\s*down/i,
+    action: "tilt",
+    direction: "down",
+  },
+  {
+    pattern: /^up(\s+a\s+(little|bit|lot))?$/i,
+    action: "tilt",
+    direction: "up",
+  },
+  {
+    pattern: /^down(\s+a\s+(little|bit|lot))?$/i,
+    action: "tilt",
+    direction: "down",
+  },
+  {
+    pattern: /zoom(\s+(the\s+)?(camera|it|view))?\s*(in|closer)/i,
+    action: "zoom",
+    direction: "in",
+  },
+  {
+    pattern: /zoom(\s+(the\s+)?(camera|it|view))?\s*(out|back|wider)/i,
+    action: "zoom",
+    direction: "out",
+  },
   { pattern: /^zoom\s+out/i, action: "zoom", direction: "out" },
   { pattern: /^zoom\s+in/i, action: "zoom", direction: "in" },
   { pattern: /can\s+you\s+zoom\s*in/i, action: "zoom", direction: "in" },
@@ -160,25 +295,49 @@ const COMMAND_PATTERNS: Array<{ pattern: RegExp; action: CommandIntent["action"]
   { pattern: /zoom\s*in\s*,?\s*please/i, action: "zoom", direction: "in" },
   { pattern: /zoom\s*out\s*,?\s*please/i, action: "zoom", direction: "out" },
   { pattern: /(get\s+)?closer/i, action: "zoom", direction: "in" },
-  { pattern: /(pull|zoom)\s*(back|out|away)/i, action: "zoom", direction: "out" },
+  {
+    pattern: /(pull|zoom)\s*(back|out|away)/i,
+    action: "zoom",
+    direction: "out",
+  },
   { pattern: /wider(\s+view)?/i, action: "zoom", direction: "out" },
   { pattern: /stop(\s+(the\s+)?(camera|it|movement))?/i, action: "stop" },
   { pattern: /(go\s+)?home/i, action: "home" },
   { pattern: /(go\s+to\s+)?preset\s*(\d+)/i, action: "preset" },
   { pattern: /recall\s*(preset\s*)?(\d+)/i, action: "preset" },
-  { pattern: /save\s+(this\s+)?(as\s+)?preset\s*(\d+)/i, action: "save_preset" },
+  {
+    pattern: /save\s+(this\s+)?(as\s+)?preset\s*(\d+)/i,
+    action: "save_preset",
+  },
   { pattern: /save\s+(to\s+)?preset\s*(\d+)/i, action: "save_preset" },
-  { pattern: /store\s+(this\s+)?(as\s+)?preset\s*(\d+)/i, action: "save_preset" },
-  { pattern: /remember\s+this\s+(as\s+)?preset\s*(\d+)/i, action: "save_preset" },
+  {
+    pattern: /store\s+(this\s+)?(as\s+)?preset\s*(\d+)/i,
+    action: "save_preset",
+  },
+  {
+    pattern: /remember\s+this\s+(as\s+)?preset\s*(\d+)/i,
+    action: "save_preset",
+  },
   { pattern: /focus\s*(near|closer|in)/i, action: "focus", direction: "near" },
-  { pattern: /focus\s*(far|farther|out|away)/i, action: "focus", direction: "far" },
+  {
+    pattern: /focus\s*(far|farther|out|away)/i,
+    action: "focus",
+    direction: "far",
+  },
   { pattern: /(auto\s*)?focus(\s+on)?(\s+this)?$/i, action: "autofocus" },
   { pattern: /refocus/i, action: "autofocus" },
   { pattern: /(turn\s+)?(on|enable)\s*auto\s*focus/i, action: "autofocus" },
-  { pattern: /(turn\s+)?(off|disable)\s*auto\s*focus/i, action: "focus", direction: "near" },
+  {
+    pattern: /(turn\s+)?(off|disable)\s*auto\s*focus/i,
+    action: "focus",
+    direction: "near",
+  },
 ];
 
-const MEMORY_PATTERNS: Array<{ pattern: RegExp; type: "repeat" | "more" | "less" | "opposite" }> = [
+const MEMORY_PATTERNS: Array<{
+  pattern: RegExp;
+  type: "repeat" | "more" | "less" | "opposite";
+}> = [
   { pattern: /^(do\s+(that|it)\s+)?again$/i, type: "repeat" },
   { pattern: /^repeat(\s+(that|last|it))?$/i, type: "repeat" },
   { pattern: /^(a\s+)?(little\s+|bit\s+)?more$/i, type: "more" },
@@ -190,7 +349,10 @@ const MEMORY_PATTERNS: Array<{ pattern: RegExp; type: "repeat" | "more" | "less"
   { pattern: /^other\s+way$/i, type: "opposite" },
 ];
 
-const AMOUNT_PATTERNS: Array<{ pattern: RegExp; amount: CommandIntent["amount"] }> = [
+const AMOUNT_PATTERNS: Array<{
+  pattern: RegExp;
+  amount: CommandIntent["amount"];
+}> = [
   { pattern: /(a\s+)?(little|bit|slightly|tiny)/i, amount: "little" },
   { pattern: /(a\s+)?lot|much|far|way/i, amount: "lot" },
 ];
@@ -202,24 +364,123 @@ const SPEED_PATTERNS: Array<{ pattern: RegExp; speed: number }> = [
   { pattern: /very\s+fast/i, speed: 22 },
 ];
 
-const VISION_QUESTION_PATTERNS: Array<{ pattern: RegExp; type: VisionQuestionType }> = [
+const VISION_QUESTION_PATTERNS: Array<{
+  pattern: RegExp;
+  type: VisionQuestionType;
+}> = [
   { pattern: /how many (people|persons|humans)/i, type: "count_people" },
   { pattern: /how many faces/i, type: "count_faces" },
   { pattern: /how many (animals|pets|dogs|cats)/i, type: "count_animals" },
-  { pattern: /(is|are) (there )?(anyone|anybody|someone|people)/i, type: "anyone_there" },
+  {
+    pattern: /(is|are) (there )?(anyone|anybody|someone|people)/i,
+    type: "anyone_there",
+  },
   { pattern: /(is|are) there (a )?(person|human)/i, type: "anyone_there" },
   { pattern: /what('s| is) (going on|happening)/i, type: "activity" },
   { pattern: /(any|what) (activity|action|movement)/i, type: "activity" },
-  { pattern: /(anyone|is someone) (waving|pointing|jumping)/i, type: "gestures" },
+  {
+    pattern: /(anyone|is someone) (waving|pointing|jumping)/i,
+    type: "gestures",
+  },
   { pattern: /what gestures/i, type: "gestures" },
   { pattern: /^describe/i, type: "describe" },
   { pattern: /what do you see/i, type: "describe" },
 ];
 
-const VISION_TARGET_PATTERNS: Array<{ pattern: RegExp; target: "person" | "face" | "animal" }> = [
-  { pattern: /(on|at|to) (the |that )?(person|human|guy|man|woman)/i, target: "person" },
+const VISION_TARGET_PATTERNS: Array<{
+  pattern: RegExp;
+  target: "person" | "face" | "animal";
+}> = [
+  {
+    pattern: /(on|at|to) (the |that )?(person|human|guy|man|woman)/i,
+    target: "person",
+  },
   { pattern: /(on|at|to) (the |that )?(face|head)/i, target: "face" },
-  { pattern: /(on|at|to) (the |that )?(animal|dog|cat|pet)/i, target: "animal" },
+  {
+    pattern: /(on|at|to) (the |that )?(animal|dog|cat|pet)/i,
+    target: "animal",
+  },
+];
+
+const DETECT_PATTERNS: Array<{
+  pattern: RegExp;
+  detectType: DetectIntent["detectType"];
+}> = [
+  {
+    pattern:
+      /^(show|find|detect|spot|identify|highlight)\s+(me\s+)?(all\s+)?(the\s+)?objects/i,
+    detectType: "all_objects",
+  },
+  {
+    pattern: /^what\s+(objects|things)\s+(are|can you see)/i,
+    detectType: "all_objects",
+  },
+  {
+    pattern: /^(show|find|detect|count)\s+(me\s+)?(all\s+)?(the\s+)?people/i,
+    detectType: "people",
+  },
+  {
+    pattern: /^(show|find|detect|count)\s+(me\s+)?(all\s+)?(the\s+)?faces/i,
+    detectType: "faces",
+  },
+  {
+    pattern: /^(show|find|detect)\s+(me\s+)?(all\s+)?(the\s+)?(animals|pets)/i,
+    detectType: "animals",
+  },
+  { pattern: /^count\s+(everything|all|objects)/i, detectType: "all_objects" },
+  {
+    pattern: /^(show|put|draw)\s+(the\s+)?(boxes|rectangles|outlines)/i,
+    detectType: "all_objects",
+  },
+  { pattern: /^let('s|s)?\s+(play\s+)?i\s*spy/i, detectType: "all_objects" },
+  {
+    pattern: /^what('s| is)\s+(in\s+)?(the\s+)?(frame|view|scene|picture)/i,
+    detectType: "all_objects",
+  },
+  { pattern: /^scan\s+(the\s+)?(scene|room|area)/i, detectType: "all_objects" },
+];
+
+const CAMERA_SETTING_PATTERNS: Array<{
+  pattern: RegExp;
+  setting: CameraSettingIntent["setting"];
+  direction: CameraSettingIntent["direction"];
+}> = [
+  {
+    pattern: /(make\s+it|go)\s+(warmer|more\s+warm|orange)/i,
+    setting: "warmth",
+    direction: "up",
+  },
+  {
+    pattern: /(make\s+it|go)\s+(cooler|more\s+cool|blue)/i,
+    setting: "warmth",
+    direction: "down",
+  },
+  {
+    pattern: /(make\s+it|go)\s+(brighter|more\s+bright|lighter)/i,
+    setting: "brightness",
+    direction: "up",
+  },
+  {
+    pattern: /(make\s+it|go)\s+(darker|more\s+dark|dimmer)/i,
+    setting: "brightness",
+    direction: "down",
+  },
+  {
+    pattern: /(increase|boost|raise|more)\s+(the\s+)?(brightness|exposure)/i,
+    setting: "brightness",
+    direction: "up",
+  },
+  {
+    pattern: /(decrease|reduce|lower|less)\s+(the\s+)?(brightness|exposure)/i,
+    setting: "brightness",
+    direction: "down",
+  },
+  {
+    pattern:
+      /(reset|auto|automatic)\s+(the\s+)?(camera|settings|exposure|white\s*balance)/i,
+    setting: "reset",
+    direction: "auto",
+  },
 ];
 
 function getVisionQuestionType(question: string): VisionQuestionType {
@@ -240,13 +501,15 @@ function getVisionTarget(input: string): "person" | "face" | "animal" | null {
   return null;
 }
 
-function handleMemoryCommand(memoryType: "repeat" | "more" | "less" | "opposite"): ParsedIntent | null {
+function handleMemoryCommand(
+  memoryType: "repeat" | "more" | "less" | "opposite",
+): ParsedIntent | null {
   if (!lastExecutedCommand) {
     return null;
   }
-  
+
   const cmd = { ...lastExecutedCommand };
-  
+
   switch (memoryType) {
     case "repeat":
       return {
@@ -255,7 +518,7 @@ function handleMemoryCommand(memoryType: "repeat" | "more" | "less" | "opposite"
         raw: "repeat",
         details: cmd,
       };
-      
+
     case "more":
       if (cmd.amount === "little") cmd.amount = "some";
       else if (cmd.amount === "some") cmd.amount = "lot";
@@ -265,7 +528,7 @@ function handleMemoryCommand(memoryType: "repeat" | "more" | "less" | "opposite"
         raw: "more",
         details: cmd,
       };
-      
+
     case "less":
       cmd.amount = "little";
       return {
@@ -274,7 +537,7 @@ function handleMemoryCommand(memoryType: "repeat" | "more" | "less" | "opposite"
         raw: "less",
         details: cmd,
       };
-      
+
     case "opposite":
       if (cmd.direction === "left") cmd.direction = "right";
       else if (cmd.direction === "right") cmd.direction = "left";
@@ -292,14 +555,14 @@ function handleMemoryCommand(memoryType: "repeat" | "more" | "less" | "opposite"
         details: cmd,
       };
   }
-  
+
   return null;
 }
 
 export function parseIntent(input: string): ParsedIntent {
   const trimmed = input.trim();
   console.log(`[ParseIntent] Input: "${trimmed}"`);
-  
+
   for (const { pattern, type } of MEMORY_PATTERNS) {
     if (pattern.test(trimmed)) {
       const memoryResult = handleMemoryCommand(type);
@@ -314,42 +577,46 @@ export function parseIntent(input: string): ParsedIntent {
       };
     }
   }
-  
+
   for (const { pattern, action, direction } of COMMAND_PATTERNS) {
     if (pattern.test(trimmed)) {
-      console.log(`[ParseIntent] Matched COMMAND pattern: ${pattern} → action=${action}, direction=${direction}`);
+      console.log(
+        `[ParseIntent] Matched COMMAND pattern: ${pattern} → action=${action}, direction=${direction}`,
+      );
       let speed = 10;
       let amount: CommandIntent["amount"] = "some";
       let presetNumber: number | undefined;
-      
+
       for (const { pattern: sp, speed: s } of SPEED_PATTERNS) {
         if (sp.test(trimmed)) {
           speed = s;
           break;
         }
       }
-      
+
       for (const { pattern: ap, amount: a } of AMOUNT_PATTERNS) {
         if (ap.test(trimmed)) {
           amount = a;
           break;
         }
       }
-      
+
       if (action === "preset") {
-        const match = trimmed.match(/(?:preset\s*|recall\s*(?:preset\s*)?)(\d+)/i);
+        const match = trimmed.match(
+          /(?:preset\s*|recall\s*(?:preset\s*)?)(\d+)/i,
+        );
         if (match) {
           presetNumber = parseInt(match[1], 10);
         }
       }
-      
+
       if (action === "save_preset") {
         const match = trimmed.match(/preset\s*(\d+)/i);
         if (match) {
           presetNumber = parseInt(match[1], 10);
         }
       }
-      
+
       return {
         type: "command",
         confidence: 0.9,
@@ -358,12 +625,51 @@ export function parseIntent(input: string): ParsedIntent {
       };
     }
   }
-  
+
+  for (const { pattern, detectType } of DETECT_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      console.log(
+        `[ParseIntent] Matched DETECT pattern: ${pattern} → detectType=${detectType}`,
+      );
+      return {
+        type: "detect",
+        confidence: 0.9,
+        raw: trimmed,
+        details: { detectType, showBoxes: true } as DetectIntent,
+      };
+    }
+  }
+
+  for (const { pattern, setting, direction } of CAMERA_SETTING_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      console.log(
+        `[ParseIntent] Matched CAMERA_SETTING pattern: ${pattern} → setting=${setting}, direction=${direction}`,
+      );
+      let amount: CameraSettingIntent["amount"] = "some";
+      for (const { pattern: ap, amount: a } of AMOUNT_PATTERNS) {
+        if (ap.test(trimmed) && a) {
+          amount = a;
+          break;
+        }
+      }
+      return {
+        type: "camera_setting",
+        confidence: 0.9,
+        raw: trimmed,
+        details: { setting, direction, amount } as CameraSettingIntent,
+      };
+    }
+  }
+
   for (const { pattern, zoomLevel } of TRACK_PATTERNS) {
     const match = trimmed.match(pattern);
     if (match) {
       const objectName = match[match.length - 1]?.trim();
-      if (objectName && objectName.length > 1 && !["in", "on", "the", "that"].includes(objectName.toLowerCase())) {
+      if (
+        objectName &&
+        objectName.length > 1 &&
+        !["in", "on", "the", "that"].includes(objectName.toLowerCase())
+      ) {
         return {
           type: "track",
           confidence: 0.9,
@@ -388,7 +694,7 @@ export function parseIntent(input: string): ParsedIntent {
       }
     }
   }
-  
+
   for (const pattern of QUESTION_PATTERNS) {
     if (pattern.test(trimmed)) {
       return {
@@ -399,7 +705,7 @@ export function parseIntent(input: string): ParsedIntent {
       };
     }
   }
-  
+
   if (trimmed.length > 10 && !trimmed.includes(" ")) {
     return {
       type: "search",
@@ -408,11 +714,16 @@ export function parseIntent(input: string): ParsedIntent {
       details: { objectName: trimmed, fuzzy: true },
     };
   }
-  
-  const looksLikeCommand = /\b(pan|tilt|zoom|move|turn|go|look|point|swing|rotate|stop|home|preset|left|right|up|down|in|out|closer|wider|back)\b/i.test(trimmed);
-  
+
+  const looksLikeCommand =
+    /\b(pan|tilt|zoom|move|turn|go|look|point|swing|rotate|stop|home|preset|left|right|up|down|in|out|closer|wider|back)\b/i.test(
+      trimmed,
+    );
+
   if (looksLikeCommand) {
-    console.log(`[ParseIntent] No pattern match but looks like command, needs AI classification`);
+    console.log(
+      `[ParseIntent] No pattern match but looks like command, needs AI classification`,
+    );
     return {
       type: "unknown",
       confidence: 0.3,
@@ -421,7 +732,7 @@ export function parseIntent(input: string): ParsedIntent {
       needsAIClassification: true,
     };
   }
-  
+
   console.log(`[ParseIntent] Defaulting to QUESTION type`);
   return {
     type: "question",
@@ -464,11 +775,11 @@ interface AIClassificationResult {
 
 async function classifyIntentWithAI(
   input: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<ParsedIntent> {
   try {
     const prompt = INTENT_CLASSIFICATION_PROMPT.replace("{INPUT}", input);
-    
+
     const response = await fetch("https://api.moondream.ai/v1/query", {
       method: "POST",
       headers: {
@@ -476,7 +787,8 @@ async function classifyIntentWithAI(
         "X-Moondream-Auth": apiKey,
       },
       body: JSON.stringify({
-        image_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        image_url:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
         question: prompt,
         stream: false,
       }),
@@ -489,9 +801,9 @@ async function classifyIntentWithAI(
 
     const data = await response.json();
     const answer = data.answer || "";
-    
+
     console.log("[AIClassifier] Response:", answer);
-    
+
     return parseAIClassification(input, answer);
   } catch (err) {
     console.error("[AIClassifier] Failed:", err);
@@ -502,14 +814,14 @@ async function classifyIntentWithAI(
 function parseAIClassification(input: string, response: string): ParsedIntent {
   const typeMatch = response.match(/TYPE:\s*(COMMAND|QUESTION|SEARCH)/i);
   const actionMatch = response.match(/ACTION:\s*(.+)/i);
-  
+
   if (!typeMatch) {
     return createFallbackIntent(input);
   }
-  
+
   const classifiedType = typeMatch[1].toUpperCase();
   const actionDetails = actionMatch?.[1]?.trim().toLowerCase() || "";
-  
+
   if (classifiedType === "COMMAND") {
     const command = parseCommandFromAI(actionDetails);
     if (command) {
@@ -521,9 +833,11 @@ function parseAIClassification(input: string, response: string): ParsedIntent {
       };
     }
   }
-  
+
   if (classifiedType === "SEARCH") {
-    const target = actionDetails || input.replace(/^(find|show|locate|where('s| is)?)\s*/i, "").trim();
+    const target =
+      actionDetails ||
+      input.replace(/^(find|show|locate|where('s| is)?)\s*/i, "").trim();
     return {
       type: "search",
       confidence: 0.85,
@@ -531,7 +845,7 @@ function parseAIClassification(input: string, response: string): ParsedIntent {
       details: { objectName: target, fuzzy: true },
     };
   }
-  
+
   return {
     type: "question",
     confidence: 0.85,
@@ -546,7 +860,7 @@ function parseCommandFromAI(actionDetails: string): CommandIntent | null {
   let speed: number = 10;
   let amount: CommandIntent["amount"] = "some";
   let presetNumber: number | undefined;
-  
+
   if (/pan\s*(left|right)/i.test(actionDetails)) {
     action = "pan";
     direction = /left/i.test(actionDetails) ? "left" : "right";
@@ -581,9 +895,9 @@ function parseCommandFromAI(actionDetails: string): CommandIntent | null {
     const match = actionDetails.match(/(\d+)/);
     if (match) presetNumber = parseInt(match[1], 10);
   }
-  
+
   if (!action) return null;
-  
+
   if (/slow/i.test(actionDetails)) {
     speed = 4;
     amount = "little";
@@ -595,7 +909,7 @@ function parseCommandFromAI(actionDetails: string): CommandIntent | null {
   } else if (/lot|much|far/i.test(actionDetails)) {
     amount = "lot";
   }
-  
+
   return { action, direction, speed, amount, presetNumber };
 }
 
@@ -610,116 +924,163 @@ function createFallbackIntent(input: string): ParsedIntent {
 
 export async function executeCommand(
   camera: CameraProfile,
-  command: CommandIntent
+  command: CommandIntent,
 ): Promise<AIResponse> {
   const durationByAmount: Record<string, number> = {
     little: 300,
     some: 800,
     lot: 2000,
   };
-  
+
   const duration = durationByAmount[command.amount || "some"];
   const speed = command.speed || 10;
-  
-  const shouldStoreCommand = ["pan", "tilt", "zoom", "focus"].includes(command.action);
+
+  const shouldStoreCommand = ["pan", "tilt", "zoom", "focus"].includes(
+    command.action,
+  );
   if (shouldStoreCommand) {
     storeLastCommand(command);
   }
-  
+
   try {
     switch (command.action) {
       case "pan":
         if (command.direction === "left" || command.direction === "right") {
           await sendPtzViscaCommand(camera, command.direction, speed, speed);
-          await new Promise(r => setTimeout(r, duration));
+          await new Promise((r) => setTimeout(r, duration));
           await sendPtzViscaCommand(camera, "stop", 0, 0);
-          return { 
-            message: `Panned ${command.direction}`, 
+          conversationMemory.recordAction(`pan ${command.direction}`);
+          const panResponse = getMovementResponse(
+            "pan",
+            command.direction,
+            command.amount,
+          );
+          return {
+            message: panResponse.message,
             action: "moved_camera",
-            followUpOptions: [
-              { label: "A little more", command: `pan ${command.direction} a little`, amount: "little" },
-              { label: "A lot more", command: `pan ${command.direction} a lot`, amount: "lot" },
-            ],
+            inlineActions: panResponse.inlineActions,
           };
         }
         break;
-        
+
       case "tilt":
         if (command.direction === "up" || command.direction === "down") {
           await sendPtzViscaCommand(camera, command.direction, speed, speed);
-          await new Promise(r => setTimeout(r, duration));
+          await new Promise((r) => setTimeout(r, duration));
           await sendPtzViscaCommand(camera, "stop", 0, 0);
-          return { 
-            message: `Tilted ${command.direction}. Want more?`, 
+          conversationMemory.recordAction(`tilt ${command.direction}`);
+          const tiltResponse = getMovementResponse(
+            "tilt",
+            command.direction,
+            command.amount,
+          );
+          return {
+            message: tiltResponse.message,
             action: "moved_camera",
-            followUpOptions: [
-              { label: "A little more", command: `tilt ${command.direction} a little`, amount: "little" },
-              { label: "A lot more", command: `tilt ${command.direction} a lot`, amount: "lot" },
-            ],
+            inlineActions: tiltResponse.inlineActions,
           };
         }
         break;
-        
+
       case "zoom":
         if (command.direction === "in" || command.direction === "out") {
           await sendZoomViscaCommand(camera, command.direction, speed);
-          await new Promise(r => setTimeout(r, duration));
+          await new Promise((r) => setTimeout(r, duration));
           await sendZoomViscaCommand(camera, "stop");
-          return { 
-            message: `Zoomed ${command.direction}. Want more?`, 
+          conversationMemory.recordAction(`zoom ${command.direction}`);
+          const zoomResponse = getMovementResponse(
+            "zoom",
+            command.direction,
+            command.amount,
+          );
+          return {
+            message: zoomResponse.message,
             action: "moved_camera",
-            followUpOptions: [
-              { label: "A little more", command: `zoom ${command.direction} a little`, amount: "little" },
-              { label: "A lot more", command: `zoom ${command.direction} a lot`, amount: "lot" },
-            ],
+            inlineActions: zoomResponse.inlineActions,
           };
         }
         break;
-        
+
       case "stop":
         await sendPtzViscaCommand(camera, "stop", 0, 0);
         await sendZoomViscaCommand(camera, "stop");
-        return { message: "Stopped all movement", action: "moved_camera" };
-        
+        return {
+          message: `${getRandomOpener("helpful")} Stopped!`,
+          action: "moved_camera",
+          inlineActions: [
+            { text: "go home", command: "go home", color: "#FF9500" },
+          ],
+        };
+
       case "home":
         await sendHomeViscaCommand(camera);
-        return { message: "Moving to home position", action: "moved_camera" };
-        
+        conversationMemory.recordAction("home");
+        return {
+          message: `${getRandomOpener("helpful")} Heading home!`,
+          action: "moved_camera",
+          inlineActions: [
+            { text: "zoom in", command: "zoom in", color: "#34C759" },
+            {
+              text: "find objects",
+              command: "show me all objects",
+              color: "#FF2D55",
+            },
+          ],
+        };
+
       case "preset":
         if (command.presetNumber !== undefined) {
           await recallPresetFromCamera(camera, command.presetNumber);
-          return { message: `Recalled preset ${command.presetNumber}`, action: "moved_camera" };
+          return {
+            message: `Recalled preset ${command.presetNumber}`,
+            action: "moved_camera",
+          };
         }
         break;
-        
+
       case "save_preset":
         if (command.presetNumber !== undefined) {
           await savePresetToCamera(camera, command.presetNumber);
-          return { message: `Saved current position as preset ${command.presetNumber}`, action: "moved_camera" };
+          return {
+            message: `Saved current position as preset ${command.presetNumber}`,
+            action: "moved_camera",
+          };
         }
         break;
-        
+
       case "focus":
         if (command.direction === "near" || command.direction === "far") {
-          await sendFocusViscaCommand(camera, command.direction, speed > 10 ? 5 : 3);
-          await new Promise(r => setTimeout(r, duration));
+          await sendFocusViscaCommand(
+            camera,
+            command.direction,
+            speed > 10 ? 5 : 3,
+          );
+          await new Promise((r) => setTimeout(r, duration));
           await sendFocusViscaCommand(camera, "stop");
-          return { 
-            message: `Focused ${command.direction === "near" ? "closer" : "farther"}`, 
+          return {
+            message: `Focused ${command.direction === "near" ? "closer" : "farther"}`,
             action: "moved_camera",
             followUpOptions: [
-              { label: "A little more", command: `focus ${command.direction} a little`, amount: "little" },
-              { label: "A lot more", command: `focus ${command.direction} a lot`, amount: "lot" },
+              {
+                label: "A little more",
+                command: `focus ${command.direction} a little`,
+                amount: "little",
+              },
+              {
+                label: "A lot more",
+                command: `focus ${command.direction} a lot`,
+                amount: "lot",
+              },
             ],
           };
         }
         break;
-        
+
       case "autofocus":
         await triggerOnePushAutoFocus(camera);
         return { message: "Auto-focusing...", action: "moved_camera" };
     }
-    
+
     return { message: "Command not understood", action: "none" };
   } catch (err) {
     console.error("[CameraAI] Command execution failed:", err);
@@ -730,7 +1091,7 @@ export async function executeCommand(
 async function answerWithVision(
   imageBase64: string,
   questionType: VisionQuestionType,
-  frame: string
+  frame: string,
 ): Promise<AIResponse | null> {
   if (!VisionTracking.isVisionAvailable) return null;
 
@@ -741,58 +1102,133 @@ async function answerWithVision(
       case "count_people":
         const peopleCount = analysis.humanCount;
         if (peopleCount === 0) {
-          return { message: "I don't see anyone in the frame right now.", action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: "I don't see anyone in the frame right now.",
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        return { message: `I can see ${peopleCount} ${peopleCount === 1 ? "person" : "people"} in the frame.`, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: `I can see ${peopleCount} ${peopleCount === 1 ? "person" : "people"} in the frame.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "count_faces":
         const faceCount = analysis.faces.length;
         if (faceCount === 0) {
-          return { message: "I don't see any faces clearly visible right now.", action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: "I don't see any faces clearly visible right now.",
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        return { message: `I can see ${faceCount} ${faceCount === 1 ? "face" : "faces"} in the frame.`, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: `I can see ${faceCount} ${faceCount === 1 ? "face" : "faces"} in the frame.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "count_animals":
         const animalCount = analysis.animals.length;
         if (animalCount === 0) {
-          return { message: "I don't see any animals in the frame.", action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: "I don't see any animals in the frame.",
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        const animalTypes = [...new Set(analysis.animals.map(a => a.label))].join(", ");
-        return { message: `I can see ${animalCount} ${animalCount === 1 ? "animal" : "animals"}: ${animalTypes}.`, action: "captured_image", imageUri: frame, source: "vision" };
+        const animalTypes = [
+          ...new Set(analysis.animals.map((a) => a.label)),
+        ].join(", ");
+        return {
+          message: `I can see ${animalCount} ${animalCount === 1 ? "animal" : "animals"}: ${animalTypes}.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "anyone_there":
         if (analysis.humanCount === 0) {
-          return { message: "No, I don't see anyone in the frame right now.", action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: "No, I don't see anyone in the frame right now.",
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        return { message: `Yes! I can see ${analysis.humanCount} ${analysis.humanCount === 1 ? "person" : "people"} in the frame.`, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: `Yes! I can see ${analysis.humanCount} ${analysis.humanCount === 1 ? "person" : "people"} in the frame.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "activity":
         const activities: string[] = [];
-        if (analysis.jumpingCount > 0) activities.push(`${analysis.jumpingCount} jumping`);
-        if (analysis.runningCount > 0) activities.push(`${analysis.runningCount} running`);
-        if (analysis.armsRaisedCount > 0) activities.push(`${analysis.armsRaisedCount} with arms raised`);
-        if (analysis.pointingCount > 0) activities.push(`${analysis.pointingCount} pointing`);
-        
+        if (analysis.jumpingCount > 0)
+          activities.push(`${analysis.jumpingCount} jumping`);
+        if (analysis.runningCount > 0)
+          activities.push(`${analysis.runningCount} running`);
+        if (analysis.armsRaisedCount > 0)
+          activities.push(`${analysis.armsRaisedCount} with arms raised`);
+        if (analysis.pointingCount > 0)
+          activities.push(`${analysis.pointingCount} pointing`);
+
         if (activities.length === 0) {
-          return { message: `${analysis.activityLevel.charAt(0).toUpperCase() + analysis.activityLevel.slice(1)} activity level. ${analysis.humanCount > 0 ? `${analysis.humanCount} people visible but no specific actions detected.` : "No people visible."}`, action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: `${analysis.activityLevel.charAt(0).toUpperCase() + analysis.activityLevel.slice(1)} activity level. ${analysis.humanCount > 0 ? `${analysis.humanCount} people visible but no specific actions detected.` : "No people visible."}`,
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        return { message: `I can see: ${activities.join(", ")}. Activity level is ${analysis.activityLevel}.`, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: `I can see: ${activities.join(", ")}. Activity level is ${analysis.activityLevel}.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "gestures":
         const gestures: string[] = [];
-        if (analysis.pointingCount > 0) gestures.push(`${analysis.pointingCount} pointing`);
-        if (analysis.thumbsUpCount > 0) gestures.push(`${analysis.thumbsUpCount} thumbs up`);
-        if (analysis.peaceSignCount > 0) gestures.push(`${analysis.peaceSignCount} peace signs`);
-        if (analysis.wavingCount > 0) gestures.push(`${analysis.wavingCount} waving`);
-        
+        if (analysis.pointingCount > 0)
+          gestures.push(`${analysis.pointingCount} pointing`);
+        if (analysis.thumbsUpCount > 0)
+          gestures.push(`${analysis.thumbsUpCount} thumbs up`);
+        if (analysis.peaceSignCount > 0)
+          gestures.push(`${analysis.peaceSignCount} peace signs`);
+        if (analysis.wavingCount > 0)
+          gestures.push(`${analysis.wavingCount} waving`);
+
         if (gestures.length === 0) {
-          return { message: "I don't detect any specific hand gestures right now.", action: "captured_image", imageUri: frame, source: "vision" };
+          return {
+            message: "I don't detect any specific hand gestures right now.",
+            action: "captured_image",
+            imageUri: frame,
+            source: "vision",
+          };
         }
-        return { message: `I can see: ${gestures.join(", ")}.`, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: `I can see: ${gestures.join(", ")}.`,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       case "describe":
         const description = generateVisionDescription(imageBase64);
-        return { message: (await description).natural, action: "captured_image", imageUri: frame, source: "vision" };
+        return {
+          message: (await description).natural,
+          action: "captured_image",
+          imageUri: frame,
+          source: "vision",
+        };
 
       default:
         return null;
@@ -806,29 +1242,40 @@ async function answerWithVision(
 export async function answerQuestion(
   camera: CameraProfile,
   apiKey: string,
-  question: string
+  question: string,
 ): Promise<AIResponse> {
   try {
     const frame = await fetchCameraFrame(camera);
     if (!frame) {
-      return { message: "I couldn't capture an image from the camera right now.", action: "none" };
+      return {
+        message: "I couldn't capture an image from the camera right now.",
+        action: "none",
+      };
     }
-    
+
     let imageBase64 = frame;
     if (imageBase64.startsWith("data:")) {
       imageBase64 = imageBase64.split(",")[1];
     }
 
     const visionQuestionType = getVisionQuestionType(question);
-    
+
     if (visionQuestionType && VisionTracking.isVisionAvailable) {
-      const visionAnswer = await answerWithVision(imageBase64, visionQuestionType, frame);
+      const visionAnswer = await answerWithVision(
+        imageBase64,
+        visionQuestionType,
+        frame,
+      );
       if (visionAnswer) {
         if (!apiKey) {
           return visionAnswer;
         }
-        if (visionQuestionType === "count_people" || visionQuestionType === "count_faces" || 
-            visionQuestionType === "count_animals" || visionQuestionType === "anyone_there") {
+        if (
+          visionQuestionType === "count_people" ||
+          visionQuestionType === "count_faces" ||
+          visionQuestionType === "count_animals" ||
+          visionQuestionType === "anyone_there"
+        ) {
           return visionAnswer;
         }
       }
@@ -844,17 +1291,25 @@ export async function answerQuestion(
           source: "vision",
         };
       }
-      return { message: "I need a Moondream API key to answer detailed questions. You can add one in Settings.", action: "none" };
+      return {
+        message:
+          "I need a Moondream API key to answer detailed questions. You can add one in Settings.",
+        action: "none",
+      };
     }
-    
+
     const prompt = question.endsWith("?") ? question : `${question}?`;
-    
-    const analysis = VisionTracking.isVisionAvailable ? await analyzeScene(imageBase64) : null;
+
+    const analysis = VisionTracking.isVisionAvailable
+      ? await analyzeScene(imageBase64)
+      : null;
     const context = analysis ? buildMoondreamContext(analysis) : "";
-    const enhancedPrompt = context ? `${prompt}\n\nContext: ${context}` : prompt;
-    
+    const enhancedPrompt = context
+      ? `${prompt}\n\nContext: ${context}`
+      : prompt;
+
     const result = await describeScene(imageBase64, apiKey, enhancedPrompt);
-    
+
     if (result.error) {
       if (VisionTracking.isVisionAvailable) {
         const visionResult = await generateVisionDescription(imageBase64);
@@ -870,9 +1325,10 @@ export async function answerQuestion(
         action: "none",
       };
     }
-    
+
     return {
-      message: result.description || "I couldn't determine an answer from what I see.",
+      message:
+        result.description || "I couldn't determine an answer from what I see.",
       action: "captured_image",
       imageUri: frame,
       source: "moondream",
@@ -885,26 +1341,30 @@ export async function answerQuestion(
 
 export async function searchForObject(
   camera: CameraProfile,
-  objectName: string
+  objectName: string,
 ): Promise<AIResponse> {
   try {
     const scans = await getRoomScans();
-    
+
     if (scans.length === 0) {
       return {
         message: `I don't have any room scans yet. Run a Hunt & Find scan first, then I can help you find "${objectName}".`,
         action: "none",
       };
     }
-    
+
     const searchTerms = objectName.toLowerCase().split(/\s+/);
-    let bestMatch: { object: DetectedObject; scan: RoomScan; score: number } | null = null;
-    
+    let bestMatch: {
+      object: DetectedObject;
+      scan: RoomScan;
+      score: number;
+    } | null = null;
+
     for (const scan of scans) {
       for (const obj of scan.objects) {
         const objNameLower = obj.name.toLowerCase();
         let score = 0;
-        
+
         if (objNameLower === objectName.toLowerCase()) {
           score = 100;
         } else if (objNameLower.includes(objectName.toLowerCase())) {
@@ -919,25 +1379,27 @@ export async function searchForObject(
             }
           }
         }
-        
+
         if (score > 0 && (!bestMatch || score > bestMatch.score)) {
           bestMatch = { object: obj, scan, score };
         }
       }
     }
-    
+
     if (!bestMatch) {
-      const allObjects = scans.flatMap(s => s.objects.map(o => o.name)).slice(0, 10);
+      const allObjects = scans
+        .flatMap((s) => s.objects.map((o) => o.name))
+        .slice(0, 10);
       return {
         message: `I couldn't find "${objectName}" in my scans. I know about: ${allObjects.join(", ")}. Would you like me to look for something else?`,
         action: "none",
       };
     }
-    
+
     await recallPresetFromCamera(camera, bestMatch.object.presetSlot);
-    
+
     const locationDesc = bestMatch.object.relativeLocation.replace(/-/g, " ");
-    
+
     return {
       message: `Found "${bestMatch.object.name}"! It's in the ${locationDesc} area. Moving camera there now.`,
       action: "found_object",
@@ -945,7 +1407,10 @@ export async function searchForObject(
     };
   } catch (err) {
     console.error("[CameraAI] Object search failed:", err);
-    return { message: "I had trouble searching for that object.", action: "none" };
+    return {
+      message: "I had trouble searching for that object.",
+      action: "none",
+    };
   }
 }
 
@@ -953,24 +1418,24 @@ const TRACKING_CONFIG = {
   deadZone: 0.12,
   innerDeadZone: 0.04,
   maxIterations: 20,
-  centeredConfirmations: 1,      // Was 2 - trust first detection
-  moveDurationMs: 80,            // Was 120
-  settleDurationMs: 80,          // Was 250 - camera settles fast
-  zoomStepDurationMs: 150,       // Was 300 - zoom faster
-  zoomSettleMs: 50,              // Was 150 (hardcoded) - minimal settle
-  ptzSpeed: 14,                  // Was 6 - move faster
-  ptzMinSpeed: 6,                // Was 2 - even min is faster
-  ptzFineTuneSpeed: 3,           // Was 1 - fine tune faster too
+  centeredConfirmations: 1, // Was 2 - trust first detection
+  moveDurationMs: 80, // Was 120
+  settleDurationMs: 80, // Was 250 - camera settles fast
+  zoomStepDurationMs: 150, // Was 300 - zoom faster
+  zoomSettleMs: 50, // Was 150 (hardcoded) - minimal settle
+  ptzSpeed: 14, // Was 6 - move faster
+  ptzMinSpeed: 6, // Was 2 - even min is faster
+  ptzFineTuneSpeed: 3, // Was 1 - fine tune faster too
 };
 
 const ZOOM_TARGETS: Record<TrackIntent["zoomLevel"], number> = {
   medium: 0.35,
-  tight: 0.50,
-  close: 0.70,
+  tight: 0.5,
+  close: 0.7,
 };
 
 async function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function trackAndZoomToObject(
@@ -978,13 +1443,15 @@ export async function trackAndZoomToObject(
   apiKey: string,
   objectName: string,
   zoomLevel: TrackIntent["zoomLevel"],
-  getFrame?: () => Promise<string | null>
+  getFrame?: () => Promise<string | null>,
 ): Promise<AIResponse> {
-  console.log(`[TrackZoom] Starting track & zoom for "${objectName}" to ${zoomLevel}`);
-  
+  console.log(
+    `[TrackZoom] Starting track & zoom for "${objectName}" to ${zoomLevel}`,
+  );
+
   activeTrackingCancelled = false;
   activeTrackingInProgress = true;
-  
+
   try {
     const captureFrame = async (): Promise<string | null> => {
       if (activeTrackingCancelled) return null;
@@ -1000,7 +1467,10 @@ export async function trackAndZoomToObject(
       if (activeTrackingCancelled) {
         return { message: "Tracking cancelled.", action: "none" };
       }
-      return { message: "I couldn't capture an image from the camera.", action: "none" };
+      return {
+        message: "I couldn't capture an image from the camera.",
+        action: "none",
+      };
     }
 
     let imageBase64 = frame;
@@ -1012,8 +1482,8 @@ export async function trackAndZoomToObject(
     const detection = await detectObject(imageBase64, apiKey, objectName);
 
     if (!detection.found || !detection.box) {
-      return { 
-        message: `I couldn't find "${objectName}" in the current view. Try panning the camera or describing what you're looking for differently.`, 
+      return {
+        message: `I couldn't find "${objectName}" in the current view. Try panning the camera or describing what you're looking for differently.`,
         action: "none",
         imageUri: frame,
       };
@@ -1022,18 +1492,29 @@ export async function trackAndZoomToObject(
     const box = detection.box;
     const boxCenterX = (box.x_min + box.x_max) / 2;
     const boxCenterY = (box.y_min + box.y_max) / 2;
-    console.log(`[TrackZoom] Found "${objectName}" at box: x=${box.x_min.toFixed(3)}-${box.x_max.toFixed(3)} y=${box.y_min.toFixed(3)}-${box.y_max.toFixed(3)} center=(${(boxCenterX * 100).toFixed(1)}%, ${(boxCenterY * 100).toFixed(1)}%)`);
+    console.log(
+      `[TrackZoom] Found "${objectName}" at box: x=${box.x_min.toFixed(3)}-${box.x_max.toFixed(3)} y=${box.y_min.toFixed(3)}-${box.y_max.toFixed(3)} center=(${(boxCenterX * 100).toFixed(1)}%, ${(boxCenterY * 100).toFixed(1)}%)`,
+    );
 
     let trackingId: string | null = null;
-    console.log(`[TrackZoom] VisionTracking.isVisionAvailable = ${VisionTracking.isVisionAvailable}`);
-    
+    console.log(
+      `[TrackZoom] VisionTracking.isVisionAvailable = ${VisionTracking.isVisionAvailable}`,
+    );
+
     if (VisionTracking.isVisionAvailable) {
       const width = box.x_max - box.x_min;
       const height = box.y_max - box.y_min;
-      trackingId = VisionTracking.startTracking(box.x_min, box.y_min, width, height);
+      trackingId = VisionTracking.startTracking(
+        box.x_min,
+        box.y_min,
+        width,
+        height,
+      );
       console.log(`[TrackZoom] Started Vision tracking with ID: ${trackingId}`);
     } else {
-      console.log(`[TrackZoom] Vision not available, will use Moondream for centering`);
+      console.log(
+        `[TrackZoom] Vision not available, will use Moondream for centering`,
+      );
     }
 
     if (activeTrackingCancelled) {
@@ -1041,28 +1522,45 @@ export async function trackAndZoomToObject(
       return { message: "Tracking cancelled.", action: "none" };
     }
 
-    const centerResult = await centerOnObject(camera, apiKey, objectName, detection.box, captureFrame, trackingId);
-    
+    const centerResult = await centerOnObject(
+      camera,
+      apiKey,
+      objectName,
+      detection.box,
+      captureFrame,
+      trackingId,
+    );
+
     if (activeTrackingCancelled) {
       if (trackingId) VisionTracking.stopTracking(trackingId);
       activeTrackingInProgress = false;
       return { message: "Tracking cancelled.", action: "none" };
     }
-    
+
     if (!centerResult.success) {
       if (trackingId) VisionTracking.stopTracking(trackingId);
       activeTrackingInProgress = false;
-      return { 
-        message: `I found "${objectName}" but had trouble centering on it. The camera may have moved.`, 
+      return {
+        message: `I found "${objectName}" but had trouble centering on it. The camera may have moved.`,
         action: "moved_camera",
         imageUri: centerResult.frame || frame,
       };
     }
 
-    console.log(`[TrackZoom] Centered on "${objectName}", now zooming to ${zoomLevel}...`);
-    
+    console.log(
+      `[TrackZoom] Centered on "${objectName}", now zooming to ${zoomLevel}...`,
+    );
+
     const targetHeight = ZOOM_TARGETS[zoomLevel];
-    const zoomResult = await zoomToTarget(camera, apiKey, objectName, targetHeight, captureFrame, trackingId, centerResult.box);
+    const zoomResult = await zoomToTarget(
+      camera,
+      apiKey,
+      objectName,
+      targetHeight,
+      captureFrame,
+      trackingId,
+      centerResult.box,
+    );
 
     if (trackingId) VisionTracking.stopTracking(trackingId);
     activeTrackingInProgress = false;
@@ -1072,17 +1570,19 @@ export async function trackAndZoomToObject(
     }
 
     const finalFrame = await captureFrame();
-    
+
     return {
       message: `Zoomed in on "${objectName}". ${zoomResult.success ? `Got a nice ${zoomLevel} shot!` : "Reached maximum zoom."}`,
       action: "moved_camera",
       imageUri: finalFrame || frame,
     };
-
   } catch (err) {
     activeTrackingInProgress = false;
     console.error("[TrackZoom] Error:", err);
-    return { message: `I had trouble tracking "${objectName}".`, action: "none" };
+    return {
+      message: `I had trouble tracking "${objectName}".`,
+      action: "none",
+    };
   }
 }
 
@@ -1098,7 +1598,7 @@ async function centerOnObject(
   objectName: string,
   initialBox: { x_min: number; y_min: number; x_max: number; y_max: number },
   captureFrame: () => Promise<string | null>,
-  initialTrackingId: string | null
+  initialTrackingId: string | null,
 ): Promise<CenterResult> {
   let iterations = 0;
   let centeredCount = 0;
@@ -1106,7 +1606,9 @@ async function centerOnObject(
   let lastFrame: string | undefined;
   let trackingId = initialTrackingId;
 
-  console.log(`[CenterObject] Starting centering for "${objectName}" trackingId=${trackingId} visionAvailable=${VisionTracking.isVisionAvailable}`);
+  console.log(
+    `[CenterObject] Starting centering for "${objectName}" trackingId=${trackingId} visionAvailable=${VisionTracking.isVisionAvailable}`,
+  );
 
   while (iterations < TRACKING_CONFIG.maxIterations) {
     iterations++;
@@ -1125,11 +1627,19 @@ async function centerOnObject(
 
     let currentBox = lastBox;
     let trackingSource = "stale";
-    
+
     if (trackingId && VisionTracking.isVisionAvailable) {
-      const trackResult = await VisionTracking.updateTracking(trackingId, imageBase64);
-      console.log(`[CenterObject] Iter ${iterations}: Vision tracking result:`, trackResult ? `conf=${trackResult.confidence?.toFixed(2)} lost=${trackResult.isLost} x=${trackResult.x?.toFixed(3)} y=${trackResult.y?.toFixed(3)}` : "NULL");
-      
+      const trackResult = await VisionTracking.updateTracking(
+        trackingId,
+        imageBase64,
+      );
+      console.log(
+        `[CenterObject] Iter ${iterations}: Vision tracking result:`,
+        trackResult
+          ? `conf=${trackResult.confidence?.toFixed(2)} lost=${trackResult.isLost} x=${trackResult.x?.toFixed(3)} y=${trackResult.y?.toFixed(3)}`
+          : "NULL",
+      );
+
       if (trackResult && !trackResult.isLost && trackResult.confidence > 0.3) {
         currentBox = {
           x_min: trackResult.x,
@@ -1140,19 +1650,28 @@ async function centerOnObject(
         lastBox = currentBox;
         trackingSource = "vision";
       } else {
-        console.log(`[CenterObject] Vision tracking lost/low confidence, falling back to Moondream`);
+        console.log(
+          `[CenterObject] Vision tracking lost/low confidence, falling back to Moondream`,
+        );
         const detection = await detectObject(imageBase64, apiKey, objectName);
         if (detection.found && detection.box) {
           currentBox = detection.box;
           lastBox = currentBox;
           trackingSource = "moondream-fallback";
-          
+
           if (trackingId) {
             VisionTracking.stopTracking(trackingId);
             const width = currentBox.x_max - currentBox.x_min;
             const height = currentBox.y_max - currentBox.y_min;
-            trackingId = VisionTracking.startTracking(currentBox.x_min, currentBox.y_min, width, height);
-            console.log(`[CenterObject] Restarted Vision tracking with new box`);
+            trackingId = VisionTracking.startTracking(
+              currentBox.x_min,
+              currentBox.y_min,
+              width,
+              height,
+            );
+            console.log(
+              `[CenterObject] Restarted Vision tracking with new box`,
+            );
           }
         } else {
           console.log(`[CenterObject] Moondream fallback also failed`);
@@ -1163,8 +1682,13 @@ async function centerOnObject(
       }
     } else {
       const detection = await detectObject(imageBase64, apiKey, objectName);
-      console.log(`[CenterObject] Iter ${iterations}: Moondream detection:`, detection.found ? `found at x=${detection.box?.x_min?.toFixed(3)}-${detection.box?.x_max?.toFixed(3)}` : "NOT FOUND");
-      
+      console.log(
+        `[CenterObject] Iter ${iterations}: Moondream detection:`,
+        detection.found
+          ? `found at x=${detection.box?.x_min?.toFixed(3)}-${detection.box?.x_max?.toFixed(3)}`
+          : "NOT FOUND",
+      );
+
       if (detection.found && detection.box) {
         currentBox = detection.box;
         lastBox = currentBox;
@@ -1182,18 +1706,30 @@ async function centerOnObject(
     const offsetX = Math.abs(centerX - 0.5);
     const offsetY = Math.abs(centerY - 0.5);
     const maxOffset = Math.max(offsetX, offsetY);
-    
-    console.log(`[CenterObject] Iter ${iterations}: source=${trackingSource} center=(${(centerX * 100).toFixed(1)}%, ${(centerY * 100).toFixed(1)}%) offset=(${(offsetX * 100).toFixed(1)}%, ${(offsetY * 100).toFixed(1)}%)`);
-    
-    const direction = calculatePtzDirection(centerX, centerY, TRACKING_CONFIG.innerDeadZone);
-    console.log(`[CenterObject] Iter ${iterations}: direction pan=${direction.pan || 'null'} tilt=${direction.tilt || 'null'} innerDeadzone=${(TRACKING_CONFIG.innerDeadZone * 100).toFixed(0)}%`);
+
+    console.log(
+      `[CenterObject] Iter ${iterations}: source=${trackingSource} center=(${(centerX * 100).toFixed(1)}%, ${(centerY * 100).toFixed(1)}%) offset=(${(offsetX * 100).toFixed(1)}%, ${(offsetY * 100).toFixed(1)}%)`,
+    );
+
+    const direction = calculatePtzDirection(
+      centerX,
+      centerY,
+      TRACKING_CONFIG.innerDeadZone,
+    );
+    console.log(
+      `[CenterObject] Iter ${iterations}: direction pan=${direction.pan || "null"} tilt=${direction.tilt || "null"} innerDeadzone=${(TRACKING_CONFIG.innerDeadZone * 100).toFixed(0)}%`,
+    );
 
     if (direction.pan === null && direction.tilt === null) {
       centeredCount++;
-      console.log(`[CenterObject] In inner deadzone (${centeredCount}/${TRACKING_CONFIG.centeredConfirmations})`);
-      
+      console.log(
+        `[CenterObject] In inner deadzone (${centeredCount}/${TRACKING_CONFIG.centeredConfirmations})`,
+      );
+
       if (centeredCount >= TRACKING_CONFIG.centeredConfirmations) {
-        console.log(`[CenterObject] SUCCESS: Centered in ${iterations} iterations`);
+        console.log(
+          `[CenterObject] SUCCESS: Centered in ${iterations} iterations`,
+        );
         return { success: true, box: lastBox, frame: lastFrame };
       }
       await delay(30);
@@ -1201,34 +1737,66 @@ async function centerOnObject(
     }
 
     centeredCount = 0;
-    const ptzDirection = getPtzDirectionFromPanTilt(direction.pan, direction.tilt);
-    const isFineTuning = maxOffset <= TRACKING_CONFIG.deadZone && maxOffset > TRACKING_CONFIG.innerDeadZone;
-    console.log(`[CenterObject] Iter ${iterations}: PTZ direction=${ptzDirection || 'NONE'} fineTune=${isFineTuning}`);
+    const ptzDirection = getPtzDirectionFromPanTilt(
+      direction.pan,
+      direction.tilt,
+    );
+    const isFineTuning =
+      maxOffset <= TRACKING_CONFIG.deadZone &&
+      maxOffset > TRACKING_CONFIG.innerDeadZone;
+    console.log(
+      `[CenterObject] Iter ${iterations}: PTZ direction=${ptzDirection || "NONE"} fineTune=${isFineTuning}`,
+    );
 
     if (ptzDirection) {
       let scaledSpeed: number;
       let moveTime: number;
-      
+
       if (isFineTuning) {
         scaledSpeed = TRACKING_CONFIG.ptzFineTuneSpeed;
         moveTime = 40;
       } else {
-        const normalizedOffset = Math.min(1, (maxOffset - TRACKING_CONFIG.deadZone) / (0.4 - TRACKING_CONFIG.deadZone));
-        scaledSpeed = Math.round(
-          TRACKING_CONFIG.ptzMinSpeed + normalizedOffset * (TRACKING_CONFIG.ptzSpeed - TRACKING_CONFIG.ptzMinSpeed)
+        const normalizedOffset = Math.min(
+          1,
+          (maxOffset - TRACKING_CONFIG.deadZone) /
+            (0.4 - TRACKING_CONFIG.deadZone),
         );
-        moveTime = Math.max(40, Math.min(150, Math.round(40 + normalizedOffset * 110)));
+        scaledSpeed = Math.round(
+          TRACKING_CONFIG.ptzMinSpeed +
+            normalizedOffset *
+              (TRACKING_CONFIG.ptzSpeed - TRACKING_CONFIG.ptzMinSpeed),
+        );
+        moveTime = Math.max(
+          40,
+          Math.min(150, Math.round(40 + normalizedOffset * 110)),
+        );
       }
-      
-      console.log(`[CenterObject] Sending VISCA: ${ptzDirection} @ speed ${scaledSpeed} for ${moveTime}ms ${isFineTuning ? '(fine-tuning)' : ''}`);
-      const moveResult = await sendPtzViscaCommand(camera, ptzDirection, scaledSpeed, scaledSpeed);
-      console.log(`[CenterObject] PTZ move result: ${moveResult ? 'OK' : 'FAILED'}`);
-      
+
+      console.log(
+        `[CenterObject] Sending VISCA: ${ptzDirection} @ speed ${scaledSpeed} for ${moveTime}ms ${isFineTuning ? "(fine-tuning)" : ""}`,
+      );
+      const moveResult = await sendPtzViscaCommand(
+        camera,
+        ptzDirection,
+        scaledSpeed,
+        scaledSpeed,
+      );
+      console.log(
+        `[CenterObject] PTZ move result: ${moveResult ? "OK" : "FAILED"}`,
+      );
+
       await delay(moveTime);
-      
-      const stopResult = await sendPtzViscaCommand(camera, "stop", scaledSpeed, scaledSpeed);
-      console.log(`[CenterObject] PTZ stop result: ${stopResult ? 'OK' : 'FAILED'}`);
-      
+
+      const stopResult = await sendPtzViscaCommand(
+        camera,
+        "stop",
+        scaledSpeed,
+        scaledSpeed,
+      );
+      console.log(
+        `[CenterObject] PTZ stop result: ${stopResult ? "OK" : "FAILED"}`,
+      );
+
       await delay(TRACKING_CONFIG.settleDurationMs);
     } else {
       console.log(`[CenterObject] No PTZ direction generated`);
@@ -1251,7 +1819,7 @@ async function zoomToTarget(
   targetHeight: number,
   captureFrame: () => Promise<string | null>,
   trackingId: string | null,
-  initialBox?: { x_min: number; y_min: number; x_max: number; y_max: number }
+  initialBox?: { x_min: number; y_min: number; x_max: number; y_max: number },
 ): Promise<ZoomResult> {
   const maxZoomSteps = 10;
   let lastBox = initialBox;
@@ -1262,8 +1830,15 @@ async function zoomToTarget(
     await sendZoomViscaCommand(camera, "stop");
     await delay(TRACKING_CONFIG.zoomSettleMs);
 
-    const centerResult = await centerOnObject(camera, apiKey, objectName, lastBox!, captureFrame, trackingId);
-    
+    const centerResult = await centerOnObject(
+      camera,
+      apiKey,
+      objectName,
+      lastBox!,
+      captureFrame,
+      trackingId,
+    );
+
     if (!centerResult.success || !centerResult.box) {
       console.log(`[ZoomTarget] Lost object during zoom step ${step + 1}`);
       if (step === 0) return { success: false };
@@ -1272,7 +1847,9 @@ async function zoomToTarget(
 
     lastBox = centerResult.box;
     const currentHeight = lastBox.y_max - lastBox.y_min;
-    console.log(`[ZoomTarget] Step ${step + 1}: box height ${(currentHeight * 100).toFixed(1)}% (target: ${(targetHeight * 100).toFixed(0)}%)`);
+    console.log(
+      `[ZoomTarget] Step ${step + 1}: box height ${(currentHeight * 100).toFixed(1)}% (target: ${(targetHeight * 100).toFixed(0)}%)`,
+    );
 
     if (currentHeight >= targetHeight) {
       console.log(`[ZoomTarget] Target reached at step ${step + 1}`);
@@ -1283,28 +1860,307 @@ async function zoomToTarget(
   return { success: false, box: lastBox };
 }
 
+async function handleDetectIntent(
+  detectIntent: DetectIntent,
+  apiKey: string,
+  getFrame: () => Promise<string | null>,
+): Promise<AIResponse> {
+  const frame = await getFrame();
+  if (!frame) {
+    return {
+      message: "I couldn't capture an image right now.",
+      action: "none",
+    };
+  }
+
+  let imageBase64 = frame;
+  if (imageBase64.startsWith("data:")) {
+    imageBase64 = imageBase64.split(",")[1];
+  }
+
+  const { detectType } = detectIntent;
+
+  try {
+    if (detectType === "people" || detectType === "faces") {
+      if (VisionTracking.isVisionAvailable) {
+        const detections =
+          detectType === "people"
+            ? await VisionTracking.detectHumans(imageBase64)
+            : await VisionTracking.detectFaces(imageBase64);
+
+        const count = detections.length;
+        const formattedDetections = detections.map((d, i) => ({
+          label: detectType === "people" ? `Person ${i + 1}` : `Face ${i + 1}`,
+          box: { x: d.x, y: d.y, width: d.width, height: d.height },
+          confidence: d.confidence,
+        }));
+
+        conversationMemory.recordPeopleCount(count);
+        const response = getDetectionResponse(
+          detectType,
+          count,
+          undefined,
+          false,
+        );
+
+        return {
+          message: response.message,
+          action: "show_detections",
+          imageUri: frame,
+          source: "vision",
+          detections: formattedDetections,
+          detectType,
+          inlineActions: response.inlineActions,
+        };
+      }
+    }
+
+    if (detectType === "animals" && VisionTracking.isVisionAvailable) {
+      const detections = await VisionTracking.detectAnimals(imageBase64);
+      const count = detections.length;
+      const formattedDetections = detections.map((d, i) => ({
+        label: d.label || `Animal ${i + 1}`,
+        box: { x: d.x, y: d.y, width: d.width, height: d.height },
+        confidence: d.confidence,
+      }));
+
+      const message =
+        count === 0
+          ? "I don't see any animals right now."
+          : `Found ${count} ${count === 1 ? "animal" : "animals"}! ${detections
+              .map((d) => d.label)
+              .filter(Boolean)
+              .join(", ")}`;
+
+      return {
+        message,
+        action: "show_detections",
+        imageUri: frame,
+        source: "vision",
+        detections: formattedDetections,
+        detectType: "animals",
+      };
+    }
+
+    if (detectType === "all_objects") {
+      if (VisionTracking.isVisionAvailable) {
+        try {
+          const detections =
+            await VisionTracking.detectObjectsYOLO(imageBase64);
+          if (detections.length > 0) {
+            const formattedDetections = detections.map((d) => ({
+              label: d.label,
+              box: { x: d.x, y: d.y, width: d.width, height: d.height },
+              confidence: d.confidence,
+            }));
+
+            const labels = detections.map((d) => d.label);
+            conversationMemory.recordDetections(labels);
+            const response = getDetectionResponse(
+              "objects",
+              detections.length,
+              labels,
+              false,
+            );
+
+            return {
+              message: response.message,
+              action: "show_detections",
+              imageUri: frame,
+              source: "vision",
+              detections: formattedDetections,
+              detectType: "all_objects",
+              inlineActions: response.inlineActions,
+            };
+          }
+        } catch (e) {
+          console.log("[CameraAI] YOLO not available, trying Moondream");
+        }
+      }
+
+      if (apiKey) {
+        const { detectInterestingObjects } = await import("@/lib/moondream");
+        const objects = await detectInterestingObjects(imageBase64, apiKey, 10);
+
+        if (objects.length > 0) {
+          const formattedDetections = objects.map((obj) => ({
+            label: obj.name,
+            box: {
+              x: obj.box.x_min,
+              y: obj.box.y_min,
+              width: obj.box.x_max - obj.box.x_min,
+              height: obj.box.y_max - obj.box.y_min,
+            },
+            confidence: 0.8,
+          }));
+
+          const labels = objects.map((o) => o.name);
+          conversationMemory.recordDetections(labels);
+          const response = getDetectionResponse(
+            "objects",
+            objects.length,
+            labels,
+            false,
+          );
+
+          return {
+            message: response.message,
+            action: "show_detections",
+            imageUri: frame,
+            source: "moondream",
+            detections: formattedDetections,
+            detectType: "all_objects",
+            inlineActions: response.inlineActions,
+          };
+        }
+      }
+
+      const emptyResponse = getDetectionResponse(
+        "objects",
+        0,
+        undefined,
+        false,
+      );
+      return {
+        message: emptyResponse.message + " Try moving the camera!",
+        action: "none",
+        inlineActions: emptyResponse.inlineActions,
+      };
+    }
+
+    return { message: "Detection type not supported yet.", action: "none" };
+  } catch (err) {
+    console.error("[CameraAI] Detection error:", err);
+    return {
+      message: "I had trouble detecting objects. Please try again.",
+      action: "none",
+    };
+  }
+}
+
+function handleCameraSettingIntent(
+  settingIntent: CameraSettingIntent,
+  isPtz: boolean = false,
+): AIResponse {
+  const { setting, direction, amount } = settingIntent;
+
+  const amountWord =
+    amount === "little" ? "slightly" : amount === "lot" ? "significantly" : "";
+
+  if (!isPtz) {
+    const settingName =
+      setting === "warmth"
+        ? direction === "up"
+          ? "warmer"
+          : "cooler"
+        : direction === "up"
+          ? "brighter"
+          : "darker";
+
+    return {
+      message: `Camera adjustments like "${settingName}" work best with a PTZ camera. Your device camera uses automatic settings. Try "find objects" or "count people" instead!`,
+      action: "none",
+      inlineActions: [
+        {
+          text: "find objects",
+          command: "show me all objects",
+          color: "#FF2D55",
+        },
+        { text: "count people", command: "count people", color: "#FF2D55" },
+      ],
+    };
+  }
+
+  if (setting === "reset") {
+    return {
+      message: `${getRandomOpener("helpful")} Resetting camera to automatic settings.`,
+      action: "adjusted_camera",
+    };
+  }
+
+  if (setting === "warmth") {
+    const action = direction === "up" ? "warmer" : "cooler";
+    return {
+      message: `${getRandomOpener("helpful")} Making the image ${amountWord} ${action}!`,
+      action: "adjusted_camera",
+      inlineActions: [
+        {
+          text: action === "warmer" ? "warmer" : "cooler",
+          command: `make it ${action}`,
+          color: action === "warmer" ? "#FF9500" : "#5AC8FA",
+          actionType: "repeatable",
+          repeatDelay: 100,
+        },
+        {
+          text: action === "warmer" ? "cooler" : "warmer",
+          command: `make it ${action === "warmer" ? "cooler" : "warmer"}`,
+          color: action === "warmer" ? "#5AC8FA" : "#FF9500",
+          actionType: "repeatable",
+          repeatDelay: 100,
+        },
+      ],
+    };
+  }
+
+  if (setting === "brightness") {
+    const action = direction === "up" ? "brighter" : "darker";
+    return {
+      message: `${getRandomOpener("helpful")} Making the image ${amountWord} ${action}!`,
+      action: "adjusted_camera",
+      inlineActions: [
+        {
+          text: action,
+          command: `make it ${action}`,
+          color: action === "brighter" ? "#FFCC00" : "#8E8E93",
+          actionType: "repeatable",
+          repeatDelay: 100,
+        },
+        {
+          text: action === "brighter" ? "darker" : "brighter",
+          command: `make it ${action === "brighter" ? "darker" : "brighter"}`,
+          color: action === "brighter" ? "#8E8E93" : "#FFCC00",
+          actionType: "repeatable",
+          repeatDelay: 100,
+        },
+      ],
+    };
+  }
+
+  return { message: "Camera setting adjusted.", action: "adjusted_camera" };
+}
+
 export async function processUserInput(
   input: string,
   camera: CameraProfile | null,
-  apiKey: string
+  apiKey: string,
 ): Promise<AIResponse> {
   if (!camera) {
-    return { message: "No camera is connected. Please connect a camera first.", action: "none" };
+    return {
+      message: "No camera is connected. Please connect a camera first.",
+      action: "none",
+    };
   }
-  
+
   const intent = parseIntent(input);
   console.log("[CameraAI] Parsed intent:", intent.type, intent.details);
-  
+
   switch (intent.type) {
     case "command":
       return executeCommand(camera, intent.details as CommandIntent);
-      
+
     case "question":
-      return answerQuestion(camera, apiKey, (intent.details as QuestionIntent).question);
-      
+      return answerQuestion(
+        camera,
+        apiKey,
+        (intent.details as QuestionIntent).question,
+      );
+
     case "search":
-      return searchForObject(camera, (intent.details as SearchIntent).objectName);
-      
+      return searchForObject(
+        camera,
+        (intent.details as SearchIntent).objectName,
+      );
+
     default:
       return answerQuestion(camera, apiKey, input);
   }
@@ -1313,29 +2169,40 @@ export async function processUserInput(
 export async function answerQuestionWithFrame(
   apiKey: string,
   question: string,
-  getFrame: () => Promise<string | null>
+  getFrame: () => Promise<string | null>,
 ): Promise<AIResponse> {
   try {
     const frame = await getFrame();
     if (!frame) {
-      return { message: "I couldn't capture an image right now.", action: "none" };
+      return {
+        message: "I couldn't capture an image right now.",
+        action: "none",
+      };
     }
-    
+
     let imageBase64 = frame;
     if (imageBase64.startsWith("data:")) {
       imageBase64 = imageBase64.split(",")[1];
     }
 
     const visionQuestionType = getVisionQuestionType(question);
-    
+
     if (visionQuestionType && VisionTracking.isVisionAvailable) {
-      const visionAnswer = await answerWithVision(imageBase64, visionQuestionType, frame);
+      const visionAnswer = await answerWithVision(
+        imageBase64,
+        visionQuestionType,
+        frame,
+      );
       if (visionAnswer) {
         if (!apiKey) {
           return visionAnswer;
         }
-        if (visionQuestionType === "count_people" || visionQuestionType === "count_faces" || 
-            visionQuestionType === "count_animals" || visionQuestionType === "anyone_there") {
+        if (
+          visionQuestionType === "count_people" ||
+          visionQuestionType === "count_faces" ||
+          visionQuestionType === "count_animals" ||
+          visionQuestionType === "anyone_there"
+        ) {
           return visionAnswer;
         }
       }
@@ -1351,17 +2218,25 @@ export async function answerQuestionWithFrame(
           source: "vision",
         };
       }
-      return { message: "I need a Moondream API key to answer detailed questions. You can add one in Settings.", action: "none" };
+      return {
+        message:
+          "I need a Moondream API key to answer detailed questions. You can add one in Settings.",
+        action: "none",
+      };
     }
-    
+
     const prompt = question.endsWith("?") ? question : `${question}?`;
-    
-    const analysis = VisionTracking.isVisionAvailable ? await analyzeScene(imageBase64) : null;
+
+    const analysis = VisionTracking.isVisionAvailable
+      ? await analyzeScene(imageBase64)
+      : null;
     const context = analysis ? buildMoondreamContext(analysis) : "";
-    const enhancedPrompt = context ? `${prompt}\n\nContext: ${context}` : prompt;
-    
+    const enhancedPrompt = context
+      ? `${prompt}\n\nContext: ${context}`
+      : prompt;
+
     const result = await describeScene(imageBase64, apiKey, enhancedPrompt);
-    
+
     if (result.error) {
       if (VisionTracking.isVisionAvailable) {
         const visionResult = await generateVisionDescription(imageBase64);
@@ -1377,9 +2252,10 @@ export async function answerQuestionWithFrame(
         action: "none",
       };
     }
-    
+
     return {
-      message: result.description || "I couldn't determine an answer from what I see.",
+      message:
+        result.description || "I couldn't determine an answer from what I see.",
       action: "captured_image",
       imageUri: frame,
       source: "moondream",
@@ -1394,80 +2270,253 @@ export async function processUserInputWithFrame(
   input: string,
   camera: CameraProfile | null,
   apiKey: string,
-  getFrame?: () => Promise<string | null>
+  getFrame?: () => Promise<string | null>,
 ): Promise<AIResponse> {
+  const isPtz = camera !== null;
+  const hasApiKey = Boolean(apiKey);
+
+  if (isHelpRequest(input)) {
+    const helpResponse = getHelpResponse(isPtz, hasApiKey);
+    return {
+      message: helpResponse.message,
+      action: "none",
+      inlineActions: helpResponse.inlineActions,
+    };
+  }
+
   let intent = parseIntent(input);
-  console.log("[CameraAI] Parsed intent:", intent.type, intent.details, "confidence:", intent.confidence);
-  
+  console.log(
+    "[CameraAI] Parsed intent:",
+    intent.type,
+    intent.details,
+    "confidence:",
+    intent.confidence,
+  );
+
   if (intent.needsAIClassification && apiKey) {
     console.log("[CameraAI] Low confidence, using AI classification...");
     intent = await classifyIntentWithAI(input, apiKey);
     console.log("[CameraAI] AI classified as:", intent.type, intent.details);
   }
-  
+
   switch (intent.type) {
     case "command":
       if (!camera) {
-        return { message: "I can't move the camera - no PTZ camera is connected. Connect to a PTZ camera first.", action: "none" };
+        return {
+          message:
+            "I can't move the camera - no PTZ camera is connected. Connect to a PTZ camera first.",
+          action: "none",
+        };
       }
       return executeCommand(camera, intent.details as CommandIntent);
-      
+
     case "question":
       if (getFrame) {
-        return answerQuestionWithFrame(apiKey, (intent.details as QuestionIntent).question, getFrame);
+        return answerQuestionWithFrame(
+          apiKey,
+          (intent.details as QuestionIntent).question,
+          getFrame,
+        );
       }
       if (!camera) {
-        return { message: "I can't see anything - no camera source available.", action: "none" };
+        return {
+          message: "I can't see anything - no camera source available.",
+          action: "none",
+        };
       }
-      return answerQuestion(camera, apiKey, (intent.details as QuestionIntent).question);
-      
+      return answerQuestion(
+        camera,
+        apiKey,
+        (intent.details as QuestionIntent).question,
+      );
+
     case "search":
       if (!camera) {
-        return { message: "I can't search without a PTZ camera connected.", action: "none" };
+        return {
+          message: "I can't search without a PTZ camera connected.",
+          action: "none",
+        };
       }
-      return searchForObject(camera, (intent.details as SearchIntent).objectName);
-      
+      return searchForObject(
+        camera,
+        (intent.details as SearchIntent).objectName,
+      );
+
     case "track":
       if (!camera) {
-        return { message: "I can't track objects without a PTZ camera connected.", action: "none" };
+        return {
+          message: "I can't track objects without a PTZ camera connected.",
+          action: "none",
+        };
       }
       if (!apiKey) {
-        return { message: "I need a Moondream API key to detect and track objects. Add one in Settings.", action: "none" };
+        return {
+          message:
+            "I need a Moondream API key to detect and track objects. Add one in Settings.",
+          action: "none",
+        };
       }
       const trackIntent = intent.details as TrackIntent;
-      return trackAndZoomToObject(camera, apiKey, trackIntent.objectName, trackIntent.zoomLevel, getFrame);
-      
+      return trackAndZoomToObject(
+        camera,
+        apiKey,
+        trackIntent.objectName,
+        trackIntent.zoomLevel,
+        getFrame,
+      );
+
+    case "detect":
+      if (!getFrame) {
+        return {
+          message: "I can't detect objects without a camera view.",
+          action: "none",
+        };
+      }
+      return handleDetectIntent(
+        intent.details as DetectIntent,
+        apiKey,
+        getFrame,
+      );
+
+    case "camera_setting":
+      return handleCameraSettingIntent(
+        intent.details as CameraSettingIntent,
+        isPtz,
+      );
+
     case "unknown":
       if (apiKey && camera) {
-        return { message: "I'm not sure what you want me to do. Try saying something like 'pan left', 'zoom in', or 'what do you see?'", action: "none" };
+        return {
+          message:
+            "I'm not sure what you want me to do. Try saying something like 'pan left', 'zoom in', or 'what do you see?'",
+          action: "none",
+        };
       }
       if (getFrame) {
         return answerQuestionWithFrame(apiKey, input, getFrame);
       }
-      return { message: "I'm not sure what you want me to do. Try a specific command like 'pan left' or a question like 'what do you see?'", action: "none" };
-      
+      return {
+        message:
+          "I'm not sure what you want me to do. Try a specific command like 'pan left' or a question like 'what do you see?'",
+        action: "none",
+      };
+
     default:
       if (getFrame) {
         return answerQuestionWithFrame(apiKey, input, getFrame);
       }
       if (!camera) {
-        return { message: "I can't see anything - no camera source available.", action: "none" };
+        return {
+          message: "I can't see anything - no camera source available.",
+          action: "none",
+        };
       }
       return answerQuestion(camera, apiKey, input);
   }
 }
 
-export function getSuggestedPrompts(): string[] {
-  return [
-    "What do you see?",
-    "Is anyone in the room?",
-    "Zoom into the guitar",
-    "Focus on that person",
-    "Pan left slowly",
-    "Find my phone",
-    "Where is the door?",
-    "How many chairs are there?",
-    "Describe the room",
-    "Track the plant",
-  ];
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+const PTZ_SUGGESTIONS = [
+  "What do you see?",
+  "Is anyone in the room?",
+  "Pan left slowly",
+  "Pan right a bit",
+  "Zoom in a little",
+  "Zoom out and show me more",
+  "Find my phone",
+  "Go to preset 1",
+  "Track that person",
+  "Describe the scene",
+  "Any movement?",
+  "Scan the room",
+  "Look around",
+  "What's on the left?",
+  "What's on the right?",
+  "Go home",
+  "Find something interesting",
+  "Count everyone",
+  "Who's there?",
+];
+
+const NATIVE_SUGGESTIONS = [
+  "What do you see?",
+  "Show me all objects!",
+  "Count the people",
+  "Find all the faces",
+  "What's interesting here?",
+  "Let's play I spy",
+  "Describe everything",
+  "Any animals?",
+  "What colors do you see?",
+  "Is there text anywhere?",
+  "What's the biggest object?",
+  "Find something unusual",
+  "How many things are here?",
+  "What's in the background?",
+  "Describe this scene",
+  "Any faces visible?",
+  "What stands out?",
+];
+
+export function getSuggestedPrompts(isPtz: boolean = false): string[] {
+  const pool = isPtz ? PTZ_SUGGESTIONS : NATIVE_SUGGESTIONS;
+  return shuffleArray(pool).slice(0, 8);
+}
+
+const NATIVE_QUICK_ACTIONS = [
+  { label: "What's here?", icon: "eye", command: "What do you see?" },
+  { label: "Find objects", icon: "box", command: "Show me all objects" },
+  { label: "Count people", icon: "users", command: "Count all the people" },
+  { label: "Find faces", icon: "smile", command: "Show me all faces" },
+  { label: "I Spy!", icon: "target", command: "Let's play I spy" },
+  { label: "Describe", icon: "file-text", command: "Describe the scene" },
+  { label: "Any text?", icon: "type", command: "Is there any text visible?" },
+  { label: "Colors", icon: "droplet", command: "What colors do you see?" },
+  { label: "Background", icon: "layers", command: "What's in the background?" },
+  { label: "Animals?", icon: "github", command: "Are there any animals?" },
+];
+
+const PTZ_QUICK_ACTIONS = [
+  { label: "What's here?", icon: "eye", command: "What do you see?" },
+  { label: "Pan left", icon: "arrow-left", command: "Pan left" },
+  { label: "Pan right", icon: "arrow-right", command: "Pan right" },
+  { label: "Zoom in", icon: "zoom-in", command: "Zoom in" },
+  { label: "Zoom out", icon: "zoom-out", command: "Zoom out" },
+  { label: "Go home", icon: "home", command: "Go home" },
+  { label: "Find objects", icon: "box", command: "Show me all objects" },
+  { label: "Scan room", icon: "rotate-cw", command: "Scan the room" },
+  { label: "Track", icon: "crosshair", command: "Track that person" },
+  { label: "Anyone there?", icon: "users", command: "Is anyone there?" },
+  { label: "Look left", icon: "chevron-left", command: "What's on the left?" },
+  {
+    label: "Look right",
+    icon: "chevron-right",
+    command: "What's on the right?",
+  },
+];
+
+export function getNativeCameraQuickActions(): Array<{
+  label: string;
+  icon: string;
+  command: string;
+}> {
+  const shuffled = shuffleArray(NATIVE_QUICK_ACTIONS);
+  return shuffled.slice(0, 8);
+}
+
+export function getPtzQuickActions(): Array<{
+  label: string;
+  icon: string;
+  command: string;
+}> {
+  const shuffled = shuffleArray(PTZ_QUICK_ACTIONS);
+  return shuffled.slice(0, 8);
 }

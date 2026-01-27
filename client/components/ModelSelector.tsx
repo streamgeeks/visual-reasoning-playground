@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, Linking, TextInput } from "react-native";
+import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator, Image, Linking, TextInput, Modal, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
@@ -90,6 +90,7 @@ export function ModelSelector({
   const [savedObjects, setSavedObjects] = useState<SavedCustomObject[]>([]);
   const [showSavedObjects, setShowSavedObjects] = useState(false);
   const [yoloStatus, setYoloStatus] = useState<NativeDetectionStatus | null>(null);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameCountRef = useRef(0);
@@ -329,6 +330,270 @@ export function ModelSelector({
 
   return (
     <View style={styles.outerContainer}>
+      {/* Tracking Model Section */}
+      <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>Tracking Model</Text>
+          <Pressable
+            onPress={onShowInfo}
+            hitSlop={8}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Feather name="info" size={20} color={theme.primary} />
+          </Pressable>
+        </View>
+
+        <View style={styles.controls}>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setShowModelPicker(true);
+            }}
+            disabled={isTracking}
+            style={({ pressed }) => [
+              styles.modelPickerButton,
+              { 
+                backgroundColor: theme.backgroundSecondary,
+                opacity: isTracking ? 0.6 : (pressed ? 0.8 : 1),
+              },
+            ]}
+          >
+            <View style={[styles.modelPickerIcon, { backgroundColor: theme.primary + "20" }]}>
+              <Feather name={modelInfo.icon as any} size={20} color={theme.primary} />
+            </View>
+            <View style={styles.modelPickerInfo}>
+              <Text style={[styles.modelPickerName, { color: theme.text }]}>
+                {modelInfo.name}
+              </Text>
+              <Text style={[styles.modelPickerDesc, { color: theme.textSecondary }]} numberOfLines={1}>
+                {modelInfo.usesYolo ? "YOLO Detection" : modelInfo.usesVision ? "Vision Framework" : "Cloud AI"}
+              </Text>
+            </View>
+            {modelInfo.usesYolo && yoloStatus && !yoloStatus.yoloLoaded ? (
+              <View style={[styles.backendBadge, { backgroundColor: theme.warning + "20" }]}>
+                <Feather name="alert-circle" size={8} color={theme.warning} style={{ marginRight: 2 }} />
+                <Text style={[styles.backendBadgeText, { color: theme.warning }]}>
+                  Fallback
+                </Text>
+              </View>
+            ) : (
+              <View style={[
+                styles.backendBadge, 
+                { 
+                  backgroundColor: modelInfo.usesYolo 
+                    ? theme.success + "20" 
+                    : modelInfo.usesVision 
+                      ? theme.primary + "20" 
+                      : theme.warning + "20" 
+                }
+              ]}>
+                <Text style={[
+                  styles.backendBadgeText, 
+                  { 
+                    color: modelInfo.usesYolo 
+                      ? theme.success 
+                      : modelInfo.usesVision 
+                        ? theme.primary 
+                        : theme.warning 
+                  }
+                ]}>
+                  {modelInfo.usesYolo ? "YOLO" : modelInfo.usesVision ? "Vision" : "Cloud"}
+                </Text>
+              </View>
+            )}
+            <Feather name="chevron-down" size={18} color={theme.textSecondary} style={{ marginLeft: Spacing.xs }} />
+          </Pressable>
+
+          {modelInfo.usesYolo && (
+            <View style={styles.trackingModeSection}>
+              <Text style={[styles.trackingModeLabel, { color: theme.textSecondary }]}>
+                Tracking Mode:
+              </Text>
+              <View style={[styles.trackingModeSelector, { backgroundColor: theme.backgroundSecondary }]}>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onTrackingModeChange?.("detection-only");
+                  }}
+                  disabled={isTracking}
+                  style={[
+                    styles.trackingModeOption,
+                    trackingMode === "detection-only" && { backgroundColor: theme.primary },
+                    isTracking && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={[
+                    styles.trackingModeText,
+                    { color: trackingMode === "detection-only" ? "#FFF" : theme.textSecondary },
+                  ]}>
+                    YOLO Only
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onTrackingModeChange?.("hybrid-vision");
+                  }}
+                  disabled={isTracking}
+                  style={[
+                    styles.trackingModeOption,
+                    trackingMode === "hybrid-vision" && { backgroundColor: theme.success },
+                    isTracking && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={[
+                    styles.trackingModeText,
+                    { color: trackingMode === "hybrid-vision" ? "#FFF" : theme.textSecondary },
+                  ]}>
+                    YOLO + Vision
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {isTracking && trackingState?.statusInfo && (
+            <View style={[styles.liveStatusContainer, { backgroundColor: theme.backgroundSecondary }]}>
+              <View style={styles.liveStatusRow}>
+                <View style={[styles.liveStatusDot, { 
+                  backgroundColor: trackingState.statusInfo.backend === "vision-tracking" 
+                    ? theme.success 
+                    : trackingState.statusInfo.backend === "yolo-detecting"
+                    ? theme.warning
+                    : trackingState.statusInfo.backend === "reacquiring"
+                    ? theme.error
+                    : theme.primary 
+                }]} />
+                <Text style={[styles.liveStatusText, { color: theme.text }]}>
+                  {trackingState.statusInfo.backend === "vision-tracking" && "Vision Tracking"}
+                  {trackingState.statusInfo.backend === "yolo-detecting" && "YOLO Detecting"}
+                  {trackingState.statusInfo.backend === "vision-detecting" && "Vision Detecting"}
+                  {trackingState.statusInfo.backend === "moondream-detecting" && "Cloud API"}
+                  {trackingState.statusInfo.backend === "reacquiring" && "Re-acquiring..."}
+                  {trackingState.statusInfo.backend === "idle" && "Idle"}
+                </Text>
+                <Text style={[styles.liveStatusTime, { color: theme.textSecondary }]}>
+                  {trackingState.statusInfo.lastDetectionMs}ms
+                </Text>
+              </View>
+              {trackingState.statusInfo.mode === "hybrid-vision" && (
+                <View style={styles.liveStatusStats}>
+                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
+                    Tracked: {trackingState.statusInfo.trackingFrameCount} frames
+                  </Text>
+                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
+                    Re-acquired: {trackingState.statusInfo.reacquisitionCount}x
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {selectedModel === "custom" ? (
+            <View style={styles.customObjectSection}>
+              <View style={styles.customInputRow}>
+                <TextInput
+                  style={[
+                    styles.customInput,
+                    {
+                      backgroundColor: theme.backgroundSecondary,
+                      color: theme.text,
+                      borderColor: theme.primary,
+                      flex: 1,
+                    },
+                  ]}
+                  placeholder="Describe object to track..."
+                  placeholderTextColor={theme.textSecondary}
+                  value={customObject}
+                  onChangeText={onCustomObjectChange}
+                  editable={!isTracking}
+                  returnKeyType="done"
+                />
+                {customObject.trim() && !isTracking ? (
+                  <Pressable
+                    onPress={handleSaveCustomObject}
+                    style={({ pressed }) => [
+                      styles.saveObjectButton,
+                      { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Feather name="bookmark" size={14} color="#FFF" />
+                  </Pressable>
+                ) : null}
+                {savedObjects.length > 0 ? (
+                  <Pressable
+                    onPress={() => setShowSavedObjects(!showSavedObjects)}
+                    style={({ pressed }) => [
+                      styles.savedObjectsToggle,
+                      { 
+                        backgroundColor: showSavedObjects ? theme.primary : theme.backgroundSecondary,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <Feather 
+                      name="list" 
+                      size={14} 
+                      color={showSavedObjects ? "#FFF" : theme.text} 
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+              
+              {showSavedObjects && savedObjects.length > 0 ? (
+                <View style={[styles.savedObjectsList, { backgroundColor: theme.backgroundSecondary }]}>
+                  {savedObjects.slice(0, 8).map((obj) => (
+                    <View key={obj.id} style={styles.savedObjectItem}>
+                      <Pressable
+                        onPress={() => handleSelectSavedObject(obj)}
+                        style={({ pressed }) => [
+                          styles.savedObjectButton,
+                          { opacity: pressed ? 0.7 : 1 },
+                        ]}
+                      >
+                        <Text 
+                          style={[styles.savedObjectText, { color: theme.text }]} 
+                          numberOfLines={1}
+                        >
+                          {obj.name}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteSavedObject(obj.id)}
+                        hitSlop={8}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 0.6 })}
+                      >
+                        <Feather name="x" size={12} color={theme.textSecondary} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          <Pressable
+            onPress={handleToggleTracking}
+            disabled={!cameraConnected && Boolean(camera)}
+            style={({ pressed }) => [
+              styles.trackButton,
+              {
+                backgroundColor: isTracking ? theme.error : theme.success,
+                opacity: (!cameraConnected && camera) ? 0.5 : (pressed ? 0.85 : 1),
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Feather
+              name={isTracking ? "stop-circle" : "play-circle"}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.trackButtonText}>{isTracking ? "Stop" : "Track"}</Text>
+          </Pressable>
+        </View>
+      </View>
+
       {/* Camera Connection Section */}
       <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.header}>
@@ -552,273 +817,163 @@ export function ModelSelector({
         ) : null}
       </View>
 
-      {/* Tracking Model Section */}
-      <View style={[styles.container, { backgroundColor: theme.backgroundDefault }]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.text }]}>Tracking Model</Text>
-          <Pressable
-            onPress={onShowInfo}
-            hitSlop={8}
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+      <Modal
+        visible={showModelPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModelPicker(false)}
+      >
+        <Pressable 
+          style={styles.modalBackdrop} 
+          onPress={() => setShowModelPicker(false)}
+        >
+          <Pressable 
+            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            onPress={(e) => e.stopPropagation()}
           >
-            <Feather name="info" size={20} color={theme.primary} />
-          </Pressable>
-        </View>
-
-        <View style={styles.controls}>
-          <View style={styles.modelPickerRow}>
-            <View style={[styles.modelPicker, { backgroundColor: theme.backgroundSecondary }]}>
-              {TRACKING_MODELS.map((model) => (
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Select Tracking Model</Text>
+              <Pressable
+                onPress={() => setShowModelPicker(false)}
+                hitSlop={12}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <Feather name="x" size={24} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+            
+            <ScrollView 
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[styles.sectionHeader, { color: theme.primary }]}>
+                <Feather name="eye" size={12} /> Vision Framework
+              </Text>
+              <Text style={[styles.sectionSubheader, { color: theme.textSecondary }]}>
+                Native iOS detection - fast, works offline
+              </Text>
+              {TRACKING_MODELS.filter(m => m.usesVision).map((model) => (
                 <Pressable
                   key={model.id}
                   onPress={() => {
-                    Haptics.selectionAsync();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onModelChange(model.id);
+                    setShowModelPicker(false);
                   }}
-                  style={[
-                    styles.modelOption,
-                    selectedModel === model.id && {
-                      backgroundColor: theme.primary,
+                  style={({ pressed }) => [
+                    styles.modelRow,
+                    { 
+                      backgroundColor: selectedModel === model.id 
+                        ? theme.primary + "15" 
+                        : pressed 
+                          ? theme.backgroundSecondary 
+                          : "transparent",
+                      borderColor: selectedModel === model.id ? theme.primary : "transparent",
                     },
                   ]}
                 >
-                  <Feather
-                    name={model.icon as any}
-                    size={16}
-                    color={selectedModel === model.id ? "#FFFFFF" : theme.textSecondary}
-                  />
+                  <View style={[styles.modelRowIcon, { backgroundColor: theme.primary + "20" }]}>
+                    <Feather name={model.icon as any} size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.modelRowInfo}>
+                    <Text style={[styles.modelRowName, { color: theme.text }]}>{model.name}</Text>
+                    <Text style={[styles.modelRowDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                      {model.description}
+                    </Text>
+                  </View>
+                  {selectedModel === model.id && (
+                    <Feather name="check-circle" size={20} color={theme.primary} />
+                  )}
                 </Pressable>
               ))}
-            </View>
 
-            <View style={styles.modelNameContainer}>
-              <Text style={[styles.modelName, { color: theme.textSecondary }]}>
-                {modelInfo.name}
+              <Text style={[styles.sectionHeader, { color: theme.success, marginTop: Spacing.lg }]}>
+                <Feather name="zap" size={12} /> YOLO Detection
               </Text>
-              {modelInfo.usesYolo && yoloStatus && !yoloStatus.yoloLoaded ? (
-                <View style={[styles.backendBadge, { backgroundColor: theme.warning + "20" }]}>
-                  <Feather name="alert-circle" size={8} color={theme.warning} style={{ marginRight: 2 }} />
-                  <Text style={[styles.backendBadgeText, { color: theme.warning }]}>
-                    Fallback
-                  </Text>
-                </View>
-              ) : (
-                <View style={[
-                  styles.backendBadge, 
-                  { 
-                    backgroundColor: modelInfo.usesYolo 
-                      ? theme.success + "20" 
-                      : modelInfo.usesVision 
-                        ? theme.primary + "20" 
-                        : theme.warning + "20" 
-                  }
-                ]}>
-                  <Text style={[
-                    styles.backendBadgeText, 
+              <Text style={[styles.sectionSubheader, { color: theme.textSecondary }]}>
+                On-device AI - 80 object classes at 30+ FPS
+              </Text>
+              {TRACKING_MODELS.filter(m => m.usesYolo).map((model) => (
+                <Pressable
+                  key={model.id}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    onModelChange(model.id);
+                    setShowModelPicker(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modelRow,
                     { 
-                      color: modelInfo.usesYolo 
-                        ? theme.success 
-                        : modelInfo.usesVision 
-                          ? theme.primary 
-                          : theme.warning 
-                    }
-                  ]}>
-                    {modelInfo.usesYolo ? "YOLO" : modelInfo.usesVision ? "Vision" : "Cloud"}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {modelInfo.usesYolo && (
-            <View style={styles.trackingModeSection}>
-              <Text style={[styles.trackingModeLabel, { color: theme.textSecondary }]}>
-                Tracking Mode:
-              </Text>
-              <View style={[styles.trackingModeSelector, { backgroundColor: theme.backgroundSecondary }]}>
-                <Pressable
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    onTrackingModeChange?.("detection-only");
-                  }}
-                  disabled={isTracking}
-                  style={[
-                    styles.trackingModeOption,
-                    trackingMode === "detection-only" && { backgroundColor: theme.primary },
-                    isTracking && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={[
-                    styles.trackingModeText,
-                    { color: trackingMode === "detection-only" ? "#FFF" : theme.textSecondary },
-                  ]}>
-                    YOLO Only
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    onTrackingModeChange?.("hybrid-vision");
-                  }}
-                  disabled={isTracking}
-                  style={[
-                    styles.trackingModeOption,
-                    trackingMode === "hybrid-vision" && { backgroundColor: theme.success },
-                    isTracking && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={[
-                    styles.trackingModeText,
-                    { color: trackingMode === "hybrid-vision" ? "#FFF" : theme.textSecondary },
-                  ]}>
-                    YOLO + Vision
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-
-          {isTracking && trackingState?.statusInfo && (
-            <View style={[styles.liveStatusContainer, { backgroundColor: theme.backgroundSecondary }]}>
-              <View style={styles.liveStatusRow}>
-                <View style={[styles.liveStatusDot, { 
-                  backgroundColor: trackingState.statusInfo.backend === "vision-tracking" 
-                    ? theme.success 
-                    : trackingState.statusInfo.backend === "yolo-detecting"
-                    ? theme.warning
-                    : trackingState.statusInfo.backend === "reacquiring"
-                    ? theme.error
-                    : theme.primary 
-                }]} />
-                <Text style={[styles.liveStatusText, { color: theme.text }]}>
-                  {trackingState.statusInfo.backend === "vision-tracking" && "Vision Tracking"}
-                  {trackingState.statusInfo.backend === "yolo-detecting" && "YOLO Detecting"}
-                  {trackingState.statusInfo.backend === "vision-detecting" && "Vision Detecting"}
-                  {trackingState.statusInfo.backend === "moondream-detecting" && "Cloud API"}
-                  {trackingState.statusInfo.backend === "reacquiring" && "Re-acquiring..."}
-                  {trackingState.statusInfo.backend === "idle" && "Idle"}
-                </Text>
-                <Text style={[styles.liveStatusTime, { color: theme.textSecondary }]}>
-                  {trackingState.statusInfo.lastDetectionMs}ms
-                </Text>
-              </View>
-              {trackingState.statusInfo.mode === "hybrid-vision" && (
-                <View style={styles.liveStatusStats}>
-                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
-                    Tracked: {trackingState.statusInfo.trackingFrameCount} frames
-                  </Text>
-                  <Text style={[styles.liveStatItem, { color: theme.textSecondary }]}>
-                    Re-acquired: {trackingState.statusInfo.reacquisitionCount}x
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {selectedModel === "custom" ? (
-            <View style={styles.customObjectSection}>
-              <View style={styles.customInputRow}>
-                <TextInput
-                  style={[
-                    styles.customInput,
-                    {
-                      backgroundColor: theme.backgroundSecondary,
-                      color: theme.text,
-                      borderColor: theme.primary,
-                      flex: 1,
+                      backgroundColor: selectedModel === model.id 
+                        ? theme.success + "15" 
+                        : pressed 
+                          ? theme.backgroundSecondary 
+                          : "transparent",
+                      borderColor: selectedModel === model.id ? theme.success : "transparent",
                     },
                   ]}
-                  placeholder="Describe object to track..."
-                  placeholderTextColor={theme.textSecondary}
-                  value={customObject}
-                  onChangeText={onCustomObjectChange}
-                  editable={!isTracking}
-                  returnKeyType="done"
-                />
-                {customObject.trim() && !isTracking ? (
-                  <Pressable
-                    onPress={handleSaveCustomObject}
-                    style={({ pressed }) => [
-                      styles.saveObjectButton,
-                      { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
-                    ]}
-                  >
-                    <Feather name="bookmark" size={14} color="#FFF" />
-                  </Pressable>
-                ) : null}
-                {savedObjects.length > 0 ? (
-                  <Pressable
-                    onPress={() => setShowSavedObjects(!showSavedObjects)}
-                    style={({ pressed }) => [
-                      styles.savedObjectsToggle,
-                      { 
-                        backgroundColor: showSavedObjects ? theme.primary : theme.backgroundSecondary,
-                        opacity: pressed ? 0.8 : 1,
-                      },
-                    ]}
-                  >
-                    <Feather 
-                      name="list" 
-                      size={14} 
-                      color={showSavedObjects ? "#FFF" : theme.text} 
-                    />
-                  </Pressable>
-                ) : null}
-              </View>
-              
-              {showSavedObjects && savedObjects.length > 0 ? (
-                <View style={[styles.savedObjectsList, { backgroundColor: theme.backgroundSecondary }]}>
-                  {savedObjects.slice(0, 8).map((obj) => (
-                    <View key={obj.id} style={styles.savedObjectItem}>
-                      <Pressable
-                        onPress={() => handleSelectSavedObject(obj)}
-                        style={({ pressed }) => [
-                          styles.savedObjectButton,
-                          { opacity: pressed ? 0.7 : 1 },
-                        ]}
-                      >
-                        <Text 
-                          style={[styles.savedObjectText, { color: theme.text }]} 
-                          numberOfLines={1}
-                        >
-                          {obj.name}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleDeleteSavedObject(obj.id)}
-                        hitSlop={8}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 0.6 })}
-                      >
-                        <Feather name="x" size={12} color={theme.textSecondary} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+                >
+                  <View style={[styles.modelRowIcon, { backgroundColor: theme.success + "20" }]}>
+                    <Feather name={model.icon as any} size={20} color={theme.success} />
+                  </View>
+                  <View style={styles.modelRowInfo}>
+                    <Text style={[styles.modelRowName, { color: theme.text }]}>{model.name}</Text>
+                    <Text style={[styles.modelRowDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                      {model.description}
+                    </Text>
+                  </View>
+                  {selectedModel === model.id && (
+                    <Feather name="check-circle" size={20} color={theme.success} />
+                  )}
+                </Pressable>
+              ))}
 
-          <Pressable
-            onPress={handleToggleTracking}
-            disabled={!cameraConnected && Boolean(camera)}
-            style={({ pressed }) => [
-              styles.trackButton,
-              {
-                backgroundColor: isTracking ? theme.error : theme.success,
-                opacity: (!cameraConnected && camera) ? 0.5 : (pressed ? 0.85 : 1),
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              },
-            ]}
-          >
-            <Feather
-              name={isTracking ? "stop-circle" : "play-circle"}
-              size={18}
-              color="#FFFFFF"
-            />
-            <Text style={styles.trackButtonText}>{isTracking ? "Stop" : "Track"}</Text>
+              <Text style={[styles.sectionHeader, { color: theme.warning, marginTop: Spacing.lg }]}>
+                <Feather name="cloud" size={12} /> Cloud AI
+              </Text>
+              <Text style={[styles.sectionSubheader, { color: theme.textSecondary }]}>
+                Moondream API - track anything you describe
+              </Text>
+              {TRACKING_MODELS.filter(m => !m.usesYolo && !m.usesVision).map((model) => (
+                <Pressable
+                  key={model.id}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    onModelChange(model.id);
+                    setShowModelPicker(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modelRow,
+                    { 
+                      backgroundColor: selectedModel === model.id 
+                        ? theme.warning + "15" 
+                        : pressed 
+                          ? theme.backgroundSecondary 
+                          : "transparent",
+                      borderColor: selectedModel === model.id ? theme.warning : "transparent",
+                    },
+                  ]}
+                >
+                  <View style={[styles.modelRowIcon, { backgroundColor: theme.warning + "20" }]}>
+                    <Feather name={model.icon as any} size={20} color={theme.warning} />
+                  </View>
+                  <View style={styles.modelRowInfo}>
+                    <Text style={[styles.modelRowName, { color: theme.text }]}>{model.name}</Text>
+                    <Text style={[styles.modelRowDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                      {model.description}
+                    </Text>
+                  </View>
+                  {selectedModel === model.id && (
+                    <Feather name="check-circle" size={20} color={theme.warning} />
+                  )}
+                </Pressable>
+              ))}
+              
+              <View style={{ height: Spacing["2xl"] }} />
+            </ScrollView>
           </Pressable>
-        </View>
-      </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1228,5 +1383,93 @@ const styles = StyleSheet.create({
   },
   liveStatItem: {
     fontSize: 10,
+  },
+  modelPickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  modelPickerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modelPickerInfo: {
+    flex: 1,
+  },
+  modelPickerName: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  modelPickerDesc: {
+    fontSize: Typography.small.fontSize,
+    marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  modalTitle: {
+    fontSize: Typography.h3.fontSize,
+    fontWeight: "700",
+  },
+  modalScroll: {
+    paddingHorizontal: Spacing.lg,
+  },
+  sectionHeader: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "700",
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  sectionSubheader: {
+    fontSize: Typography.small.fontSize,
+    marginBottom: Spacing.sm,
+  },
+  modelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.md,
+    marginBottom: Spacing.xs,
+    borderWidth: 1.5,
+  },
+  modelRowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modelRowInfo: {
+    flex: 1,
+  },
+  modelRowName: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+  },
+  modelRowDesc: {
+    fontSize: Typography.small.fontSize,
+    marginTop: 2,
+    lineHeight: 16,
   },
 });

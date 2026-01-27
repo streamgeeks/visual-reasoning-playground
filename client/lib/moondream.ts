@@ -291,3 +291,78 @@ Where coordinates are normalized 0-1 values (x_min,y_min,x_max,y_max). If no peo
     return [];
   }
 }
+
+export interface InterestingObject {
+  name: string;
+  box: {
+    x_min: number;
+    y_min: number;
+    x_max: number;
+    y_max: number;
+  };
+}
+
+export async function detectInterestingObjects(
+  imageBase64: string,
+  apiKey: string,
+  maxObjects: number = 5
+): Promise<InterestingObject[]> {
+  const prompt = `Identify the ${maxObjects} most interesting and visually distinct objects in this image. For each object, provide its name and bounding box coordinates.
+
+Return in this exact format:
+1. [object name]: x_min,y_min,x_max,y_max
+2. [object name]: x_min,y_min,x_max,y_max
+...
+
+Coordinates should be normalized 0-1 values. Focus on concrete, specific objects (not abstract concepts). Use simple, common nouns.`;
+
+  try {
+    const response = await fetch(`${MOONDREAM_API_BASE}/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Moondream-Auth": apiKey,
+      },
+      body: JSON.stringify({
+        image_url: `data:image/jpeg;base64,${imageBase64}`,
+        question: prompt,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Moondream API error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const answer = (data.answer || data.caption || data.result || "").trim();
+
+    const results: InterestingObject[] = [];
+    const lines = answer.split("\n").filter((line: string) => line.trim());
+
+    for (const line of lines) {
+      const match = line.match(/^\d+\.\s*\[?([^\]:]+)\]?\s*:\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/i);
+
+      if (match) {
+        const name = match[1].trim().toLowerCase();
+        const x_min = parseFloat(match[2]);
+        const y_min = parseFloat(match[3]);
+        const x_max = parseFloat(match[4]);
+        const y_max = parseFloat(match[5]);
+
+        if (x_min >= 0 && x_max <= 1 && y_min >= 0 && y_max <= 1 && x_min < x_max && y_min < y_max) {
+          results.push({
+            name,
+            box: { x_min, y_min, x_max, y_max },
+          });
+        }
+      }
+    }
+
+    return results.slice(0, maxObjects);
+  } catch (error) {
+    console.error("Moondream interesting objects error:", error);
+    return [];
+  }
+}

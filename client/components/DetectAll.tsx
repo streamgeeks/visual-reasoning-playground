@@ -8,22 +8,33 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  cancelAnimation,
+} from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography, Colors } from "@/constants/theme";
-import { 
-  checkNativeDetectionStatus, 
+import {
+  checkNativeDetectionStatus,
   detectAllObjects,
   NativeDetectionResult,
   NativeDetectionStatus,
 } from "@/lib/nativeDetection";
+import { detectInterestingObjects } from "@/lib/moondream";
 
 interface DetectAllProps {
   isConnected: boolean;
   getFrame: () => Promise<string | null>;
   onDetectionsChange?: (detections: LabeledDetection[]) => void;
+  apiKey?: string;
 }
 
 export type { LabeledDetection };
@@ -44,40 +55,83 @@ const DETECTION_COLORS = [
 ];
 
 function getColorForLabel(label: string, index: number): string {
-  const hash = label.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hash = label
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return DETECTION_COLORS[(hash + index) % DETECTION_COLORS.length];
 }
 
-export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectAllProps) {
+export function DetectAll({
+  isConnected,
+  getFrame,
+  onDetectionsChange,
+  apiKey,
+}: DetectAllProps) {
   const { theme } = useTheme();
-  
+
   const [isDetecting, setIsDetecting] = useState(false);
   const [detections, setDetections] = useState<LabeledDetection[]>([]);
-  const [yoloStatus, setYoloStatus] = useState<NativeDetectionStatus | null>(null);
+  const [yoloStatus, setYoloStatus] = useState<NativeDetectionStatus | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [autoDetect, setAutoDetect] = useState(false);
   const [lastDetectionTime, setLastDetectionTime] = useState<number>(0);
-  
+  const [detectionMode, setDetectionMode] = useState<"on-device" | "cloud">(
+    "on-device",
+  );
+
   const autoDetectRef = useRef(autoDetect);
   const detectingRef = useRef(false);
-  
+
+  const scanPulse = useSharedValue(1);
+
+  const scanPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scanPulse.value }],
+  }));
+
+  React.useEffect(() => {
+    if (isDetecting) {
+      scanPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 300 }),
+          withTiming(0.95, { duration: 300 }),
+        ),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(scanPulse);
+      scanPulse.value = withTiming(1, { duration: 150 });
+    }
+  }, [isDetecting]);
+
+  const canUseOnDevice = yoloStatus?.yoloLoaded ?? false;
+  const canUseCloud = Boolean(apiKey);
+  const canDetect = canUseOnDevice || canUseCloud;
+
   useEffect(() => {
     autoDetectRef.current = autoDetect;
   }, [autoDetect]);
 
   useEffect(() => {
-    checkNativeDetectionStatus().then(setYoloStatus);
-  }, []);
+    checkNativeDetectionStatus().then((status) => {
+      setYoloStatus(status);
+      if (!status?.yoloLoaded && apiKey) {
+        setDetectionMode("cloud");
+      }
+    });
+  }, [apiKey]);
 
   const runDetection = useCallback(async () => {
-    if (!isConnected || detectingRef.current) return;
-    
+    if (!isConnected || detectingRef.current || !canDetect) return;
+
     detectingRef.current = true;
     setIsDetecting(true);
     setError(null);
-    
+
     const startTime = Date.now();
-    
+
     try {
       const frame = await getFrame();
       if (!frame) {
@@ -86,18 +140,34 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
       }
 
       const base64 = frame.replace(/^data:image\/\w+;base64,/, "");
-      const results = await detectAllObjects(base64);
-      
-      const labeled: LabeledDetection[] = results.map((d, i) => ({
-        ...d,
-        color: getColorForLabel(d.label, i),
-      }));
-      
+      let labeled: LabeledDetection[] = [];
+
+      if (detectionMode === "on-device" && canUseOnDevice) {
+        const results = await detectAllObjects(base64);
+        labeled = results.map((d, i) => ({
+          ...d,
+          color: getColorForLabel(d.label, i),
+        }));
+      } else if (detectionMode === "cloud" && apiKey) {
+        const cloudResults = await detectInterestingObjects(base64, apiKey, 15);
+        labeled = cloudResults.map((obj, i) => ({
+          label: obj.name,
+          confidence: 0.8,
+          boundingBox: {
+            x: obj.box.x_min,
+            y: obj.box.y_min,
+            width: obj.box.x_max - obj.box.x_min,
+            height: obj.box.y_max - obj.box.y_min,
+          },
+          color: getColorForLabel(obj.name, i),
+        }));
+      }
+
       setDetections(labeled);
       setLastDetectionTime(Date.now() - startTime);
       onDetectionsChange?.(labeled);
-      
-      if (results.length > 0) {
+
+      if (labeled.length > 0) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (e) {
@@ -108,39 +178,48 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
       setIsDetecting(false);
       detectingRef.current = false;
     }
-  }, [isConnected, getFrame]);
+  }, [isConnected, getFrame, detectionMode, canUseOnDevice, apiKey, canDetect]);
 
   useEffect(() => {
     if (!autoDetect || !isConnected) return;
-    
+
     const interval = setInterval(() => {
       if (autoDetectRef.current && !detectingRef.current) {
         runDetection();
       }
     }, 500);
-    
+
     return () => clearInterval(interval);
   }, [autoDetect, isConnected, runDetection]);
 
-  const groupedDetections = detections.reduce((acc, d) => {
-    acc[d.label] = (acc[d.label] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const groupedDetections = detections.reduce(
+    (acc, d) => {
+      acc[d.label] = (acc[d.label] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
-  const sortedLabels = Object.entries(groupedDetections)
-    .sort((a, b) => b[1] - a[1]);
+  const sortedLabels = Object.entries(groupedDetections).sort(
+    (a, b) => b[1] - a[1],
+  );
 
-  if (!yoloStatus?.yoloLoaded) {
+  if (!canDetect) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
+      >
         <View style={styles.statusContainer}>
           <Feather name="alert-circle" size={48} color={theme.warning} />
           <Text style={[styles.statusTitle, { color: theme.text }]}>
-            YOLO Model Not Loaded
+            No Detection Available
           </Text>
           <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-            The on-device detection model is not available.
-            Rebuild the app with the model bundled.
+            On-device YOLO model not loaded and no Moondream API key configured.
+            Add API key in Settings or rebuild with YOLO model.
           </Text>
         </View>
       </View>
@@ -148,29 +227,36 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}
+    >
       <View style={styles.controls}>
-        <Pressable
-          onPress={runDetection}
-          disabled={isDetecting || !isConnected}
-          style={({ pressed }) => [
-            styles.detectButton,
-            { 
-              backgroundColor: theme.primary,
-              opacity: (isDetecting || !isConnected) ? 0.5 : (pressed ? 0.8 : 1),
-            },
-          ]}
-        >
-          {isDetecting ? (
-            <ActivityIndicator size="small" color="#FFF" />
-          ) : (
-            <>
-              <Feather name="zap" size={18} color="#FFF" />
-              <Text style={styles.detectButtonText}>Detect Now</Text>
-            </>
-          )}
-        </Pressable>
-        
+        <Animated.View style={isDetecting ? scanPulseStyle : undefined}>
+          <Pressable
+            onPress={runDetection}
+            disabled={isDetecting || !isConnected}
+            style={({ pressed }) => [
+              styles.detectButton,
+              {
+                backgroundColor: isDetecting ? theme.success : theme.primary,
+                opacity: !isConnected ? 0.5 : pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            {isDetecting ? (
+              <>
+                <Feather name="loader" size={18} color="#FFF" />
+                <Text style={styles.detectButtonText}>Scanning...</Text>
+              </>
+            ) : (
+              <>
+                <Feather name="zap" size={18} color="#FFF" />
+                <Text style={styles.detectButtonText}>Detect Now</Text>
+              </>
+            )}
+          </Pressable>
+        </Animated.View>
+
         <Pressable
           onPress={() => {
             setAutoDetect(!autoDetect);
@@ -179,26 +265,113 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
           disabled={!isConnected}
           style={({ pressed }) => [
             styles.autoButton,
-            { 
-              backgroundColor: autoDetect ? theme.success : theme.backgroundDefault,
+            {
+              backgroundColor: autoDetect
+                ? theme.success
+                : theme.backgroundDefault,
               borderColor: autoDetect ? theme.success : theme.textSecondary,
-              opacity: !isConnected ? 0.5 : (pressed ? 0.8 : 1),
+              opacity: !isConnected ? 0.5 : pressed ? 0.8 : 1,
             },
           ]}
         >
-          <Feather 
-            name={autoDetect ? "pause" : "play"} 
-            size={16} 
-            color={autoDetect ? "#FFF" : theme.text} 
+          <Feather
+            name={autoDetect ? "pause" : "play"}
+            size={16}
+            color={autoDetect ? "#FFF" : theme.text}
           />
-          <Text style={[
-            styles.autoButtonText, 
-            { color: autoDetect ? "#FFF" : theme.text }
-          ]}>
+          <Text
+            style={[
+              styles.autoButtonText,
+              { color: autoDetect ? "#FFF" : theme.text },
+            ]}
+          >
             {autoDetect ? "Auto ON" : "Auto"}
           </Text>
         </Pressable>
       </View>
+
+      {(canUseOnDevice || canUseCloud) && (
+        <View style={styles.modeSection}>
+          <View style={styles.modeButtons}>
+            <Pressable
+              onPress={() => {
+                if (canUseOnDevice) {
+                  setDetectionMode("on-device");
+                  Haptics.selectionAsync();
+                }
+              }}
+              disabled={!canUseOnDevice}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor:
+                    detectionMode === "on-device"
+                      ? theme.success
+                      : theme.backgroundDefault,
+                  opacity: canUseOnDevice ? 1 : 0.5,
+                },
+              ]}
+            >
+              <Feather
+                name="smartphone"
+                size={14}
+                color={
+                  detectionMode === "on-device" ? "#FFF" : theme.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  {
+                    color:
+                      detectionMode === "on-device"
+                        ? "#FFF"
+                        : theme.textSecondary,
+                  },
+                ]}
+              >
+                YOLO
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (canUseCloud) {
+                  setDetectionMode("cloud");
+                  Haptics.selectionAsync();
+                }
+              }}
+              disabled={!canUseCloud}
+              style={[
+                styles.modeButton,
+                {
+                  backgroundColor:
+                    detectionMode === "cloud"
+                      ? theme.accent
+                      : theme.backgroundDefault,
+                  opacity: canUseCloud ? 1 : 0.5,
+                },
+              ]}
+            >
+              <Feather
+                name="cloud"
+                size={14}
+                color={detectionMode === "cloud" ? "#FFF" : theme.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  {
+                    color:
+                      detectionMode === "cloud" ? "#FFF" : theme.textSecondary,
+                  },
+                ]}
+              >
+                Cloud AI
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {lastDetectionTime > 0 && (
         <View style={styles.statsRow}>
@@ -209,30 +382,46 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
       )}
 
       {error && (
-        <View style={[styles.errorContainer, { backgroundColor: theme.error + "20" }]}>
+        <View
+          style={[
+            styles.errorContainer,
+            { backgroundColor: theme.error + "20" },
+          ]}
+        >
           <Feather name="alert-triangle" size={16} color={theme.error} />
-          <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+          <Text style={[styles.errorText, { color: theme.error }]}>
+            {error}
+          </Text>
         </View>
       )}
 
-      <ScrollView style={styles.resultsScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.resultsScroll}
+        showsVerticalScrollIndicator={false}
+      >
         {sortedLabels.length > 0 ? (
           <View style={styles.labelGrid}>
             {sortedLabels.map(([label, count]) => {
-              const detection = detections.find(d => d.label === label);
+              const detection = detections.find((d) => d.label === label);
               const color = detection?.color || theme.primary;
-              
+
               return (
                 <Animated.View
                   key={label}
                   entering={FadeIn.duration(200)}
                   style={[
                     styles.labelCard,
-                    { backgroundColor: color + "15", borderColor: color + "40" },
+                    {
+                      backgroundColor: color + "15",
+                      borderColor: color + "40",
+                    },
                   ]}
                 >
                   <View style={[styles.labelDot, { backgroundColor: color }]} />
-                  <Text style={[styles.labelName, { color: theme.text }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.labelName, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
                     {label}
                   </Text>
                   <View style={[styles.countBadge, { backgroundColor: color }]}>
@@ -246,7 +435,9 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
           <View style={styles.emptyState}>
             <Feather name="box" size={32} color={theme.textSecondary} />
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {isConnected ? "Tap 'Detect Now' to scan for objects" : "Grant camera permission to start"}
+              {isConnected
+                ? "Tap 'Detect Now' to scan for objects"
+                : "Grant camera permission to start"}
             </Text>
           </View>
         ) : null}
@@ -254,7 +445,9 @@ export function DetectAll({ isConnected, getFrame, onDetectionsChange }: DetectA
 
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-          YOLOv8n • 80 COCO Classes • On-Device
+          {detectionMode === "on-device"
+            ? "YOLOv8n • 80 COCO Classes • On-Device"
+            : "Moondream AI • Cloud Detection"}
         </Text>
       </View>
     </View>
@@ -289,8 +482,17 @@ export function DetectAllOverlay({
               { left, top, width, height, borderColor: color },
             ]}
           >
-            <View style={[styles.labelTag, { backgroundColor: color }]}>
-              <Text style={styles.labelTagText}>
+            <View
+              style={[
+                styles.labelTag,
+                { backgroundColor: color, minWidth: 60, maxWidth: 120 },
+              ]}
+            >
+              <Text
+                style={styles.labelTagText}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
                 {label} {(confidence * 100).toFixed(0)}%
               </Text>
             </View>
@@ -336,6 +538,26 @@ const styles = StyleSheet.create({
   },
   autoButtonText: {
     fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  modeSection: {
+    marginBottom: Spacing.sm,
+  },
+  modeButtons: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  modeButtonText: {
+    fontSize: Typography.small.fontSize,
     fontWeight: "500",
   },
   statsRow: {

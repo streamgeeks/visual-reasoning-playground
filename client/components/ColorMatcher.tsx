@@ -7,79 +7,196 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
   ImageBackground,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useCameraPermissions } from "expo-camera";
+import { useVisionCameraPermission } from "@/components/VisionCamera";
 
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
-import { CameraProfile, ColorStylePreset, CameraImageSettings } from "@/lib/storage";
-import { 
-  getColorStylePresets, 
+import {
+  CameraProfile,
+  ColorStylePreset,
+  CameraImageSettings,
+  getCameraProfiles,
+} from "@/lib/storage";
+import {
+  getColorStylePresets,
   BUILT_IN_PRESETS,
   mergeWithDefaults,
 } from "@/lib/colorStyles";
-import { applyCameraImageSettings, resetCameraImageSettings } from "@/lib/camera";
-import { isColorAnalysisAvailable, analyzeImage, ColorProfile } from "color-analysis";
+import {
+  applyCameraImageSettings,
+  resetCameraImageSettings,
+  setCameraBrightness,
+  setCameraSaturation,
+  setCameraContrast,
+  setCameraSharpness,
+  setCameraColorTemperature,
+  setCameraRedGain,
+  setCameraBlueGain,
+  testCameraConnection,
+} from "@/lib/camera";
+import {
+  isColorAnalysisAvailable,
+  analyzeImage,
+  ColorProfile,
+} from "color-analysis";
 import * as CameraControls from "camera-controls";
 
 interface ColorMatcherProps {
   camera: CameraProfile | null;
   isConnected: boolean;
   getFrame: () => Promise<string | null>;
+  onCameraChange?: (camera: CameraProfile) => void;
 }
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
 const PRESET_ICONS: Record<string, FeatherIconName> = {
-  "circle": "circle",
-  "sun": "sun",
-  "cloud": "cloud",
-  "home": "home",
-  "sunrise": "sunrise",
-  "zap": "zap",
-  "user": "user",
-  "moon": "moon",
-  "briefcase": "briefcase",
-  "mic": "mic",
-  "film": "film",
+  circle: "circle",
+  sun: "sun",
+  cloud: "cloud",
+  home: "home",
+  sunrise: "sunrise",
+  zap: "zap",
+  user: "user",
+  moon: "moon",
+  briefcase: "briefcase",
+  mic: "mic",
+  film: "film",
 };
 
-function mapColorTempToKelvin(ptzValue: number): number {
-  return 2500 + (ptzValue * 148.6);
-}
+const PTZ_SETTING_RANGES = {
+  brightness: { min: 0, max: 14, step: 1 },
+  saturation: { min: 0, max: 14, step: 1 },
+  contrast: { min: 0, max: 14, step: 1 },
+  sharpness: { min: 0, max: 14, step: 1 },
+  colorTemperature: { min: 0, max: 37, step: 1 },
+  redGain: { min: 0, max: 255, step: 5 },
+  blueGain: { min: 0, max: 255, step: 5 },
+};
 
-function mapBrightnessToExposure(ptzValue: number): number {
-  return ((ptzValue - 7) / 7) * 2;
-}
+const NATIVE_SETTING_RANGES = {
+  exposure: { min: -2, max: 2, step: 0.5 },
+  colorTemperature: { min: 2500, max: 7500, step: 500 },
+};
 
-export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProps) {
+export function ColorMatcher({
+  camera,
+  isConnected,
+  getFrame,
+  onCameraChange,
+}: ColorMatcherProps) {
   const { theme } = useTheme();
-  const [permission] = useCameraPermissions();
-  
+  const { granted: permissionGranted } = useVisionCameraPermission();
+
+  const [allCameras, setAllCameras] = useState<CameraProfile[]>([]);
+  const [activeCamera, setActiveCamera] = useState<CameraProfile | null>(
+    camera,
+  );
+  const [connectingCameraId, setConnectingCameraId] = useState<string | null>(
+    null,
+  );
+  const [connectedCameraIds, setConnectedCameraIds] = useState<Set<string>>(
+    new Set(),
+  );
+
   const [presets, setPresets] = useState<ColorStylePreset[]>(BUILT_IN_PRESETS);
-  const [selectedPreset, setSelectedPreset] = useState<ColorStylePreset | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<ColorStylePreset | null>(
+    null,
+  );
   const [isApplying, setIsApplying] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [currentProfile, setCurrentProfile] = useState<ColorProfile | null>(null);
-  const [lastApplied, setLastApplied] = useState<string | null>(null);
-  
-  const isPtzConnected = isConnected && camera;
-  const isNativeCameraAvailable = permission?.granted && CameraControls.isAvailable();
+  const [currentProfile, setCurrentProfile] = useState<ColorProfile | null>(
+    null,
+  );
+  const [applyingControl, setApplyingControl] = useState<string | null>(null);
+
+  const [ptzSettings, setPtzSettings] = useState<CameraImageSettings>({
+    whiteBalanceMode: "auto",
+    colorTemperature: 21,
+    redGain: 128,
+    blueGain: 128,
+    brightness: 7,
+    saturation: 7,
+    contrast: 7,
+    sharpness: 7,
+    hue: 7,
+  });
+
+  const [nativeSettings, setNativeSettings] = useState({
+    exposure: 0,
+    colorTemperature: 5500,
+  });
+
+  const isPtzConnected =
+    (isConnected && activeCamera) ||
+    (activeCamera && connectedCameraIds.has(activeCamera.id));
+  const isNativeCameraAvailable =
+    permissionGranted && CameraControls.isAvailable();
   const canApply = isPtzConnected || isNativeCameraAvailable;
 
   useEffect(() => {
     loadPresets();
+    loadCameras();
   }, []);
+
+  useEffect(() => {
+    if (camera) {
+      setActiveCamera(camera);
+      if (isConnected) {
+        setConnectedCameraIds((prev) => new Set([...prev, camera.id]));
+      }
+    }
+  }, [camera, isConnected]);
 
   const loadPresets = async () => {
     const allPresets = await getColorStylePresets();
     setPresets(allPresets);
   };
+
+  const loadCameras = async () => {
+    const cameras = await getCameraProfiles();
+    setAllCameras(cameras);
+  };
+
+  const handleSwitchCamera = useCallback(
+    async (cam: CameraProfile) => {
+      if (connectingCameraId) return;
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      if (connectedCameraIds.has(cam.id)) {
+        setActiveCamera(cam);
+        onCameraChange?.(cam);
+        return;
+      }
+
+      setConnectingCameraId(cam.id);
+      try {
+        const result = await testCameraConnection(cam);
+        if (result.success) {
+          setConnectedCameraIds((prev) => new Set([...prev, cam.id]));
+          setActiveCamera(cam);
+          onCameraChange?.(cam);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+          Alert.alert(
+            "Connection Failed",
+            result.error || "Could not connect to camera",
+          );
+        }
+      } catch (err) {
+        Alert.alert("Connection Failed", "Could not connect to camera");
+      } finally {
+        setConnectingCameraId(null);
+      }
+    },
+    [connectingCameraId, connectedCameraIds, onCameraChange],
+  );
 
   const analyzeCurrentFrame = useCallback(async () => {
     if (!isColorAnalysisAvailable) {
@@ -102,86 +219,195 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
     }
   }, [getFrame]);
 
-  const handleSelectPreset = (preset: ColorStylePreset) => {
-    setSelectedPreset(preset);
-    Haptics.selectionAsync();
-  };
+  const mapColorTempToKelvin = (ptzValue: number): number =>
+    2500 + ptzValue * 148.6;
+  const mapBrightnessToExposure = (ptzValue: number): number =>
+    ((ptzValue - 7) / 7) * 2;
 
-  const handleApplyPreset = async () => {
-    if (!selectedPreset || !canApply) return;
+  const handleSelectPreset = useCallback(
+    async (preset: ColorStylePreset) => {
+      if (!canApply || isApplying) return;
+
+      setSelectedPreset(preset);
+      setIsApplying(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      try {
+        const fullSettings = mergeWithDefaults(preset.settings);
+
+        if (isPtzConnected && camera) {
+          const result = await applyCameraImageSettings(camera, fullSettings);
+          if (result.success) {
+            setPtzSettings(fullSettings);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } else {
+            setPtzSettings(fullSettings);
+            console.log(
+              "[ColorMatcher] Partial apply:",
+              result.applied,
+              "Failed:",
+              result.failed,
+            );
+          }
+        } else if (isNativeCameraAvailable) {
+          const kelvin = mapColorTempToKelvin(fullSettings.colorTemperature);
+          await CameraControls.setWhiteBalanceTemperature(kelvin);
+
+          const exposure = mapBrightnessToExposure(fullSettings.brightness);
+          await CameraControls.setExposureCompensation(exposure);
+
+          setNativeSettings({
+            exposure,
+            colorTemperature: kelvin,
+          });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      } catch (err: any) {
+        console.error("[ColorMatcher] Apply error:", err);
+      } finally {
+        setIsApplying(false);
+      }
+    },
+    [canApply, isApplying, isPtzConnected, camera, isNativeCameraAvailable],
+  );
+
+  const adjustPtzSetting = useCallback(
+    async (
+      setting: keyof typeof PTZ_SETTING_RANGES,
+      direction: "up" | "down",
+    ) => {
+      if (!isPtzConnected || !camera || applyingControl) return;
+
+      const range = PTZ_SETTING_RANGES[setting];
+      const currentValue = ptzSettings[setting] as number;
+      const newValue =
+        direction === "up"
+          ? Math.min(currentValue + range.step, range.max)
+          : Math.max(currentValue - range.step, range.min);
+
+      if (newValue === currentValue) return;
+
+      setApplyingControl(setting);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      try {
+        let success = false;
+
+        switch (setting) {
+          case "brightness":
+            success = await setCameraBrightness(camera, newValue);
+            break;
+          case "saturation":
+            success = await setCameraSaturation(camera, newValue);
+            break;
+          case "contrast":
+            success = await setCameraContrast(camera, newValue);
+            break;
+          case "sharpness":
+            success = await setCameraSharpness(camera, newValue);
+            break;
+          case "colorTemperature":
+            success = await setCameraColorTemperature(camera, newValue);
+            break;
+          case "redGain":
+            success = await setCameraRedGain(camera, newValue);
+            break;
+          case "blueGain":
+            success = await setCameraBlueGain(camera, newValue);
+            break;
+        }
+
+        if (success) {
+          setPtzSettings((prev) => ({ ...prev, [setting]: newValue }));
+        }
+      } catch (err) {
+        console.error(`[ColorMatcher] Error adjusting ${setting}:`, err);
+      } finally {
+        setApplyingControl(null);
+      }
+    },
+    [isPtzConnected, camera, ptzSettings, applyingControl],
+  );
+
+  const adjustNativeSetting = useCallback(
+    async (
+      setting: keyof typeof NATIVE_SETTING_RANGES,
+      direction: "up" | "down",
+    ) => {
+      if (!isNativeCameraAvailable || applyingControl) return;
+
+      const range = NATIVE_SETTING_RANGES[setting];
+      const currentValue = nativeSettings[setting];
+      const newValue =
+        direction === "up"
+          ? Math.min(currentValue + range.step, range.max)
+          : Math.max(currentValue - range.step, range.min);
+
+      if (newValue === currentValue) return;
+
+      setApplyingControl(setting);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      try {
+        if (setting === "exposure") {
+          await CameraControls.setExposureCompensation(newValue);
+        } else if (setting === "colorTemperature") {
+          await CameraControls.setWhiteBalanceTemperature(newValue);
+        }
+        setNativeSettings((prev) => ({ ...prev, [setting]: newValue }));
+      } catch (err) {
+        console.error(`[ColorMatcher] Error adjusting ${setting}:`, err);
+      } finally {
+        setApplyingControl(null);
+      }
+    },
+    [isNativeCameraAvailable, nativeSettings, applyingControl],
+  );
+
+  const handleResetToDefault = useCallback(async () => {
+    if (!canApply || isApplying) return;
 
     setIsApplying(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const fullSettings = mergeWithDefaults(selectedPreset.settings);
-      
       if (isPtzConnected && camera) {
-        const result = await applyCameraImageSettings(camera, fullSettings);
-
-        if (result.success) {
-          setLastApplied(selectedPreset.id);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-          Alert.alert(
-            "Partial Success",
-            `Applied: ${result.applied.join(", ")}\nFailed: ${result.failed.join(", ")}`
-          );
-        }
+        await resetCameraImageSettings(camera);
+        setPtzSettings({
+          whiteBalanceMode: "auto",
+          colorTemperature: 21,
+          redGain: 128,
+          blueGain: 128,
+          brightness: 7,
+          saturation: 7,
+          contrast: 7,
+          sharpness: 7,
+          hue: 7,
+        });
       } else if (isNativeCameraAvailable) {
-        const kelvin = mapColorTempToKelvin(fullSettings.colorTemperature);
-        await CameraControls.setWhiteBalanceTemperature(kelvin);
-        
-        const exposure = mapBrightnessToExposure(fullSettings.brightness);
-        await CameraControls.setExposureCompensation(exposure);
-        
-        setLastApplied(selectedPreset.id);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Applied", `${selectedPreset.name} applied to native camera`);
+        await CameraControls.resetToAuto();
+        setNativeSettings({ exposure: 0, colorTemperature: 5500 });
       }
+
+      const neutralPreset = presets.find((p) => p.id === "neutral");
+      setSelectedPreset(neutralPreset || null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to apply preset");
+      console.error("[ColorMatcher] Reset error:", err);
     } finally {
       setIsApplying(false);
     }
-  };
-
-  const handleResetToDefault = async () => {
-    if (!canApply) return;
-
-    Alert.alert(
-      "Reset Settings",
-      "Reset all color settings to defaults?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: async () => {
-            setIsApplying(true);
-            try {
-              if (isPtzConnected && camera) {
-                await resetCameraImageSettings(camera);
-              } else if (isNativeCameraAvailable) {
-                await CameraControls.resetToAuto();
-              }
-              setSelectedPreset(presets.find(p => p.id === "neutral") || null);
-              setLastApplied("neutral");
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (err: any) {
-              Alert.alert("Error", err?.message || "Failed to reset");
-            } finally {
-              setIsApplying(false);
-            }
-          },
-        },
-      ]
-    );
-  };
+  }, [
+    canApply,
+    isApplying,
+    isPtzConnected,
+    camera,
+    isNativeCameraAvailable,
+    presets,
+  ]);
 
   const renderPresetCard = (preset: ColorStylePreset) => {
     const isSelected = selectedPreset?.id === preset.id;
-    const isApplied = lastApplied === preset.id;
     const iconName = PRESET_ICONS[preset.icon] || "sliders";
     const hasThumbnail = preset.thumbnailImage !== undefined;
 
@@ -190,11 +416,13 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
         <Pressable
           key={preset.id}
           onPress={() => handleSelectPreset(preset)}
+          disabled={isApplying}
           style={[
             styles.presetCardWithImage,
             {
               borderColor: isSelected ? theme.primary : "transparent",
               borderWidth: isSelected ? 2 : 0,
+              opacity: isApplying && !isSelected ? 0.5 : 1,
             },
           ]}
         >
@@ -204,7 +432,7 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
             imageStyle={{ borderRadius: BorderRadius.md }}
           >
             <View style={styles.presetImageOverlay}>
-              <Text 
+              <Text
                 style={[styles.presetNameOnImage, { color: "#FFF" }]}
                 numberOfLines={2}
               >
@@ -212,8 +440,10 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
               </Text>
             </View>
           </ImageBackground>
-          {isApplied && (
-            <View style={[styles.appliedBadge, { backgroundColor: theme.success }]}>
+          {isSelected && (
+            <View
+              style={[styles.selectedBadge, { backgroundColor: theme.primary }]}
+            >
               <Feather name="check" size={10} color="#FFF" />
             </View>
           )}
@@ -225,26 +455,44 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
       <Pressable
         key={preset.id}
         onPress={() => handleSelectPreset(preset)}
+        disabled={isApplying}
         style={[
           styles.presetCard,
           {
-            backgroundColor: isSelected ? theme.primary + "20" : theme.backgroundSecondary,
+            backgroundColor: isSelected
+              ? theme.primary + "20"
+              : theme.backgroundSecondary,
             borderColor: isSelected ? theme.primary : "transparent",
             borderWidth: isSelected ? 2 : 0,
+            opacity: isApplying && !isSelected ? 0.5 : 1,
           },
         ]}
       >
-        <View style={[styles.presetIconContainer, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name={iconName} size={20} color={isSelected ? theme.primary : theme.textSecondary} />
+        <View
+          style={[
+            styles.presetIconContainer,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
+          <Feather
+            name={iconName}
+            size={20}
+            color={isSelected ? theme.primary : theme.textSecondary}
+          />
         </View>
-        <Text 
-          style={[styles.presetName, { color: isSelected ? theme.primary : theme.text }]}
+        <Text
+          style={[
+            styles.presetName,
+            { color: isSelected ? theme.primary : theme.text },
+          ]}
           numberOfLines={1}
         >
           {preset.name}
         </Text>
-        {isApplied && (
-          <View style={[styles.appliedBadge, { backgroundColor: theme.success }]}>
+        {isSelected && (
+          <View
+            style={[styles.selectedBadge, { backgroundColor: theme.primary }]}
+          >
             <Feather name="check" size={10} color="#FFF" />
           </View>
         )}
@@ -252,118 +500,184 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
     );
   };
 
-  const renderSettingPreview = (label: string, value: number | string | undefined, max?: number) => {
-    if (value === undefined) return null;
-    
-    const numValue = typeof value === "number" ? value : 0;
-    const percentage = max ? (numValue / max) * 100 : 0;
+  const renderPtzControl = (
+    label: string,
+    setting: keyof typeof PTZ_SETTING_RANGES,
+    icon: FeatherIconName,
+  ) => {
+    const value = ptzSettings[setting] as number;
+    const range = PTZ_SETTING_RANGES[setting];
+    const isAdjusting = applyingControl === setting;
 
     return (
-      <View style={styles.settingRow}>
-        <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>{label}</Text>
-        {max ? (
-          <View style={styles.settingBarContainer}>
-            <View style={[styles.settingBarBg, { backgroundColor: theme.backgroundSecondary }]}>
-              <View 
-                style={[
-                  styles.settingBarFill, 
-                  { backgroundColor: theme.primary, width: `${percentage}%` }
-                ]} 
-              />
-            </View>
-            <Text style={[styles.settingValue, { color: theme.text }]}>{value}</Text>
+      <View key={setting} style={styles.adjustmentRow}>
+        <View style={styles.adjustmentLabelContainer}>
+          <Feather name={icon} size={14} color={theme.textSecondary} />
+          <Text style={[styles.adjustmentLabel, { color: theme.text }]}>
+            {label}
+          </Text>
+        </View>
+
+        <View style={styles.adjustmentControls}>
+          <Pressable
+            onPress={() => adjustPtzSetting(setting, "down")}
+            disabled={isAdjusting || value <= range.min}
+            style={[
+              styles.adjustButton,
+              {
+                backgroundColor: theme.backgroundDefault,
+                opacity: value <= range.min ? 0.3 : 1,
+              },
+            ]}
+          >
+            <Feather name="minus" size={16} color={theme.primary} />
+          </Pressable>
+
+          <View style={styles.adjustmentValueContainer}>
+            {isAdjusting ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : (
+              <Text style={[styles.adjustmentValue, { color: theme.text }]}>
+                {value}
+              </Text>
+            )}
           </View>
-        ) : (
-          <Text style={[styles.settingValue, { color: theme.text }]}>{value}</Text>
-        )}
+
+          <Pressable
+            onPress={() => adjustPtzSetting(setting, "up")}
+            disabled={isAdjusting || value >= range.max}
+            style={[
+              styles.adjustButton,
+              {
+                backgroundColor: theme.backgroundDefault,
+                opacity: value >= range.max ? 0.3 : 1,
+              },
+            ]}
+          >
+            <Feather name="plus" size={16} color={theme.primary} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
+  const renderNativeControl = (
+    label: string,
+    setting: keyof typeof NATIVE_SETTING_RANGES,
+    icon: FeatherIconName,
+    formatValue: (v: number) => string,
+  ) => {
+    const value = nativeSettings[setting];
+    const range = NATIVE_SETTING_RANGES[setting];
+    const isAdjusting = applyingControl === setting;
+
+    return (
+      <View key={setting} style={styles.adjustmentRow}>
+        <View style={styles.adjustmentLabelContainer}>
+          <Feather name={icon} size={14} color={theme.textSecondary} />
+          <Text style={[styles.adjustmentLabel, { color: theme.text }]}>
+            {label}
+          </Text>
+        </View>
+
+        <View style={styles.adjustmentControls}>
+          <Pressable
+            onPress={() => adjustNativeSetting(setting, "down")}
+            disabled={isAdjusting || value <= range.min}
+            style={[
+              styles.adjustButton,
+              {
+                backgroundColor: theme.backgroundDefault,
+                opacity: value <= range.min ? 0.3 : 1,
+              },
+            ]}
+          >
+            <Feather name="minus" size={16} color={theme.primary} />
+          </Pressable>
+
+          <View style={styles.adjustmentValueContainer}>
+            {isAdjusting ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : (
+              <Text style={[styles.adjustmentValue, { color: theme.text }]}>
+                {formatValue(value)}
+              </Text>
+            )}
+          </View>
+
+          <Pressable
+            onPress={() => adjustNativeSetting(setting, "up")}
+            disabled={isAdjusting || value >= range.max}
+            style={[
+              styles.adjustButton,
+              {
+                backgroundColor: theme.backgroundDefault,
+                opacity: value >= range.max ? 0.3 : 1,
+              },
+            ]}
+          >
+            <Feather name="plus" size={16} color={theme.primary} />
+          </Pressable>
+        </View>
       </View>
     );
   };
 
   if (!canApply) {
     return (
-      <View style={[styles.notConnected, { backgroundColor: theme.backgroundSecondary }]}>
+      <View
+        style={[
+          styles.notConnected,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
+      >
         <Feather name="wifi-off" size={32} color={theme.textSecondary} />
         <Text style={[styles.notConnectedText, { color: theme.textSecondary }]}>
-          Connect to a PTZ camera or enable native camera to adjust color settings
+          Connect to a PTZ camera or enable device camera to adjust color
+          settings
         </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        Color Presets
-      </Text>
-      <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-        Tap a style to select, then apply to camera
-      </Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Select Style
+        </Text>
+        <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+          Tap to apply instantly
+        </Text>
 
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.presetsRow}
-      >
-        {presets.map(renderPresetCard)}
-      </ScrollView>
-
-      {selectedPreset && (
-        <Animated.View 
-          entering={FadeIn.duration(200)}
-          style={[styles.selectedCard, { backgroundColor: theme.backgroundSecondary }]}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.presetsRow}
         >
-          <View style={styles.selectedHeader}>
-            <View>
-              <Text style={[styles.selectedName, { color: theme.text }]}>
-                {selectedPreset.name}
-              </Text>
-              <Text style={[styles.selectedDescription, { color: theme.textSecondary }]}>
-                {selectedPreset.description}
-              </Text>
-            </View>
-            {selectedPreset.isBuiltIn && (
-              <View style={[styles.builtInBadge, { backgroundColor: theme.primary + "20" }]}>
-                <Text style={[styles.builtInText, { color: theme.primary }]}>Built-in</Text>
-              </View>
-            )}
-          </View>
+          {presets.map(renderPresetCard)}
+        </ScrollView>
 
-          <View style={styles.settingsPreview}>
-            {renderSettingPreview("White Balance", selectedPreset.settings.whiteBalanceMode)}
-            {renderSettingPreview("Brightness", selectedPreset.settings.brightness, 14)}
-            {renderSettingPreview("Saturation", selectedPreset.settings.saturation, 14)}
-            {renderSettingPreview("Contrast", selectedPreset.settings.contrast, 14)}
-            {renderSettingPreview("Sharpness", selectedPreset.settings.sharpness, 14)}
-            {selectedPreset.settings.colorTemperature !== undefined && (
-              renderSettingPreview("Color Temp", selectedPreset.settings.colorTemperature, 37)
-            )}
+        {isApplying && (
+          <View style={styles.applyingIndicator}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={[styles.applyingText, { color: theme.textSecondary }]}>
+              Applying...
+            </Text>
           </View>
-
-          <Pressable
-            onPress={handleApplyPreset}
-            disabled={isApplying}
-            style={[
-              styles.applyButton,
-              { backgroundColor: theme.primary, opacity: isApplying ? 0.7 : 1 },
-            ]}
-          >
-            {isApplying ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Feather name="check" size={18} color="#FFF" />
-                <Text style={styles.applyButtonText}>Apply to Camera</Text>
-              </>
-            )}
-          </Pressable>
-        </Animated.View>
-      )}
+        )}
+      </View>
 
       {isColorAnalysisAvailable && (
-        <View style={[styles.analysisSection, { backgroundColor: theme.backgroundSecondary }]}>
+        <View
+          style={[
+            styles.section,
+            styles.cardSection,
+            { backgroundColor: theme.backgroundSecondary },
+          ]}
+        >
           <View style={styles.analysisHeader}>
-            <Text style={[styles.analysisSectionTitle, { color: theme.text }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
               Scene Analysis
             </Text>
             <Pressable
@@ -376,45 +690,77 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
               ) : (
                 <>
                   <Feather name="eye" size={14} color="#FFF" />
-                  <Text style={styles.analyzeButtonText}>Analyze</Text>
+                  <Text style={styles.analyzeButtonText}>
+                    {currentProfile ? "Re-analyze" : "Analyze"}
+                  </Text>
                 </>
               )}
             </Pressable>
           </View>
 
           {currentProfile && (
-            <Animated.View entering={FadeIn.duration(200)} style={styles.profileDisplay}>
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              style={styles.profileDisplay}
+            >
               <View style={styles.profileRow}>
                 <View style={styles.profileItem}>
-                  <Text style={[styles.profileLabel, { color: theme.textSecondary }]}>Brightness</Text>
+                  <Text
+                    style={[
+                      styles.profileLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    Brightness
+                  </Text>
                   <Text style={[styles.profileValue, { color: theme.text }]}>
                     {(currentProfile.brightness * 100).toFixed(0)}%
                   </Text>
                 </View>
                 <View style={styles.profileItem}>
-                  <Text style={[styles.profileLabel, { color: theme.textSecondary }]}>Saturation</Text>
+                  <Text
+                    style={[
+                      styles.profileLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    Saturation
+                  </Text>
                   <Text style={[styles.profileValue, { color: theme.text }]}>
                     {(currentProfile.saturation * 100).toFixed(0)}%
                   </Text>
                 </View>
                 <View style={styles.profileItem}>
-                  <Text style={[styles.profileLabel, { color: theme.textSecondary }]}>Temperature</Text>
+                  <Text
+                    style={[
+                      styles.profileLabel,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    Temperature
+                  </Text>
                   <Text style={[styles.profileValue, { color: theme.text }]}>
-                    {currentProfile.temperature > 1 ? "Cool" : currentProfile.temperature < 0.8 ? "Warm" : "Neutral"}
+                    {currentProfile.temperature > 1
+                      ? "Cool"
+                      : currentProfile.temperature < 0.8
+                        ? "Warm"
+                        : "Neutral"}
                   </Text>
                 </View>
               </View>
               <View style={styles.colorSwatch}>
-                <View 
+                <View
                   style={[
-                    styles.swatchColor, 
-                    { 
-                      backgroundColor: `rgb(${Math.round(currentProfile.red * 255)}, ${Math.round(currentProfile.green * 255)}, ${Math.round(currentProfile.blue * 255)})` 
-                    }
-                  ]} 
+                    styles.swatchColor,
+                    {
+                      backgroundColor: `rgb(${Math.round(currentProfile.red * 255)}, ${Math.round(currentProfile.green * 255)}, ${Math.round(currentProfile.blue * 255)})`,
+                    },
+                  ]}
                 />
-                <Text style={[styles.swatchLabel, { color: theme.textSecondary }]}>
-                  Avg Color
+                <Text
+                  style={[styles.swatchLabel, { color: theme.textSecondary }]}
+                >
+                  Average Color
                 </Text>
               </View>
             </Animated.View>
@@ -422,23 +768,82 @@ export function ColorMatcher({ camera, isConnected, getFrame }: ColorMatcherProp
         </View>
       )}
 
+      <View
+        style={[
+          styles.section,
+          styles.cardSection,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
+      >
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Fine Tune
+        </Text>
+        <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+          {isPtzConnected
+            ? "Adjust PTZ camera settings"
+            : "Adjust device camera settings"}
+        </Text>
+
+        <View style={styles.adjustmentsList}>
+          {isPtzConnected ? (
+            <>
+              {renderPtzControl("Brightness", "brightness", "sun")}
+              {renderPtzControl("Saturation", "saturation", "droplet")}
+              {renderPtzControl("Contrast", "contrast", "sliders")}
+              {renderPtzControl("Sharpness", "sharpness", "aperture")}
+              {renderPtzControl(
+                "Color Temp",
+                "colorTemperature",
+                "thermometer",
+              )}
+              {renderPtzControl("Red Gain", "redGain", "circle")}
+              {renderPtzControl("Blue Gain", "blueGain", "circle")}
+            </>
+          ) : (
+            <>
+              {renderNativeControl("Exposure", "exposure", "sun", (v) =>
+                v >= 0 ? `+${v.toFixed(1)}` : v.toFixed(1),
+              )}
+              {renderNativeControl(
+                "Color Temp",
+                "colorTemperature",
+                "thermometer",
+                (v) => `${v}K`,
+              )}
+            </>
+          )}
+        </View>
+      </View>
+
       <Pressable
         onPress={handleResetToDefault}
-        style={[styles.resetButton, { backgroundColor: theme.backgroundSecondary }]}
+        disabled={isApplying}
+        style={[
+          styles.resetButton,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
       >
         <Feather name="refresh-cw" size={16} color={theme.textSecondary} />
         <Text style={[styles.resetButtonText, { color: theme.textSecondary }]}>
           Reset to Defaults
         </Text>
       </Pressable>
-    </View>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: Spacing.md,
+  },
+  section: {
+    marginBottom: Spacing.lg,
+  },
+  cardSection: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
   },
   notConnected: {
     padding: Spacing.xl,
@@ -456,7 +861,8 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     fontSize: Typography.small.fontSize,
-    marginTop: -Spacing.xs,
+    marginTop: 2,
+    marginBottom: Spacing.sm,
   },
   presetsRow: {
     flexDirection: "row",
@@ -506,116 +912,44 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
   },
-  appliedBadge: {
+  selectedBadge: {
     position: "absolute",
     top: 4,
     right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: "center",
     alignItems: "center",
   },
-  selectedCard: {
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    gap: Spacing.md,
-  },
-  selectedHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  selectedName: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
-  },
-  selectedDescription: {
-    fontSize: Typography.small.fontSize,
-    marginTop: 2,
-  },
-  builtInBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.sm,
-  },
-  builtInText: {
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  settingsPreview: {
-    gap: Spacing.xs,
-  },
-  settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  settingLabel: {
-    fontSize: Typography.small.fontSize,
-    width: 90,
-  },
-  settingBarContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  settingBarBg: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  settingBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  settingValue: {
-    fontSize: Typography.small.fontSize,
-    fontWeight: "500",
-    width: 40,
-    textAlign: "right",
-  },
-  applyButton: {
+  applyingIndicator: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
     gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
-  applyButtonText: {
-    color: "#FFF",
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
-  },
-  analysisSection: {
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    gap: Spacing.md,
+  applyingText: {
+    fontSize: Typography.small.fontSize,
   },
   analysisHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  analysisSectionTitle: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: "600",
+    marginBottom: Spacing.sm,
   },
   analyzeButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
     gap: Spacing.xs,
   },
   analyzeButtonText: {
     color: "#FFF",
     fontSize: Typography.small.fontSize,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   profileDisplay: {
     gap: Spacing.sm,
@@ -646,6 +980,45 @@ const styles = StyleSheet.create({
   },
   swatchLabel: {
     fontSize: Typography.small.fontSize,
+  },
+  adjustmentsList: {
+    gap: Spacing.md,
+  },
+  adjustmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  adjustmentLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  adjustmentLabel: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "500",
+  },
+  adjustmentControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  adjustButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  adjustmentValueContainer: {
+    width: 50,
+    alignItems: "center",
+  },
+  adjustmentValue: {
+    fontSize: Typography.body.fontSize,
+    fontWeight: "600",
+    textAlign: "center",
   },
   resetButton: {
     flexDirection: "row",
