@@ -13,6 +13,8 @@
       "bundleIdentifier": "com.visualreasoning.playground",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "This app needs to access your local network to connect to PTZ cameras.",
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to save captured photos and AI analysis results to your photo library.",
+        "NSLocationWhenInUseUsageDescription": "This app does not use your location, but a linked library requires this permission.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
