@@ -14,12 +14,37 @@ const STORAGE_KEYS = {
   CUSTOM_OBJECTS: "@vrp_custom_objects",
   PERSON_PROFILES: "@vrp_person_profiles",
   HAS_SEEN_ONBOARDING: "@vrp_has_seen_onboarding",
+  SONG_PRESET_MAPPINGS: "@vrp_song_preset_mappings",
+  SETLISTS: "@vrp_setlists",
+  MUSIC_MODE_SETTINGS: "@vrp_music_mode_settings",
 } as const;
 
 const SECURE_KEYS = {
   MOONDREAM_API_KEY: "vrp_moondream_api_key",
   OPENAI_API_KEY: "vrp_openai_api_key",
+  CAMERA_CREDENTIALS: "vrp_camera_credentials",
 } as const;
+
+// Security & Privacy Settings
+export interface SecuritySettings {
+  privacyModeEnabled: boolean; // Completely disables all cloud AI calls
+  biometricProtectionEnabled: boolean; // Require Face ID/Touch ID for sensitive data
+  autoClearCapturesEnabled: boolean; // Auto-delete captured frames after processing
+  autoClearDelaySeconds: number; // How long to keep captures before clearing
+  showCloudIndicator: boolean; // Show visual indicator when using cloud services
+  lastSecurityAudit: string | null; // ISO date of last security check
+}
+
+export const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
+  privacyModeEnabled: false,
+  biometricProtectionEnabled: false,
+  autoClearCapturesEnabled: false,
+  autoClearDelaySeconds: 60,
+  showCloudIndicator: true,
+  lastSecurityAudit: null,
+};
+
+const SECURITY_SETTINGS_KEY = "@vrp_security_settings";
 
 export type StreamQuality = "high" | "low";
 
@@ -427,4 +452,225 @@ export async function getHasSeenOnboarding(): Promise<boolean> {
 
 export async function setHasSeenOnboarding(seen: boolean): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEYS.HAS_SEEN_ONBOARDING, seen ? "true" : "false");
+}
+
+export type SongTriggerType = "song_start" | "song_end" | "chorus" | "verse" | "manual";
+
+export interface SongPresetMapping {
+  id: string;
+  songIdentifier: string;
+  songTitle: string;
+  songArtist: string;
+  artworkUrl?: string;
+  presetId: string;
+  triggerType: SongTriggerType;
+  confidence: number;
+  usageCount: number;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+export interface SetlistSong {
+  order: number;
+  songIdentifier: string;
+  songTitle: string;
+  songArtist: string;
+  presetSequence: string[];
+  duration?: number;
+}
+
+export interface Setlist {
+  id: string;
+  name: string;
+  eventDate?: string;
+  songs: SetlistSong[];
+  createdAt: string;
+}
+
+export type BatteryOptimization = "aggressive" | "balanced" | "performance";
+
+export interface MusicModeSettings {
+  enabled: boolean;
+  continuousListening: boolean;
+  autoRecordOnMusic: boolean;
+  autoStopOnSilence: boolean;
+  silenceThresholdSeconds: number;
+  suggestPresets: boolean;
+  autoExecuteKnownSongs: boolean;
+  batteryOptimization: BatteryOptimization;
+}
+
+export const DEFAULT_MUSIC_MODE_SETTINGS: MusicModeSettings = {
+  enabled: false,
+  continuousListening: false,
+  autoRecordOnMusic: false,
+  autoStopOnSilence: true,
+  silenceThresholdSeconds: 5,
+  suggestPresets: true,
+  autoExecuteKnownSongs: false,
+  batteryOptimization: "balanced",
+};
+
+export async function getSongPresetMappings(): Promise<SongPresetMapping[]> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.SONG_PRESET_MAPPINGS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getSongPresetMapping(songIdentifier: string): Promise<SongPresetMapping | null> {
+  const mappings = await getSongPresetMappings();
+  return mappings.find((m) => m.songIdentifier === songIdentifier) ?? null;
+}
+
+export async function saveSongPresetMapping(mapping: SongPresetMapping): Promise<void> {
+  const mappings = await getSongPresetMappings();
+  const existingIndex = mappings.findIndex((m) => m.id === mapping.id);
+
+  if (existingIndex >= 0) {
+    mappings[existingIndex] = mapping;
+  } else {
+    mappings.push(mapping);
+  }
+
+  await AsyncStorage.setItem(STORAGE_KEYS.SONG_PRESET_MAPPINGS, JSON.stringify(mappings));
+}
+
+export async function deleteSongPresetMapping(id: string): Promise<void> {
+  const mappings = await getSongPresetMappings();
+  const filtered = mappings.filter((m) => m.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.SONG_PRESET_MAPPINGS, JSON.stringify(filtered));
+}
+
+export async function incrementSongMappingUsage(songIdentifier: string): Promise<void> {
+  const mappings = await getSongPresetMappings();
+  const mapping = mappings.find((m) => m.songIdentifier === songIdentifier);
+  if (mapping) {
+    mapping.usageCount++;
+    mapping.confidence = Math.min(1, mapping.confidence + 0.05);
+    mapping.lastUsedAt = new Date().toISOString();
+    await AsyncStorage.setItem(STORAGE_KEYS.SONG_PRESET_MAPPINGS, JSON.stringify(mappings));
+  }
+}
+
+export async function getSetlists(): Promise<Setlist[]> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.SETLISTS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveSetlist(setlist: Setlist): Promise<void> {
+  const setlists = await getSetlists();
+  const existingIndex = setlists.findIndex((s) => s.id === setlist.id);
+
+  if (existingIndex >= 0) {
+    setlists[existingIndex] = setlist;
+  } else {
+    setlists.push(setlist);
+  }
+
+  await AsyncStorage.setItem(STORAGE_KEYS.SETLISTS, JSON.stringify(setlists));
+}
+
+export async function deleteSetlist(id: string): Promise<void> {
+  const setlists = await getSetlists();
+  const filtered = setlists.filter((s) => s.id !== id);
+  await AsyncStorage.setItem(STORAGE_KEYS.SETLISTS, JSON.stringify(filtered));
+}
+
+export async function getMusicModeSettings(): Promise<MusicModeSettings> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.MUSIC_MODE_SETTINGS);
+    return data ? { ...DEFAULT_MUSIC_MODE_SETTINGS, ...JSON.parse(data) } : DEFAULT_MUSIC_MODE_SETTINGS;
+  } catch {
+    return DEFAULT_MUSIC_MODE_SETTINGS;
+  }
+}
+
+export async function saveMusicModeSettings(settings: Partial<MusicModeSettings>): Promise<void> {
+  const current = await getMusicModeSettings();
+  const updated = { ...current, ...settings };
+  await AsyncStorage.setItem(STORAGE_KEYS.MUSIC_MODE_SETTINGS, JSON.stringify(updated));
+}
+
+export async function getSecuritySettings(): Promise<SecuritySettings> {
+  try {
+    const data = await AsyncStorage.getItem(SECURITY_SETTINGS_KEY);
+    return data ? { ...DEFAULT_SECURITY_SETTINGS, ...JSON.parse(data) } : DEFAULT_SECURITY_SETTINGS;
+  } catch {
+    return DEFAULT_SECURITY_SETTINGS;
+  }
+}
+
+export async function saveSecuritySettings(settings: Partial<SecuritySettings>): Promise<void> {
+  const current = await getSecuritySettings();
+  const updated = { ...current, ...settings };
+  await AsyncStorage.setItem(SECURITY_SETTINGS_KEY, JSON.stringify(updated));
+}
+
+export async function isPrivacyModeEnabled(): Promise<boolean> {
+  const settings = await getSecuritySettings();
+  return settings.privacyModeEnabled;
+}
+
+export async function setPrivacyMode(enabled: boolean): Promise<void> {
+  await saveSecuritySettings({ privacyModeEnabled: enabled });
+}
+
+interface SecureCameraCredentials {
+  [cameraId: string]: {
+    username: string;
+    password: string;
+  };
+}
+
+export async function getSecureCameraCredentials(): Promise<SecureCameraCredentials> {
+  try {
+    const data = await SecureStore.getItemAsync(SECURE_KEYS.CAMERA_CREDENTIALS);
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function setSecureCameraCredentials(
+  cameraId: string,
+  username: string,
+  password: string
+): Promise<void> {
+  const credentials = await getSecureCameraCredentials();
+  credentials[cameraId] = { username, password };
+  await SecureStore.setItemAsync(SECURE_KEYS.CAMERA_CREDENTIALS, JSON.stringify(credentials));
+}
+
+export async function deleteSecureCameraCredentials(cameraId: string): Promise<void> {
+  const credentials = await getSecureCameraCredentials();
+  delete credentials[cameraId];
+  if (Object.keys(credentials).length === 0) {
+    await SecureStore.deleteItemAsync(SECURE_KEYS.CAMERA_CREDENTIALS);
+  } else {
+    await SecureStore.setItemAsync(SECURE_KEYS.CAMERA_CREDENTIALS, JSON.stringify(credentials));
+  }
+}
+
+export async function migrateCameraCredentialsToSecureStorage(): Promise<void> {
+  try {
+    const profiles = await getCameraProfiles();
+    const secureCredentials = await getSecureCameraCredentials();
+    
+    for (const profile of profiles) {
+      if (profile.username || profile.password) {
+        if (!secureCredentials[profile.id]) {
+          await setSecureCameraCredentials(profile.id, profile.username, profile.password);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to migrate camera credentials:", error);
+  }
 }

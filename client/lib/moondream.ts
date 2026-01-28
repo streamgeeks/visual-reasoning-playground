@@ -1,9 +1,25 @@
-/**
- * Direct Moondream API client - bypasses server proxy
- * Allows the app to work without running the Express backend
- */
+import { trackApiCall } from "./bundledApiKey";
+import { isPrivacyModeEnabled } from "./storage";
 
 const MOONDREAM_API_BASE = "https://api.moondream.ai/v1";
+
+export class PrivacyModeBlockedError extends Error {
+  constructor() {
+    super("Cloud AI is disabled. Privacy Mode is enabled - all processing is local only.");
+    this.name = "PrivacyModeBlockedError";
+  }
+}
+
+async function checkPrivacyMode(): Promise<void> {
+  const privacyEnabled = await isPrivacyModeEnabled();
+  if (privacyEnabled) {
+    throw new PrivacyModeBlockedError();
+  }
+}
+
+function estimateBase64Size(base64: string): number {
+  return Math.ceil((base64.length * 3) / 4);
+}
 
 export interface MoondreamDetectionResult {
   found: boolean;
@@ -19,15 +35,14 @@ export interface MoondreamDetectionResult {
   error?: string;
 }
 
-/**
- * Describe a scene using Moondream's query endpoint
- */
 export async function describeScene(
   imageBase64: string,
   apiKey: string,
-  prompt: string = "Describe this scene in detail. What do you see?"
-): Promise<{ description: string; error?: string }> {
+  prompt: string = "Describe this scene in detail. What do you see?",
+): Promise<{ description: string; error?: string; privacyBlocked?: boolean }> {
   try {
+    await checkPrivacyMode();
+    
     const response = await fetch(`${MOONDREAM_API_BASE}/query`, {
       method: "POST",
       headers: {
@@ -51,10 +66,18 @@ export async function describeScene(
     }
 
     const data = await response.json();
+    await trackApiCall(apiKey);
     return {
-      description: data.answer || data.caption || data.result || "Unable to describe the scene.",
+      description:
+        data.answer ||
+        data.caption ||
+        data.result ||
+        "Unable to describe the scene.",
     };
   } catch (error) {
+    if (error instanceof PrivacyModeBlockedError) {
+      return { description: "", error: error.message, privacyBlocked: true };
+    }
     console.error("Moondream describe error:", error);
     return {
       description: "",
@@ -63,16 +86,14 @@ export async function describeScene(
   }
 }
 
-/**
- * Detect an object using Moondream's detect endpoint
- */
 export async function detectObject(
   imageBase64: string,
   apiKey: string,
-  objectType: string
-): Promise<MoondreamDetectionResult> {
+  objectType: string,
+): Promise<MoondreamDetectionResult & { privacyBlocked?: boolean }> {
   try {
-    // Try the detect endpoint first
+    await checkPrivacyMode();
+    
     const response = await fetch(`${MOONDREAM_API_BASE}/detect`, {
       method: "POST",
       headers: {
@@ -86,7 +107,9 @@ export async function detectObject(
     });
 
     if (!response.ok) {
-      console.log(`Moondream detect endpoint returned ${response.status}, trying query fallback`);
+      console.log(
+        `Moondream detect endpoint returned ${response.status}, trying query fallback`,
+      );
       // Fallback to query endpoint
       return await detectObjectWithQuery(imageBase64, apiKey, objectType);
     }
@@ -114,6 +137,7 @@ export async function detectObject(
 
     const confidence = detection.confidence ?? detection.score ?? 0.8;
 
+    await trackApiCall(apiKey);
     return {
       found: true,
       x: centerX,
@@ -122,6 +146,9 @@ export async function detectObject(
       box: { x_min, y_min, x_max, y_max },
     };
   } catch (error) {
+    if (error instanceof PrivacyModeBlockedError) {
+      return { found: false, error: error.message, privacyBlocked: true };
+    }
     console.error("Moondream detection error:", error);
     return {
       found: false,
@@ -130,13 +157,10 @@ export async function detectObject(
   }
 }
 
-/**
- * Fallback detection using the query endpoint with coordinate parsing
- */
 async function detectObjectWithQuery(
   imageBase64: string,
   apiKey: string,
-  objectType: string
+  objectType: string,
 ): Promise<MoondreamDetectionResult> {
   const prompt = `Locate the ${objectType} in this image. If visible, respond with the bounding box coordinates in format: "x_min,y_min,x_max,y_max" where values are between 0 and 1. If not visible, say "not found".`;
 
@@ -159,14 +183,21 @@ async function detectObjectWithQuery(
     }
 
     const data = await response.json();
+    await trackApiCall(apiKey);
     const answer = (data.answer || "").toLowerCase().trim();
 
-    if (answer.includes("not found") || answer.includes("cannot") || answer.includes("don't see")) {
+    if (
+      answer.includes("not found") ||
+      answer.includes("cannot") ||
+      answer.includes("don't see")
+    ) {
       return { found: false };
     }
 
     // Try to extract 4 coordinates for bounding box
-    const boxMatch = answer.match(/(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/);
+    const boxMatch = answer.match(
+      /(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/,
+    );
     if (boxMatch) {
       const x_min = parseFloat(boxMatch[1]);
       const y_min = parseFloat(boxMatch[2]);
@@ -209,13 +240,13 @@ async function detectObjectWithQuery(
       }
     }
 
-     return { found: false };
-   } catch (error) {
-     return {
-       found: false,
-       error: error instanceof Error ? error.message : "Network error",
-     };
-   }
+    return { found: false };
+  } catch (error) {
+    return {
+      found: false,
+      error: error instanceof Error ? error.message : "Network error",
+    };
+  }
 }
 
 /**
@@ -224,8 +255,19 @@ async function detectObjectWithQuery(
  */
 export async function detectNumberedPeople(
   imageBase64: string,
-  apiKey: string
-): Promise<{ id: string; box: { x_min: number; y_min: number; x_max: number; y_max: number } }[]> {
+  apiKey: string,
+): Promise<
+  {
+    id: string;
+    box: { x_min: number; y_min: number; x_max: number; y_max: number };
+  }[]
+> {
+  try {
+    await checkPrivacyMode();
+  } catch {
+    return [];
+  }
+  
   const prompt = `Detect all people in this image. For each person, assign a sequential ID starting from 1. Return the results in this exact format:
 Person 1: x1,y1,x2,y2
 Person 2: x1,y1,x2,y2
@@ -252,19 +294,25 @@ Where coordinates are normalized 0-1 values (x_min,y_min,x_max,y_max). If no peo
     }
 
     const data = await response.json();
+    await trackApiCall(apiKey);
     const answer = (data.answer || data.caption || data.result || "").trim();
 
     if (answer.toLowerCase().includes("no people detected")) {
       return [];
     }
 
-    const results: { id: string; box: { x_min: number; y_min: number; x_max: number; y_max: number } }[] = [];
+    const results: {
+      id: string;
+      box: { x_min: number; y_min: number; x_max: number; y_max: number };
+    }[] = [];
 
     // Parse each line: "Person N: x1,y1,x2,y2"
     const lines = answer.split("\n").filter((line: string) => line.trim());
 
     for (const line of lines) {
-      const match = line.match(/Person\s+(\d+)\s*:\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/i);
+      const match = line.match(
+        /Person\s+(\d+)\s*:\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/i,
+      );
 
       if (match) {
         const personId = match[1];
@@ -274,13 +322,22 @@ Where coordinates are normalized 0-1 values (x_min,y_min,x_max,y_max). If no peo
         const y_max = parseFloat(match[5]);
 
         // Validate coordinates are in valid range
-        if (x_min >= 0 && x_max <= 1 && y_min >= 0 && y_max <= 1 && x_min < x_max && y_min < y_max) {
+        if (
+          x_min >= 0 &&
+          x_max <= 1 &&
+          y_min >= 0 &&
+          y_max <= 1 &&
+          x_min < x_max &&
+          y_min < y_max
+        ) {
           results.push({
             id: `Person ${personId}`,
             box: { x_min, y_min, x_max, y_max },
           });
         } else {
-          console.warn(`Invalid coordinates for Person ${personId}: ${x_min},${y_min},${x_max},${y_max}`);
+          console.warn(
+            `Invalid coordinates for Person ${personId}: ${x_min},${y_min},${x_max},${y_max}`,
+          );
         }
       }
     }
@@ -305,8 +362,14 @@ export interface InterestingObject {
 export async function detectInterestingObjects(
   imageBase64: string,
   apiKey: string,
-  maxObjects: number = 5
+  maxObjects: number = 5,
 ): Promise<InterestingObject[]> {
+  try {
+    await checkPrivacyMode();
+  } catch {
+    return [];
+  }
+  
   const prompt = `Identify the ${maxObjects} most interesting and visually distinct objects in this image. For each object, provide its name and bounding box coordinates.
 
 Return in this exact format:
@@ -336,13 +399,16 @@ Coordinates should be normalized 0-1 values. Focus on concrete, specific objects
     }
 
     const data = await response.json();
+    await trackApiCall(apiKey);
     const answer = (data.answer || data.caption || data.result || "").trim();
 
     const results: InterestingObject[] = [];
     const lines = answer.split("\n").filter((line: string) => line.trim());
 
     for (const line of lines) {
-      const match = line.match(/^\d+\.\s*\[?([^\]:]+)\]?\s*:\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/i);
+      const match = line.match(
+        /^\d+\.\s*\[?([^\]:]+)\]?\s*:\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)/i,
+      );
 
       if (match) {
         const name = match[1].trim().toLowerCase();
@@ -351,7 +417,14 @@ Coordinates should be normalized 0-1 values. Focus on concrete, specific objects
         const x_max = parseFloat(match[4]);
         const y_max = parseFloat(match[5]);
 
-        if (x_min >= 0 && x_max <= 1 && y_min >= 0 && y_max <= 1 && x_min < x_max && y_min < y_max) {
+        if (
+          x_min >= 0 &&
+          x_max <= 1 &&
+          y_min >= 0 &&
+          y_max <= 1 &&
+          x_min < x_max &&
+          y_min < y_max
+        ) {
           results.push({
             name,
             box: { x_min, y_min, x_max, y_max },

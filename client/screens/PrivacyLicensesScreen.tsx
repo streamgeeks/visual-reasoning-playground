@@ -140,6 +140,56 @@ export default function PrivacyLicensesScreen() {
         iconColor="#9B59B6"
       />
 
+      <View style={[styles.section, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.sectionHeader}>
+          <Feather name="lock" size={20} color="#9B59B6" />
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Moondream Security</Text>
+        </View>
+        <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
+          When you use Moondream AI features, here's how your data is handled:
+        </Text>
+        
+        <View style={styles.privacyItem}>
+          <Feather name="send" size={16} color={theme.accent} />
+          <View style={styles.privacyItemContent}>
+            <Text style={[styles.privacyItemTitle, { color: theme.text }]}>What's Sent</Text>
+            <Text style={[styles.privacyItemText, { color: theme.textSecondary }]}>
+              Only the current camera frame (JPEG image) and your query are sent. No location, device info, or personal data is transmitted.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.privacyItem}>
+          <Feather name="shield" size={16} color={theme.success} />
+          <View style={styles.privacyItemContent}>
+            <Text style={[styles.privacyItemTitle, { color: theme.text }]}>Encryption</Text>
+            <Text style={[styles.privacyItemText, { color: theme.textSecondary }]}>
+              All data is transmitted over HTTPS with TLS 1.3 encryption. Your API key is stored in iOS Keychain, the most secure storage on Apple devices.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.privacyItem}>
+          <Feather name="trash-2" size={16} color={theme.warning} />
+          <View style={styles.privacyItemContent}>
+            <Text style={[styles.privacyItemTitle, { color: theme.text }]}>Data Retention</Text>
+            <Text style={[styles.privacyItemText, { color: theme.textSecondary }]}>
+              Moondream processes images in real-time and does not store them. Images are discarded immediately after processing. No training on your data.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.privacyItem}>
+          <Feather name="toggle-left" size={16} color={theme.primary} />
+          <View style={styles.privacyItemContent}>
+            <Text style={[styles.privacyItemTitle, { color: theme.text }]}>Privacy Mode</Text>
+            <Text style={[styles.privacyItemText, { color: theme.textSecondary }]}>
+              Enable Privacy Mode in Security settings to completely disable all cloud AI. The app will only use on-device processing (YOLO + Apple Vision).
+            </Text>
+          </View>
+        </View>
+      </View>
+
       <LicenseCard
         name="Apple Vision Framework"
         license="Proprietary"
@@ -189,6 +239,26 @@ export default function PrivacyLicensesScreen() {
         <Text style={[styles.paragraph, { color: theme.textSecondary, marginTop: Spacing.sm }]}>
           Apple Vision and Core ML are proprietary frameworks included with iOS. Their use is governed by the Apple Developer Program License Agreement.
         </Text>
+      </View>
+
+      <View style={[styles.section, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.sectionHeader}>
+          <Feather name="file-text" size={20} color={theme.primary} />
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Full Privacy Policy</Text>
+        </View>
+        <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
+          For the complete privacy policy, including data collection practices, third-party services, and your rights, please visit our website.
+        </Text>
+        <Pressable
+          onPress={() => Linking.openURL("https://visualreasoning.ai/privacy")}
+          style={({ pressed }) => [
+            styles.linkButton,
+            { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Feather name="external-link" size={14} color={theme.primary} />
+          <Text style={[styles.linkText, { color: theme.primary }]}>View Privacy Policy</Text>
+        </Pressable>
       </View>
 
       <View style={styles.footer}>

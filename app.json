@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Visual Reasoning Playground",
+    "name": "Visual Reasoning - AI Camera",
     "slug": "visual-reasoning-playground",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,18 +10,25 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.visualreasoning.playground",
+      "bundleIdentifier": "com.visualreasoning.ai",
+      "supportsMultipleInterfaceOrientations": true,
+      "entitlements": {
+        "com.apple.developer.weatherkit": true
+      },
       "infoPlist": {
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera for AI visual analysis, color matching, and live video streaming.",
         "NSLocalNetworkUsageDescription": "This app needs to access your local network to connect to PTZ cameras.",
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to save captured photos and AI analysis results to your photo library.",
-        "NSLocationWhenInUseUsageDescription": "This app does not use your location, but a linked library requires this permission.",
+        "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save captured photos and AI analysis results to your photo library.",
+        "NSLocationWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to access your location for local weather data and photography lighting recommendations.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
         },
         "ITSAppUsesNonExemptEncryption": false,
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition for voice control.",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone for voice commands."
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone for voice commands and music detection.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
@@ -33,7 +40,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.visualreasoning.playground",
+      "package": "com.visualreasoning.ai",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -58,8 +65,31 @@
           }
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
+          "macos": {
+            "deploymentTarget": "12.0"
+          }
+        }
+      ],
+      [
+        "./modules/shazam-kit/app.plugin.js",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to listen for music to automate camera positions."
+        }
+      ],
       "expo-web-browser",
       "expo-libvlc-player",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location for local weather data and photography lighting recommendations."
+        }
+      ],
       [
         "react-native-vision-camera",
         {

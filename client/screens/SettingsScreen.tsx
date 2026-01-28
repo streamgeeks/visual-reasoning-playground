@@ -26,7 +26,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { CameraCard } from "@/components/CameraCard";
 import { PersonManager } from "@/components/PersonManager";
-import { SettingsRow, SettingsToggle, SettingsInput } from "@/components/SettingsRow";
+import {
+  SettingsRow,
+  SettingsToggle,
+  SettingsInput,
+} from "@/components/SettingsRow";
 import { Button } from "@/components/Button";
 import {
   CameraProfile,
@@ -46,12 +50,19 @@ import {
   generateId,
   DEFAULT_TRACKING_SETTINGS,
 } from "@/lib/storage";
-import { testCameraConnection, sendPtzCommand, PTZ_COMMANDS } from "@/lib/camera";
+import {
+  testCameraConnection,
+  sendPtzCommand,
+  PTZ_COMMANDS,
+} from "@/lib/camera";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { AI_TECHNOLOGIES } from "@/lib/aiInfo";
 import { setHasSeenOnboarding } from "@/lib/storage";
 
-type SettingsNavProp = NativeStackNavigationProp<SettingsStackParamList, "Settings">;
+type SettingsNavProp = NativeStackNavigationProp<
+  SettingsStackParamList,
+  "Settings"
+>;
 
 export default function SettingsScreen() {
   const { theme } = useTheme();
@@ -61,7 +72,9 @@ export default function SettingsScreen() {
   const navigation = useNavigation<SettingsNavProp>();
 
   const [cameras, setCameras] = useState<CameraProfile[]>([]);
-  const [currentCameraId, setCurrentCameraIdState] = useState<string | null>(null);
+  const [currentCameraId, setCurrentCameraIdState] = useState<string | null>(
+    null,
+  );
   const [settings, setSettings] = useState<AppSettings>({
     replayBufferDuration: 30,
     showStatsByDefault: false,
@@ -74,7 +87,9 @@ export default function SettingsScreen() {
       trackingMode: "detection-only",
     },
   });
-  const [userProfile, setUserProfile] = useState<UserProfile>({ displayName: "User" });
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    displayName: "User",
+  });
   const [showAddCamera, setShowAddCamera] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [newCamera, setNewCamera] = useState({
@@ -95,12 +110,13 @@ export default function SettingsScreen() {
 
   const loadData = async () => {
     try {
-      const [loadedCameras, cameraId, loadedSettings, profile] = await Promise.all([
-        getCameraProfiles(),
-        getCurrentCameraId(),
-        getSettings(),
-        getUserProfile(),
-      ]);
+      const [loadedCameras, cameraId, loadedSettings, profile] =
+        await Promise.all([
+          getCameraProfiles(),
+          getCurrentCameraId(),
+          getSettings(),
+          getUserProfile(),
+        ]);
 
       setCameras(loadedCameras);
       setCurrentCameraIdState(cameraId);
@@ -118,46 +134,55 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
-  const handleDeleteCamera = useCallback(async (camera: CameraProfile) => {
-    await deleteCameraProfile(camera.id);
-    setCameras((prev) => prev.filter((c) => c.id !== camera.id));
-    
-    if (currentCameraId === camera.id) {
-      await setCurrentCameraId(null);
-      setCurrentCameraIdState(null);
-    }
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [currentCameraId]);
+  const handleDeleteCamera = useCallback(
+    async (camera: CameraProfile) => {
+      await deleteCameraProfile(camera.id);
+      setCameras((prev) => prev.filter((c) => c.id !== camera.id));
 
-  const handleTestCamera = useCallback(async (camera: CameraProfile): Promise<boolean> => {
-    try {
-      const result = await testCameraConnection(camera);
-      return result.success;
-    } catch {
-      return false;
-    }
-  }, []);
+      if (currentCameraId === camera.id) {
+        await setCurrentCameraId(null);
+        setCurrentCameraIdState(null);
+      }
 
-  const handlePtzStart = useCallback(async (command: string) => {
-    const activeCamera = cameras.find(c => c.id === currentCameraId);
-    if (!activeCamera) return;
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await sendPtzCommand(activeCamera, command);
-  }, [cameras, currentCameraId]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    [currentCameraId],
+  );
+
+  const handleTestCamera = useCallback(
+    async (camera: CameraProfile): Promise<boolean> => {
+      try {
+        const result = await testCameraConnection(camera);
+        return result.success;
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
+
+  const handlePtzStart = useCallback(
+    async (command: string) => {
+      const activeCamera = cameras.find((c) => c.id === currentCameraId);
+      if (!activeCamera) return;
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await sendPtzCommand(activeCamera, command);
+    },
+    [cameras, currentCameraId],
+  );
 
   const handlePtzStop = useCallback(async () => {
-    const activeCamera = cameras.find(c => c.id === currentCameraId);
+    const activeCamera = cameras.find((c) => c.id === currentCameraId);
     if (!activeCamera) return;
-    
+
     await sendPtzCommand(activeCamera, PTZ_COMMANDS.stop);
   }, [cameras, currentCameraId]);
 
   const handlePtzHome = useCallback(async () => {
-    const activeCamera = cameras.find(c => c.id === currentCameraId);
+    const activeCamera = cameras.find((c) => c.id === currentCameraId);
     if (!activeCamera) return;
-    
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await sendPtzCommand(activeCamera, PTZ_COMMANDS.home);
   }, [cameras, currentCameraId]);
@@ -192,12 +217,15 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [newCamera]);
 
-  const handleToggleStats = useCallback(async (value: boolean) => {
-    const newSettings = { ...settings, showStatsByDefault: value };
-    setSettings(newSettings);
-    await saveSettings({ showStatsByDefault: value });
-    Haptics.selectionAsync();
-  }, [settings]);
+  const handleToggleStats = useCallback(
+    async (value: boolean) => {
+      const newSettings = { ...settings, showStatsByDefault: value };
+      setSettings(newSettings);
+      await saveSettings({ showStatsByDefault: value });
+      Haptics.selectionAsync();
+    },
+    [settings],
+  );
 
   const handleApiKeyChange = useCallback((value: string) => {
     setPendingApiKey(value);
@@ -210,7 +238,7 @@ export default function SettingsScreen() {
     await saveSettings({ moondreamApiKey: pendingApiKey });
     setApiKeySaved(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
+
     setTimeout(() => {
       setApiKeySaved(false);
     }, 2000);
@@ -236,36 +264,59 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Section */}
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           Profile
         </ThemedText>
         <Pressable
           onPress={() => setShowEditProfile(true)}
           style={({ pressed }) => [
             styles.profileCard,
-            { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+            {
+              backgroundColor: theme.backgroundDefault,
+              opacity: pressed ? 0.8 : 1,
+            },
           ]}
         >
-          <View style={[styles.avatar, { backgroundColor: theme.backgroundSecondary }]}>
+          <View
+            style={[
+              styles.avatar,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
             <Feather name="user" size={28} color={theme.textSecondary} />
           </View>
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: theme.text }]}>
               {userProfile.displayName}
             </Text>
-            <Text style={[styles.profileSubtitle, { color: theme.textSecondary }]}>
+            <Text
+              style={[styles.profileSubtitle, { color: theme.textSecondary }]}
+            >
               Tap to edit
             </Text>
           </View>
           <Feather name="chevron-right" size={20} color={theme.textSecondary} />
         </Pressable>
 
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           Identity Tracking
         </ThemedText>
-        <PersonManager onSelectPerson={(person) => console.log("Selected person:", person?.name)} />
+        <PersonManager
+          onSelectPerson={(person) =>
+            console.log("Selected person:", person?.name)
+          }
+        />
 
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           Camera Settings
         </ThemedText>
 
@@ -280,14 +331,21 @@ export default function SettingsScreen() {
             index={index}
           />
         ))}
-        
+
         {currentCameraId ? (
-          <View style={[styles.ptzControlSection, { backgroundColor: theme.backgroundDefault }]}>
+          <View
+            style={[
+              styles.ptzControlSection,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             <View style={styles.ptzHeader}>
               <Feather name="move" size={16} color={theme.primary} />
-              <Text style={[styles.ptzTitle, { color: theme.text }]}>PTZ Test Controls</Text>
+              <Text style={[styles.ptzTitle, { color: theme.text }]}>
+                PTZ Test Controls
+              </Text>
             </View>
-            
+
             <View style={styles.ptzGrid}>
               <View style={styles.ptzRow}>
                 <View style={styles.ptzSpacer} />
@@ -296,21 +354,29 @@ export default function SettingsScreen() {
                   onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    {
+                      backgroundColor: pressed
+                        ? theme.primary
+                        : theme.backgroundSecondary,
+                    },
                   ]}
                 >
                   <Feather name="chevron-up" size={24} color={theme.text} />
                 </Pressable>
                 <View style={styles.ptzSpacer} />
               </View>
-              
+
               <View style={styles.ptzRow}>
                 <Pressable
                   onPressIn={() => handlePtzStart(PTZ_COMMANDS.left)}
                   onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    {
+                      backgroundColor: pressed
+                        ? theme.primary
+                        : theme.backgroundSecondary,
+                    },
                   ]}
                 >
                   <Feather name="chevron-left" size={24} color={theme.text} />
@@ -320,7 +386,10 @@ export default function SettingsScreen() {
                   style={({ pressed }) => [
                     styles.ptzButton,
                     styles.ptzHomeButton,
-                    { backgroundColor: theme.primary, opacity: pressed ? 0.7 : 1 },
+                    {
+                      backgroundColor: theme.primary,
+                      opacity: pressed ? 0.7 : 1,
+                    },
                   ]}
                 >
                   <Feather name="home" size={20} color="#FFFFFF" />
@@ -330,13 +399,17 @@ export default function SettingsScreen() {
                   onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    {
+                      backgroundColor: pressed
+                        ? theme.primary
+                        : theme.backgroundSecondary,
+                    },
                   ]}
                 >
                   <Feather name="chevron-right" size={24} color={theme.text} />
                 </Pressable>
               </View>
-              
+
               <View style={styles.ptzRow}>
                 <View style={styles.ptzSpacer} />
                 <Pressable
@@ -344,7 +417,11 @@ export default function SettingsScreen() {
                   onPressOut={handlePtzStop}
                   style={({ pressed }) => [
                     styles.ptzButton,
-                    { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                    {
+                      backgroundColor: pressed
+                        ? theme.primary
+                        : theme.backgroundSecondary,
+                    },
                   ]}
                 >
                   <Feather name="chevron-down" size={24} color={theme.text} />
@@ -352,29 +429,51 @@ export default function SettingsScreen() {
                 <View style={styles.ptzSpacer} />
               </View>
             </View>
-            
+
             <View style={styles.zoomRow}>
               <Pressable
                 onPressIn={() => handlePtzStart(PTZ_COMMANDS.zoomOut)}
-                onPressOut={() => sendPtzCommand(cameras.find(c => c.id === currentCameraId)!, PTZ_COMMANDS.zoomStop)}
+                onPressOut={() =>
+                  sendPtzCommand(
+                    cameras.find((c) => c.id === currentCameraId)!,
+                    PTZ_COMMANDS.zoomStop,
+                  )
+                }
                 style={({ pressed }) => [
                   styles.zoomButton,
-                  { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                  {
+                    backgroundColor: pressed
+                      ? theme.primary
+                      : theme.backgroundSecondary,
+                  },
                 ]}
               >
                 <Feather name="zoom-out" size={20} color={theme.text} />
-                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>Zoom Out</Text>
+                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>
+                  Zoom Out
+                </Text>
               </Pressable>
               <Pressable
                 onPressIn={() => handlePtzStart(PTZ_COMMANDS.zoomIn)}
-                onPressOut={() => sendPtzCommand(cameras.find(c => c.id === currentCameraId)!, PTZ_COMMANDS.zoomStop)}
+                onPressOut={() =>
+                  sendPtzCommand(
+                    cameras.find((c) => c.id === currentCameraId)!,
+                    PTZ_COMMANDS.zoomStop,
+                  )
+                }
                 style={({ pressed }) => [
                   styles.zoomButton,
-                  { backgroundColor: pressed ? theme.primary : theme.backgroundSecondary },
+                  {
+                    backgroundColor: pressed
+                      ? theme.primary
+                      : theme.backgroundSecondary,
+                  },
                 ]}
               >
                 <Feather name="zoom-in" size={20} color={theme.text} />
-                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>Zoom In</Text>
+                <Text style={[styles.zoomText, { color: theme.textSecondary }]}>
+                  Zoom In
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -384,10 +483,15 @@ export default function SettingsScreen() {
           onPress={() => setShowAddCamera(true)}
           style={({ pressed }) => [
             styles.addCameraButton,
-            { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.8 : 1 },
+            {
+              backgroundColor: theme.backgroundDefault,
+              opacity: pressed ? 0.8 : 1,
+            },
           ]}
         >
-          <View style={[styles.addIcon, { backgroundColor: theme.primary + "20" }]}>
+          <View
+            style={[styles.addIcon, { backgroundColor: theme.primary + "20" }]}
+          >
             <Feather name="plus" size={24} color={theme.primary} />
           </View>
           <Text style={[styles.addCameraText, { color: theme.text }]}>
@@ -396,7 +500,10 @@ export default function SettingsScreen() {
         </Pressable>
 
         {/* Performance Settings */}
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           Performance
         </ThemedText>
 
@@ -409,18 +516,32 @@ export default function SettingsScreen() {
         />
 
         {/* AI Settings */}
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           AI Integration
         </ThemedText>
 
-        <View style={[styles.apiKeyContainer, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[
+            styles.apiKeyContainer,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
           <View style={styles.apiKeyHeader}>
-            <View style={[styles.apiKeyIcon, { backgroundColor: "#FF9500" + "20" }]}>
+            <View
+              style={[styles.apiKeyIcon, { backgroundColor: "#FF9500" + "20" }]}
+            >
               <Feather name="key" size={18} color="#FF9500" />
             </View>
             <View style={styles.apiKeyHeaderText}>
-              <Text style={[styles.apiKeyLabel, { color: theme.text }]}>Moondream API Key</Text>
-              <Text style={[styles.apiKeyOptional, { color: theme.textSecondary }]}>
+              <Text style={[styles.apiKeyLabel, { color: theme.text }]}>
+                Moondream API Key
+              </Text>
+              <Text
+                style={[styles.apiKeyOptional, { color: theme.textSecondary }]}
+              >
                 Optional - most tools work without it
               </Text>
             </View>
@@ -430,7 +551,10 @@ export default function SettingsScreen() {
             <TextInput
               style={[
                 styles.apiKeyInput,
-                { backgroundColor: theme.backgroundSecondary, color: theme.text },
+                {
+                  backgroundColor: theme.backgroundSecondary,
+                  color: theme.text,
+                },
               ]}
               value={pendingApiKey}
               onChangeText={handleApiKeyChange}
@@ -449,8 +573,8 @@ export default function SettingsScreen() {
                   backgroundColor: apiKeySaved
                     ? theme.success
                     : pendingApiKey !== settings.moondreamApiKey
-                    ? theme.primary
-                    : theme.backgroundSecondary,
+                      ? theme.primary
+                      : theme.backgroundSecondary,
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}
@@ -472,31 +596,80 @@ export default function SettingsScreen() {
             </Text>
           ) : null}
 
-          <View style={[styles.apiKeyInstructions, { backgroundColor: theme.backgroundSecondary }]}>
-            <Text style={[styles.apiKeyInstructionsTitle, { color: theme.text }]}>
+          <View
+            style={[
+              styles.apiKeyInstructions,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
+            <Text
+              style={[styles.apiKeyInstructionsTitle, { color: theme.text }]}
+            >
               How to get a free API key:
             </Text>
             <View style={styles.apiKeyStep}>
-              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
-                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>1</Text>
+              <View
+                style={[
+                  styles.apiKeyStepNumber,
+                  { backgroundColor: theme.primary + "20" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.apiKeyStepNumberText,
+                    { color: theme.primary },
+                  ]}
+                >
+                  1
+                </Text>
               </View>
-              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+              <Text
+                style={[styles.apiKeyStepText, { color: theme.textSecondary }]}
+              >
                 Visit console.moondream.ai
               </Text>
             </View>
             <View style={styles.apiKeyStep}>
-              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
-                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>2</Text>
+              <View
+                style={[
+                  styles.apiKeyStepNumber,
+                  { backgroundColor: theme.primary + "20" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.apiKeyStepNumberText,
+                    { color: theme.primary },
+                  ]}
+                >
+                  2
+                </Text>
               </View>
-              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+              <Text
+                style={[styles.apiKeyStepText, { color: theme.textSecondary }]}
+              >
                 Sign up for a free account
               </Text>
             </View>
             <View style={styles.apiKeyStep}>
-              <View style={[styles.apiKeyStepNumber, { backgroundColor: theme.primary + "20" }]}>
-                <Text style={[styles.apiKeyStepNumberText, { color: theme.primary }]}>3</Text>
+              <View
+                style={[
+                  styles.apiKeyStepNumber,
+                  { backgroundColor: theme.primary + "20" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.apiKeyStepNumberText,
+                    { color: theme.primary },
+                  ]}
+                >
+                  3
+                </Text>
               </View>
-              <Text style={[styles.apiKeyStepText, { color: theme.textSecondary }]}>
+              <Text
+                style={[styles.apiKeyStepText, { color: theme.textSecondary }]}
+              >
                 Copy your API key and paste it above
               </Text>
             </View>
@@ -514,14 +687,28 @@ export default function SettingsScreen() {
           </Pressable>
 
           <View style={styles.apiKeyUnlocks}>
-            <Text style={[styles.apiKeyUnlocksTitle, { color: theme.textSecondary }]}>
+            <Text
+              style={[
+                styles.apiKeyUnlocksTitle,
+                { color: theme.textSecondary },
+              ]}
+            >
               API key unlocks:
             </Text>
             <View style={styles.apiKeyUnlocksList}>
-              {["Scene descriptions", "Custom object search", "Natural language chat", "Custom photo triggers"].map((feature, i) => (
+              {[
+                "Scene descriptions",
+                "Custom object search",
+                "Natural language chat",
+                "Custom photo triggers",
+              ].map((feature, i) => (
                 <View key={i} style={styles.apiKeyUnlockItem}>
                   <Feather name="check" size={12} color={theme.success} />
-                  <Text style={[styles.apiKeyUnlockText, { color: theme.text }]}>{feature}</Text>
+                  <Text
+                    style={[styles.apiKeyUnlockText, { color: theme.text }]}
+                  >
+                    {feature}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -529,36 +716,83 @@ export default function SettingsScreen() {
         </View>
 
         {/* About the AI */}
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           About the AI
         </ThemedText>
 
-        <View style={[styles.aiTechSection, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[
+            styles.aiTechSection,
+            { backgroundColor: theme.backgroundDefault },
+          ]}
+        >
           <Text style={[styles.aiTechIntro, { color: theme.textSecondary }]}>
-            This app uses multiple AI technologies to understand and process camera footage:
+            This app uses multiple AI technologies to understand and process
+            camera footage:
           </Text>
-          
+
           {Object.entries(AI_TECHNOLOGIES).map(([key, tech]) => (
             <View key={key} style={styles.aiTechRow}>
-              <View style={[styles.aiTechIcon, { backgroundColor: tech.color + "20" }]}>
+              <View
+                style={[
+                  styles.aiTechIcon,
+                  { backgroundColor: tech.color + "20" },
+                ]}
+              >
                 <Feather name={tech.icon as any} size={18} color={tech.color} />
               </View>
               <View style={styles.aiTechInfo}>
                 <View style={styles.aiTechHeader}>
-                  <Text style={[styles.aiTechName, { color: theme.text }]}>{tech.name}</Text>
-                  <View style={[styles.aiTechBadge, { backgroundColor: tech.type === "on-device" ? theme.success + "20" : theme.warning + "20" }]}>
-                    <Text style={[styles.aiTechBadgeText, { color: tech.type === "on-device" ? theme.success : theme.warning }]}>
+                  <Text style={[styles.aiTechName, { color: theme.text }]}>
+                    {tech.name}
+                  </Text>
+                  <View
+                    style={[
+                      styles.aiTechBadge,
+                      {
+                        backgroundColor:
+                          tech.type === "on-device"
+                            ? theme.success + "20"
+                            : theme.warning + "20",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.aiTechBadgeText,
+                        {
+                          color:
+                            tech.type === "on-device"
+                              ? theme.success
+                              : theme.warning,
+                        },
+                      ]}
+                    >
                       {tech.type === "on-device" ? "On-Device" : "Cloud"}
                     </Text>
                   </View>
                 </View>
-                <Text style={[styles.aiTechDesc, { color: theme.textSecondary }]}>{tech.description}</Text>
+                <Text
+                  style={[styles.aiTechDesc, { color: theme.textSecondary }]}
+                >
+                  {tech.description}
+                </Text>
               </View>
             </View>
           ))}
 
-          <View style={[styles.learnMoreSection, { borderTopColor: theme.backgroundSecondary }]}>
-            <Text style={[styles.learnMoreTitle, { color: theme.textSecondary }]}>
+          <View
+            style={[
+              styles.learnMoreSection,
+              { borderTopColor: theme.backgroundSecondary },
+            ]}
+          >
+            <Text
+              style={[styles.learnMoreTitle, { color: theme.textSecondary }]}
+            >
               Learn More
             </Text>
             <View style={styles.learnMoreLinks}>
@@ -566,40 +800,67 @@ export default function SettingsScreen() {
                 onPress={() => Linking.openURL("https://visualreasoning.ai")}
                 style={({ pressed }) => [
                   styles.learnMoreLink,
-                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    opacity: pressed ? 0.7 : 1,
+                  },
                 ]}
               >
                 <Feather name="eye" size={14} color={theme.primary} />
-                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                <Text
+                  style={[styles.learnMoreLinkText, { color: theme.primary }]}
+                >
                   visualreasoning.ai
                 </Text>
-                <Feather name="external-link" size={12} color={theme.textSecondary} />
+                <Feather
+                  name="external-link"
+                  size={12}
+                  color={theme.textSecondary}
+                />
               </Pressable>
               <Pressable
                 onPress={() => Linking.openURL("https://ptzoptics.com")}
                 style={({ pressed }) => [
                   styles.learnMoreLink,
-                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    opacity: pressed ? 0.7 : 1,
+                  },
                 ]}
               >
                 <Feather name="video" size={14} color={theme.primary} />
-                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                <Text
+                  style={[styles.learnMoreLinkText, { color: theme.primary }]}
+                >
                   ptzoptics.com
                 </Text>
-                <Feather name="external-link" size={12} color={theme.textSecondary} />
+                <Feather
+                  name="external-link"
+                  size={12}
+                  color={theme.textSecondary}
+                />
               </Pressable>
               <Pressable
                 onPress={() => Linking.openURL("https://moondream.ai")}
                 style={({ pressed }) => [
                   styles.learnMoreLink,
-                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    opacity: pressed ? 0.7 : 1,
+                  },
                 ]}
               >
                 <Feather name="cloud" size={14} color={theme.primary} />
-                <Text style={[styles.learnMoreLinkText, { color: theme.primary }]}>
+                <Text
+                  style={[styles.learnMoreLinkText, { color: theme.primary }]}
+                >
                   moondream.ai
                 </Text>
-                <Feather name="external-link" size={12} color={theme.textSecondary} />
+                <Feather
+                  name="external-link"
+                  size={12}
+                  color={theme.textSecondary}
+                />
               </Pressable>
             </View>
           </View>
@@ -607,11 +868,17 @@ export default function SettingsScreen() {
           <Pressable
             onPress={async () => {
               await setHasSeenOnboarding(false);
-              Alert.alert("Onboarding Reset", "The AI onboarding will show again when you restart the app.");
+              Alert.alert(
+                "Onboarding Reset",
+                "The AI onboarding will show again when you restart the app.",
+              );
             }}
             style={({ pressed }) => [
               styles.replayOnboardingButton,
-              { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.7 : 1 },
+              {
+                backgroundColor: theme.backgroundSecondary,
+                opacity: pressed ? 0.7 : 1,
+              },
             ]}
           >
             <Feather name="play-circle" size={18} color={theme.primary} />
@@ -622,9 +889,18 @@ export default function SettingsScreen() {
         </View>
 
         {/* About */}
-        <ThemedText type="small" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        <ThemedText
+          type="small"
+          style={[styles.sectionTitle, { color: theme.textSecondary }]}
+        >
           About
         </ThemedText>
+
+        <SettingsRow
+          icon="eye"
+          label="About Visual Reasoning"
+          onPress={() => navigation.navigate("About")}
+        />
 
         <SettingsRow
           icon="info"
@@ -640,6 +916,13 @@ export default function SettingsScreen() {
         />
 
         <SettingsRow
+          icon="lock"
+          label="Security & Privacy"
+          onPress={() => navigation.navigate("SecurityDashboard")}
+          iconColor={theme.success}
+        />
+
+        <SettingsRow
           icon="shield"
           label="Privacy & Licenses"
           onPress={() => navigation.navigate("PrivacyLicenses")}
@@ -648,13 +931,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="book-open"
           label="Documentation"
-          onPress={() => console.log("Open docs")}
-        />
-
-        <SettingsRow
-          icon="help-circle"
-          label="Help & Support"
-          onPress={() => console.log("Open help")}
+          onPress={() => navigation.navigate("Documentation")}
         />
       </ScrollView>
 
@@ -665,22 +942,24 @@ export default function SettingsScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddCamera(false)}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <ThemedText type="h4">Add PTZ Camera</ThemedText>
-              <Pressable
-                onPress={() => setShowAddCamera(false)}
-                hitSlop={12}
-              >
+              <Pressable onPress={() => setShowAddCamera(false)} hitSlop={12}>
                 <Feather name="x" size={24} color={theme.text} />
               </Pressable>
             </View>
 
-            <ScrollView 
+            <ScrollView
               style={styles.modalScroll}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -689,49 +968,85 @@ export default function SettingsScreen() {
                 Camera Name
               </Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder="My PTZ Camera"
                 placeholderTextColor={theme.textSecondary}
                 value={newCamera.name}
-                onChangeText={(text) => setNewCamera((prev) => ({ ...prev, name: text }))}
+                onChangeText={(text) =>
+                  setNewCamera((prev) => ({ ...prev, name: text }))
+                }
               />
 
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
                 IP Address
               </Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder="192.168.1.100"
                 placeholderTextColor={theme.textSecondary}
                 value={newCamera.ipAddress}
-                onChangeText={(text) => setNewCamera((prev) => ({ ...prev, ipAddress: text }))}
+                onChangeText={(text) =>
+                  setNewCamera((prev) => ({ ...prev, ipAddress: text }))
+                }
                 keyboardType="numeric"
               />
 
               <View style={styles.inputRow}>
                 <View style={styles.inputHalf}>
-                  <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                  <Text
+                    style={[styles.inputLabel, { color: theme.textSecondary }]}
+                  >
                     HTTP Port
                   </Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.backgroundSecondary,
+                        color: theme.text,
+                      },
+                    ]}
                     placeholder="80"
                     placeholderTextColor={theme.textSecondary}
                     value={newCamera.httpPort}
-                    onChangeText={(text) => setNewCamera((prev) => ({ ...prev, httpPort: text }))}
+                    onChangeText={(text) =>
+                      setNewCamera((prev) => ({ ...prev, httpPort: text }))
+                    }
                     keyboardType="numeric"
                   />
                 </View>
                 <View style={styles.inputHalf}>
-                  <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                  <Text
+                    style={[styles.inputLabel, { color: theme.textSecondary }]}
+                  >
                     RTSP Port
                   </Text>
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.backgroundSecondary,
+                        color: theme.text,
+                      },
+                    ]}
                     placeholder="554"
                     placeholderTextColor={theme.textSecondary}
                     value={newCamera.rtspPort}
-                    onChangeText={(text) => setNewCamera((prev) => ({ ...prev, rtspPort: text }))}
+                    onChangeText={(text) =>
+                      setNewCamera((prev) => ({ ...prev, rtspPort: text }))
+                    }
                     keyboardType="numeric"
                   />
                 </View>
@@ -741,11 +1056,19 @@ export default function SettingsScreen() {
                 Username
               </Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder="admin"
                 placeholderTextColor={theme.textSecondary}
                 value={newCamera.username}
-                onChangeText={(text) => setNewCamera((prev) => ({ ...prev, username: text }))}
+                onChangeText={(text) =>
+                  setNewCamera((prev) => ({ ...prev, username: text }))
+                }
                 autoCapitalize="none"
               />
 
@@ -753,11 +1076,19 @@ export default function SettingsScreen() {
                 Password
               </Text>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder="Enter password"
                 placeholderTextColor={theme.textSecondary}
                 value={newCamera.password}
-                onChangeText={(text) => setNewCamera((prev) => ({ ...prev, password: text }))}
+                onChangeText={(text) =>
+                  setNewCamera((prev) => ({ ...prev, password: text }))
+                }
                 secureTextEntry
               />
 
@@ -766,25 +1097,37 @@ export default function SettingsScreen() {
               </Text>
               <View style={styles.qualitySelector}>
                 <Pressable
-                  onPress={() => setNewCamera((prev) => ({ ...prev, streamQuality: "high" }))}
+                  onPress={() =>
+                    setNewCamera((prev) => ({ ...prev, streamQuality: "high" }))
+                  }
                   style={[
                     styles.qualityOption,
                     {
-                      backgroundColor: newCamera.streamQuality === "high" 
-                        ? theme.primary 
-                        : theme.backgroundSecondary,
+                      backgroundColor:
+                        newCamera.streamQuality === "high"
+                          ? theme.primary
+                          : theme.backgroundSecondary,
                     },
                   ]}
                 >
-                  <Feather 
-                    name="zap" 
-                    size={16} 
-                    color={newCamera.streamQuality === "high" ? "#FFFFFF" : theme.textSecondary} 
+                  <Feather
+                    name="zap"
+                    size={16}
+                    color={
+                      newCamera.streamQuality === "high"
+                        ? "#FFFFFF"
+                        : theme.textSecondary
+                    }
                   />
                   <Text
                     style={[
                       styles.qualityText,
-                      { color: newCamera.streamQuality === "high" ? "#FFFFFF" : theme.text },
+                      {
+                        color:
+                          newCamera.streamQuality === "high"
+                            ? "#FFFFFF"
+                            : theme.text,
+                      },
                     ]}
                   >
                     High Bitrate
@@ -792,32 +1135,49 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.qualitySubtext,
-                      { color: newCamera.streamQuality === "high" ? "rgba(255,255,255,0.7)" : theme.textSecondary },
+                      {
+                        color:
+                          newCamera.streamQuality === "high"
+                            ? "rgba(255,255,255,0.7)"
+                            : theme.textSecondary,
+                      },
                     ]}
                   >
                     stream1
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setNewCamera((prev) => ({ ...prev, streamQuality: "low" }))}
+                  onPress={() =>
+                    setNewCamera((prev) => ({ ...prev, streamQuality: "low" }))
+                  }
                   style={[
                     styles.qualityOption,
                     {
-                      backgroundColor: newCamera.streamQuality === "low" 
-                        ? theme.primary 
-                        : theme.backgroundSecondary,
+                      backgroundColor:
+                        newCamera.streamQuality === "low"
+                          ? theme.primary
+                          : theme.backgroundSecondary,
                     },
                   ]}
                 >
-                  <Feather 
-                    name="battery" 
-                    size={16} 
-                    color={newCamera.streamQuality === "low" ? "#FFFFFF" : theme.textSecondary} 
+                  <Feather
+                    name="battery"
+                    size={16}
+                    color={
+                      newCamera.streamQuality === "low"
+                        ? "#FFFFFF"
+                        : theme.textSecondary
+                    }
                   />
                   <Text
                     style={[
                       styles.qualityText,
-                      { color: newCamera.streamQuality === "low" ? "#FFFFFF" : theme.text },
+                      {
+                        color:
+                          newCamera.streamQuality === "low"
+                            ? "#FFFFFF"
+                            : theme.text,
+                      },
                     ]}
                   >
                     Low Bitrate
@@ -825,7 +1185,12 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.qualitySubtext,
-                      { color: newCamera.streamQuality === "low" ? "rgba(255,255,255,0.7)" : theme.textSecondary },
+                      {
+                        color:
+                          newCamera.streamQuality === "low"
+                            ? "rgba(255,255,255,0.7)"
+                            : theme.textSecondary,
+                      },
                     ]}
                   >
                     stream2
@@ -837,9 +1202,14 @@ export default function SettingsScreen() {
             <View style={styles.modalButtons}>
               <Pressable
                 onPress={() => setShowAddCamera(false)}
-                style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: theme.backgroundSecondary },
+                ]}
               >
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>
+                  Cancel
+                </Text>
               </Pressable>
               <Pressable
                 onPress={handleAddCamera}
@@ -852,7 +1222,9 @@ export default function SettingsScreen() {
                 ]}
                 disabled={!newCamera.name || !newCamera.ipAddress}
               >
-                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>Add Camera</Text>
+                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>
+                  Add Camera
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -866,11 +1238,16 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={() => setShowEditProfile(false)}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
             <ThemedText type="h4" style={styles.modalTitle}>
               Edit Profile
             </ThemedText>
@@ -879,25 +1256,40 @@ export default function SettingsScreen() {
               Display Name
             </Text>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text }]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.backgroundSecondary,
+                  color: theme.text,
+                },
+              ]}
               placeholder="Your name"
               placeholderTextColor={theme.textSecondary}
               value={userProfile.displayName}
-              onChangeText={(text) => setUserProfile((prev) => ({ ...prev, displayName: text }))}
+              onChangeText={(text) =>
+                setUserProfile((prev) => ({ ...prev, displayName: text }))
+              }
             />
 
             <View style={styles.modalButtons}>
               <Pressable
                 onPress={() => setShowEditProfile(false)}
-                style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: theme.backgroundSecondary },
+                ]}
               >
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>
+                  Cancel
+                </Text>
               </Pressable>
               <Pressable
                 onPress={handleSaveProfile}
                 style={[styles.modalButton, { backgroundColor: theme.primary }]}
               >
-                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>Save</Text>
+                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>
+                  Save
+                </Text>
               </Pressable>
             </View>
           </View>

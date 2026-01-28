@@ -22,6 +22,16 @@
     "production": {
       "autoIncrement": true,
       "node": "22.13.0"
+    },
+    "production-mac": {
+      "extends": "production",
+      "ios": {
+        "buildConfiguration": "Release",
+        "scheme": "visual-reasoning-playground"
+      },
+      "env": {
+        "EAS_BUILD_PLATFORM": "ios"
+      }
     }
   },
   "submit": {
