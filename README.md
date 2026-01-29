@@ -290,6 +290,36 @@ Voice: "Camera 2, close up" → PTZ moves + OBS switches
 
 ---
 
+### 🎙️ Tool 15: Voice Triggers — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/15-voice-triggers/)
+Speech-to-text automation with Whisper AI running entirely in-browser.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ Microphone  │────▶│  Whisper AI     │────▶│  "switch to     │
+│   Input     │     │  (In-Browser)   │     │   camera two"   │
+└─────────────┘     └─────────────────┘     └────────┬────────┘
+                                                     │
+                    ┌─────────────────┐              │
+                    │  Trigger Rules  │◀─────────────┘
+                    │  phrase → action│
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  Execute Action │
+                    │  (Log/Alert/OBS)│
+                    └─────────────────┘
+```
+
+**Key Features:**
+- **No API key needed** - Whisper runs locally via WebGPU/WASM
+- **~40MB model** - Downloads once, cached in browser
+- **Trigger rules** - Map phrases to actions
+- **Privacy-first** - Audio never leaves your device
+
+📁 `15-voice-triggers/`
+
+---
+
 ### 🔌 OBS Plugin: Visual Reasoning AI — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/obs-visual-reasoning/)
 Complete AI control panel as an OBS Browser Dock.
 

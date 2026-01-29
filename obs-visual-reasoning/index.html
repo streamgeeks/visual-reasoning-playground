@@ -158,6 +158,14 @@
             </section>
 
             <section id="voice-tab" class="tab-panel">
+                <div class="info-banner">
+                    <div class="info-icon">🎓</div>
+                    <div class="info-content">
+                        <strong>Module 7: Voice Control with Whisper</strong><br>
+                        <span class="info-text">Uses OpenAI's Whisper model running entirely in your browser via Transformers.js. No API key needed for speech recognition - audio never leaves your device.</span>
+                    </div>
+                </div>
+
                 <div class="video-preview">
                     <video id="voiceVideo" autoplay muted playsinline></video>
                     <div class="voice-overlay">
@@ -179,6 +187,9 @@
                             <div class="model-progress-bar" id="modelProgressBar"></div>
                         </div>
                     </div>
+                    <div class="help-note">
+                        First load downloads ~40MB model (cached for future use). Uses WebGPU acceleration when available.
+                    </div>
                 </div>
 
                 <div class="section">
@@ -186,10 +197,21 @@
                     <div id="currentTranscript" class="transcript-box">
                         Start voice detection to see transcriptions...
                     </div>
+                    <div class="help-note">
+                        Audio is processed in 5-second chunks. Speak clearly for best results.
+                    </div>
                 </div>
 
                 <div class="section">
                     <h3>Voice Trigger Rules</h3>
+                    <div class="concept-box">
+                        <strong>How it works:</strong> Define phrases that trigger OBS actions. When Whisper transcribes matching text, the action fires automatically.
+                        <div class="example-triggers">
+                            <span class="example-tag">"switch to camera two"</span>
+                            <span class="example-tag">"start recording"</span>
+                            <span class="example-tag">"go to wide shot"</span>
+                        </div>
+                    </div>
                     <div id="voiceRulesContainer">
                         <div class="rule-item empty-state">
                             No voice triggers configured
@@ -215,6 +237,24 @@
                 <div class="control-row">
                     <button id="startVoiceBtn" class="btn btn-primary">Start Voice Detection</button>
                     <button id="stopVoiceBtn" class="btn btn-danger" disabled>Stop</button>
+                </div>
+
+                <div class="section edu-section">
+                    <h3>📚 Learning Notes</h3>
+                    <div class="edu-content">
+                        <div class="edu-item">
+                            <strong>Whisper vs Web Speech API:</strong> Unlike browser speech recognition, Whisper runs the full neural network locally. More accurate, works offline after model loads, but requires more processing power.
+                        </div>
+                        <div class="edu-item">
+                            <strong>WebGPU Acceleration:</strong> Modern browsers with WebGPU support run Whisper ~10x faster using your GPU. Falls back to WebAssembly (CPU) automatically.
+                        </div>
+                        <div class="edu-item">
+                            <strong>Trigger Matching:</strong> Phrases are matched as substrings. "camera" will match "switch to camera two" and "camera one please". Be specific to avoid false triggers.
+                        </div>
+                        <div class="edu-item">
+                            <strong>Privacy:</strong> Audio is processed entirely in-browser. Nothing is sent to any server. The Whisper model runs on your machine.
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>

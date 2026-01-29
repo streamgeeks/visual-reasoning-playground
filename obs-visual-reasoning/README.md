@@ -36,6 +36,26 @@ Automatically switch scenes based on what AI sees.
 - "When AI sees **'close-up of document'** → Switch to **Document Cam**"
 - Fully customizable keyword → scene mappings
 
+### 4. Voice Control (NEW)
+Speech-to-text automation using OpenAI's Whisper model running entirely in-browser.
+- **No API key needed** for speech recognition - runs locally via WebGPU/WASM
+- **~40MB model** downloads once and is cached in your browser
+- Define **trigger phrases** that switch OBS scenes when spoken
+- **Privacy-first** - your voice never leaves your device
+- Adjustable chunk duration and cooldown settings
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ Microphone  │────▶│  Whisper AI     │────▶│  "switch to     │
+│   Input     │     │  (In-Browser)   │     │   wide shot"    │
+└─────────────┘     └─────────────────┘     └────────┬────────┘
+                                                     │
+                                            ┌────────▼────────┐
+                                            │   OBS Studio    │
+                                            │  Scene Switch   │
+                                            └─────────────────┘
+```
+
 ---
 
 ## Installation
@@ -110,6 +130,23 @@ This plugin requires OBS WebSocket (included in OBS 28+).
 3. Toggle the rule **On**
 4. AI monitors scene descriptions and triggers switches
 
+### Voice Control
+1. Click the **Voice** tab
+2. Click **Start Listening** to load the Whisper model (~40MB, first time only)
+3. Wait for model to load (shows progress bar)
+4. Once loaded, speak naturally - transcripts appear in real-time
+5. Add voice trigger rules:
+   - Click **+ Add Rule**
+   - Enter trigger phrase (e.g., "switch to camera two")
+   - Select action type and OBS scene
+6. When you say the trigger phrase, OBS switches scenes automatically
+
+**Tips:**
+- Speak clearly at a normal pace
+- The 5-second processing chunk means slight delay is normal
+- Adjust cooldown to prevent rapid-fire triggers
+- Works best in quieter environments
+
 ---
 
 ## Configuration Options
@@ -120,6 +157,8 @@ This plugin requires OBS WebSocket (included in OBS 28+).
 | Confidence Threshold | 70% | Minimum confidence to trigger action |
 | Cooldown | 5s | Wait time between actions |
 | Debounce | 2 | Consecutive detections required |
+| Voice Chunk Duration | 5s | Audio processing interval for speech recognition |
+| Voice Cooldown | 5s | Wait time between voice trigger activations |
 
 ---
 
@@ -152,8 +191,9 @@ This plugin uses the [Moondream API](https://moondream.ai). Costs depend on usag
 | Gesture Detection | 1 per check | ~$0.001 each |
 | Scene Description | 1 per description | ~$0.001 each |
 | Auto-Switch | 1 per check | ~$0.001 each |
+| Voice Control | 0 | **FREE** (runs locally) |
 
-**Tip**: Increase detection interval to reduce costs.
+**Tip**: Increase detection interval to reduce costs. Voice Control uses no API calls!
 
 ---
 
@@ -163,6 +203,7 @@ This plugin uses the [Moondream API](https://moondream.ai). Costs depend on usag
 - Frames are not stored by Moondream
 - API key is stored locally in your browser
 - No data is sent to StreamGeeks servers
+- **Voice Control**: Audio is processed entirely in-browser - your voice never leaves your device
 
 ---
 

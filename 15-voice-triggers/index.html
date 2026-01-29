@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Triggers - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            padding: 20px;
+            padding-left: 420px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-container {
+            position: relative;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .camera-controls select {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+
+        .camera-controls select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn-icon {
+            padding: 10px 14px;
+            background: rgba(13, 27, 42, 0.9);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: rgba(48, 102, 190, 0.8);
+        }
+
+        /* Audio Visualizer */
+        .audio-section {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .audio-section h3 {
+            margin: 0 0 12px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .audio-visualizer {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 3px;
+            height: 60px;
+            background: var(--background);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .audio-bar {
+            width: 8px;
+            background: linear-gradient(to top, var(--primary), var(--secondary));
+            border-radius: 2px;
+            transition: height 0.05s ease;
+            min-height: 4px;
+        }
+
+        .audio-bar.active {
+            background: linear-gradient(to top, var(--success), #4ade80);
+        }
+
+        .audio-status {
+            text-align: center;
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .audio-status.listening {
+            color: var(--success);
+        }
+
+        /* Transcript Section */
+        .transcript-section {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .transcript-section h3 {
+            margin: 0 0 12px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .transcript-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--background);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .transcript-entry {
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            background: var(--surface);
+            border-radius: 4px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .transcript-entry.triggered {
+            border-left-color: var(--success);
+            background: rgba(42, 157, 143, 0.1);
+        }
+
+        .transcript-text {
+            color: var(--text);
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .transcript-time {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .transcript-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        /* Results Section */
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .result-card {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .result-card h3 {
+            margin: 0 0 12px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Model Status */
+        .model-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--background);
+            border-radius: 6px;
+        }
+
+        .model-status-icon {
+            font-size: 1.5rem;
+        }
+
+        .model-status-text {
+            flex: 1;
+        }
+
+        .model-status-label {
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .model-status-detail {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .model-progress {
+            width: 100%;
+            height: 6px;
+            background: var(--surface-light);
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .model-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        /* Voice Rules */
+        .rules-section {
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .rules-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .rules-header:hover {
+            background: var(--surface-light);
+        }
+
+        .rules-header h3 {
+            margin: 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .collapse-icon {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            transition: transform 0.2s;
+        }
+
+        .rules-section.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .rules-section.collapsed .rules-content {
+            display: none;
+        }
+
+        .rules-content {
+            padding: 0 15px 15px 15px;
+        }
+
+        .rules-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .rule-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--background);
+            border-radius: 6px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .rule-item.disabled {
+            opacity: 0.5;
+            border-left-color: var(--text-muted);
+        }
+
+        .rule-phrase {
+            flex: 1;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .rule-phrase strong {
+            color: var(--secondary);
+        }
+
+        .rule-action {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            background: var(--surface);
+            border-radius: 4px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 20px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--surface-light);
+            transition: 0.2s;
+            border-radius: 20px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--primary);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(16px);
+        }
+
+        .btn-delete-rule {
+            padding: 4px 8px;
+            background: transparent;
+            border: 1px solid var(--error);
+            border-radius: 4px;
+            color: var(--error);
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .btn-delete-rule:hover {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-add-rule {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px dashed var(--surface-light);
+            border-radius: 6px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-add-rule:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .rules-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 15px;
+            font-size: 0.85rem;
+        }
+
+        /* Settings */
+        .settings-card {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .settings-card h3 {
+            margin: 0 0 15px 0;
+            color: var(--primary-light);
+            font-size: 0.95rem;
+        }
+
+        .setting-row {
+            margin-bottom: 15px;
+        }
+
+        .setting-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .setting-row label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-group input[type="range"] {
+            flex: 1;
+        }
+
+        .slider-value {
+            color: var(--secondary);
+            font-weight: 600;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            background: #2555a3;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary.active {
+            background: var(--error);
+        }
+
+        .btn-primary.active:hover {
+            background: #c42f3a;
+        }
+
+        .btn-secondary {
+            background: var(--surface-light);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: #3a5269;
+        }
+
+        /* Info Banners */
+        .info-banner {
+            padding: 12px 15px;
+            background: rgba(48, 102, 190, 0.1);
+            border: 1px solid rgba(48, 102, 190, 0.3);
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .info-banner h4 {
+            margin: 0 0 6px 0;
+            color: var(--primary-light);
+            font-size: 0.9rem;
+        }
+
+        .info-banner p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .info-banner.success {
+            background: rgba(42, 157, 143, 0.1);
+            border-color: rgba(42, 157, 143, 0.3);
+        }
+
+        .info-banner.success h4 {
+            color: var(--success);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 450px;
+            transform: translateY(-20px);
+            transition: transform 0.2s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: translateY(0);
+        }
+
+        .modal h3 {
+            margin: 0 0 20px 0;
+            color: var(--primary-light);
+            font-size: 1.1rem;
+        }
+
+        .modal-field {
+            margin-bottom: 16px;
+        }
+
+        .modal-field label {
+            display: block;
+            color: var(--text);
+            font-size: 0.9rem;
+            margin-bottom: 6px;
+        }
+
+        .modal-field input,
+        .modal-field select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .modal-field input:focus,
+        .modal-field select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .modal-field small {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-top: 4px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            margin-top: 15px;
+            padding: 10px;
+            background: var(--background);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .status-bar.error {
+            color: var(--error);
+            background: rgba(230, 57, 70, 0.1);
+        }
+
+        .status-bar.success {
+            color: var(--success);
+            background: rgba(42, 157, 143, 0.1);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                padding-left: 20px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .rc-container {
+                width: calc(100% - 30px) !important;
+                left: 15px !important;
+                right: 15px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Voice Triggers</h1>
+        <p class="subtitle">Module 15 - Speech-to-text automation with Whisper AI</p>
+        <a href="../" class="project-link">&larr; Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="main-layout">
+        <div class="video-section">
+            <!-- Info Banner -->
+            <div class="info-banner success">
+                <h4>No API Key Required for Speech Recognition</h4>
+                <p>Whisper AI runs entirely in your browser using WebGPU acceleration. The ~40MB model downloads once and is cached locally. Your voice never leaves your device.</p>
+            </div>
+
+            <!-- Video Preview -->
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="camera-controls">
+                    <select id="cameraSelect">
+                        <option value="">Select Camera...</option>
+                    </select>
+                    <button id="refreshCamerasBtn" class="btn-icon" title="Refresh camera list">&#x1F504;</button>
+                </div>
+            </div>
+
+            <!-- Audio Visualizer -->
+            <div class="audio-section">
+                <h3>&#x1F3A4; Microphone Input</h3>
+                <div class="audio-visualizer" id="audioVisualizer">
+                    <!-- Bars will be generated by JS -->
+                </div>
+                <div class="audio-status" id="audioStatus">Click "Start Listening" to begin</div>
+            </div>
+
+            <!-- Transcript Display -->
+            <div class="transcript-section">
+                <h3>
+                    <span>&#x1F4DD; Live Transcripts</span>
+                    <button id="clearTranscriptsBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;">Clear</button>
+                </h3>
+                <div class="transcript-list" id="transcriptList">
+                    <div class="transcript-empty">
+                        Transcriptions will appear here when you speak...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <!-- Model Status -->
+            <div class="result-card">
+                <h3>&#x1F9E0; Whisper Model Status</h3>
+                <div class="model-status" id="modelStatus">
+                    <div class="model-status-icon">&#x23F3;</div>
+                    <div class="model-status-text">
+                        <div class="model-status-label">Model Not Loaded</div>
+                        <div class="model-status-detail">Click Start to load the Whisper model</div>
+                    </div>
+                </div>
+                <div class="model-progress" id="modelProgress" style="display: none;">
+                    <div class="model-progress-bar" id="modelProgressBar" style="width: 0%;"></div>
+                </div>
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-primary">Start Listening</button>
+                </div>
+                <div id="status" class="status-bar">Ready to start voice recognition</div>
+            </div>
+
+            <!-- Voice Trigger Rules -->
+            <div class="rules-section" id="rulesSection">
+                <div class="rules-header" id="rulesToggle">
+                    <h3>&#x26A1; Voice Trigger Rules</h3>
+                    <span class="collapse-icon">&#x25BC;</span>
+                </div>
+                <div class="rules-content">
+                    <div class="info-banner">
+                        <h4>How Triggers Work</h4>
+                        <p>When the transcribed speech contains your trigger phrase, the action will be logged to the reasoning console. Connect to OBS for scene switching.</p>
+                    </div>
+                    <div class="rules-list" id="rulesList">
+                        <div class="rules-empty">No trigger rules defined yet</div>
+                    </div>
+                    <button id="addRuleBtn" class="btn-add-rule">+ Add Trigger Rule</button>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="settings-card">
+                <h3>&#x2699;&#xFE0F; Settings</h3>
+
+                <div class="setting-row">
+                    <label>Processing Chunk Duration</label>
+                    <div class="slider-group">
+                        <input type="range" id="chunkDuration" min="2" max="10" value="5">
+                        <span class="slider-value" id="chunkDurationValue">5s</span>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <label>Trigger Cooldown</label>
+                    <div class="slider-group">
+                        <input type="range" id="cooldown" min="1" max="15" value="5">
+                        <span class="slider-value" id="cooldownValue">5s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info -->
+            <div class="info-banner">
+                <h4>About Whisper AI</h4>
+                <p>OpenAI's Whisper is a state-of-the-art speech recognition model. This tool uses the "tiny.en" variant (~40MB) optimized for English, running via Transformers.js with WebGPU acceleration (falls back to WASM if needed).</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Rule Modal -->
+    <div class="modal-overlay" id="ruleModal">
+        <div class="modal">
+            <h3>Add Voice Trigger Rule</h3>
+            <div class="modal-field">
+                <label>Trigger Phrase</label>
+                <input type="text" id="rulePhraseInput" placeholder="e.g., switch to camera two">
+                <small>The phrase to listen for (case-insensitive)</small>
+            </div>
+            <div class="modal-field">
+                <label>Action Type</label>
+                <select id="ruleActionType">
+                    <option value="log">Log to Console</option>
+                    <option value="scene">Switch OBS Scene</option>
+                    <option value="alert">Show Alert</option>
+                </select>
+            </div>
+            <div class="modal-field">
+                <label>Action Value</label>
+                <input type="text" id="ruleActionValue" placeholder="e.g., Camera 2">
+                <small>Scene name, message, or custom value</small>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelRuleBtn" class="btn btn-secondary">Cancel</button>
+                <button id="saveRuleBtn" class="btn btn-primary">Add Rule</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>
