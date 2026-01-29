@@ -34,10 +34,11 @@
             </div>
         </header>
 
-        <nav class="tab-nav">
+<nav class="tab-nav">
             <button class="tab-btn active" data-tab="gestures">Gestures</button>
             <button class="tab-btn" data-tab="describe">Describe</button>
             <button class="tab-btn" data-tab="autoswitch">Auto-Switch</button>
+            <button class="tab-btn" data-tab="voice">Voice</button>
         </nav>
 
         <main class="tab-content">
@@ -119,7 +120,7 @@
                 </div>
             </section>
 
-            <section id="autoswitch-tab" class="tab-panel">
+<section id="autoswitch-tab" class="tab-panel">
                 <div class="section">
                     <div class="toggle-row">
                         <span>Auto-Switch Enabled</span>
@@ -153,6 +154,67 @@
                     <div id="lastTrigger" class="last-trigger">
                         No triggers yet
                     </div>
+                </div>
+            </section>
+
+            <section id="voice-tab" class="tab-panel">
+                <div class="video-preview">
+                    <video id="voiceVideo" autoplay muted playsinline></video>
+                    <div class="voice-overlay">
+                        <div class="audio-visualizer" id="audioVisualizer"></div>
+                        <div class="voice-status" id="voiceStatusDisplay">
+                            <span class="voice-status-icon">🎤</span>
+                            <span class="voice-status-text" id="voiceStatusText">Ready</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="model-status" id="modelStatus">
+                        <div class="model-status-text">
+                            <span id="modelStatusLabel">Whisper Model</span>
+                            <span id="modelStatusValue">Not loaded</span>
+                        </div>
+                        <div class="model-progress" id="modelProgress">
+                            <div class="model-progress-bar" id="modelProgressBar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Live Transcript</h3>
+                    <div id="currentTranscript" class="transcript-box">
+                        Start voice detection to see transcriptions...
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Voice Trigger Rules</h3>
+                    <div id="voiceRulesContainer">
+                        <div class="rule-item empty-state">
+                            No voice triggers configured
+                        </div>
+                    </div>
+                    <button id="addVoiceRuleBtn" class="btn btn-secondary btn-full">+ Add Voice Trigger</button>
+                </div>
+
+                <div class="section">
+                    <h3>Transcript History</h3>
+                    <div id="transcriptHistory" class="activity-feed">
+                        <div class="activity-item placeholder">No transcripts yet</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Last Voice Trigger</h3>
+                    <div id="lastVoiceTrigger" class="last-trigger">
+                        No triggers yet
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <button id="startVoiceBtn" class="btn btn-primary">Start Voice Detection</button>
+                    <button id="stopVoiceBtn" class="btn btn-danger" disabled>Stop</button>
                 </div>
             </section>
         </main>
@@ -211,7 +273,7 @@
             </div>
         </div>
 
-        <div id="ruleModal" class="modal">
+<div id="ruleModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
                     <h2>Add Auto-Switch Rule</h2>
@@ -233,12 +295,36 @@
                 </div>
             </div>
         </div>
+
+        <div id="voiceRuleModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Add Voice Trigger</h2>
+                    <button id="closeVoiceRuleBtn" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group">
+                        <label>Trigger Phrase</label>
+                        <input type="text" id="voiceRulePhrase" placeholder="e.g., switch to camera two">
+                        <span class="help-text">Phrase to listen for in speech</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Action</label>
+                        <select id="voiceRuleAction">
+                            <option value="">Select action...</option>
+                        </select>
+                    </div>
+                    <button id="saveVoiceRuleBtn" class="btn btn-primary btn-full">Save Trigger</button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script src="obs-client.js"></script>
+<script src="obs-client.js"></script>
     <script src="modules/gesture-control.js"></script>
     <script src="modules/scene-describer.js"></script>
     <script src="modules/auto-switcher.js"></script>
+    <script src="modules/voice-control.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
