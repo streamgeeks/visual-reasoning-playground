@@ -75,7 +75,7 @@ python -m http.server 8000
 
 ## Related
 
-- [Book Chapter 10: Zone Monitor](../../book/chapters/10-zone-monitor.md)
+- [Book: Visual Reasoning AI](https://visualreasoning.ai/book) - Chapter 10 covers this tool in depth
 - [Tool #5: Smart Counter](../05-smart-counter/)
 - [Tool #2: Detection Boxes](../02-detection-boxes/)
 

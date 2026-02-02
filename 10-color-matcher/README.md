@@ -75,7 +75,7 @@ The AI analyzes and compares:
 
 ## Related
 
-- [Book Chapter 11: AI Color Correction](../../book/chapters/11-ai-color-correction.md)
+- [Book: Visual Reasoning AI](https://visualreasoning.ai/book) - Chapter 11 covers this tool in depth
 - [Tool #1: Scene Describer](../01-scene-describer/)
 
 ---

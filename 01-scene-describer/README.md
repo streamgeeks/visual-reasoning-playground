@@ -68,9 +68,9 @@ Each "Describe Scene" click = 1 API call
 
 ## Related
 
-- [Book Chapter 2: Your First Visual Query](../../book/chapters/02-your-first-visual-query.md)
+- [Book: Visual Reasoning AI](https://visualreasoning.ai/book) - Chapter 2 covers this tool in depth
 - [Tool #2: Detection Box Drawer](../02-detection-boxes/)
-- [Tool #5: Scene Analyzer](../05-scene-analyzer/)
+- [Tool #6: Scene Analyzer](../06-scene-analyzer/)
 
 ---
 

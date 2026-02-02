@@ -73,7 +73,7 @@ python -m http.server 8000
 
 ## Related
 
-- [Book Chapter 9: Scene Analyzer](../../book/chapters/09-scene-analyzer.md)
+- [Book: Visual Reasoning AI](https://visualreasoning.ai/book) - Chapter 9 covers this tool in depth
 - [Tool #1: Scene Describer](../01-scene-describer/)
 - [Tool #7: Zone Monitor](../07-zone-monitor/)
 
