@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     let analysisCount = 0;
     let adjustmentCount = 0;
     let currentRecommendation = null;
+    let videoAdapter = null;
 
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
@@ -124,6 +125,33 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (error) {
             updateStatus('Camera error: ' + error.message, true);
             window.reasoningConsole.logError('Camera failed: ' + error.message);
+        }
+    }
+
+    async function initVideoSource() {
+        try {
+            window.reasoningConsole.logInfo('Initializing video source...');
+            
+            if (window.VideoSourceAdapter) {
+                videoAdapter = window.VideoSourceAdapter.init({
+                    videoElement: video,
+                    toolId: 'ptz-color-tuner',
+                    insertInto: video.parentElement,
+                    onSourceChange: (source) => {
+                        window.reasoningConsole.logInfo(`Switched to ${source === 'camera' ? 'live camera' : 'sample video'}`);
+                        updateStatus(source === 'camera' ? 'Camera ready' : 'Using sample video');
+                    }
+                });
+                
+                await videoAdapter.switchToSample();
+                updateStatus('Using sample video');
+                window.reasoningConsole.logInfo('Video source initialized with sample video');
+            } else {
+                await startCamera();
+            }
+        } catch (error) {
+            updateStatus('Video error: ' + error.message, true);
+            window.reasoningConsole.logError('Video initialization failed: ' + error.message);
         }
     }
 
@@ -399,5 +427,5 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     await enumerateCameras();
-    await startCamera();
+    await initVideoSource();
 });
