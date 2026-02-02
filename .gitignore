@@ -30,3 +30,43 @@ build/
 
 # Zip files (keep code-examples.zip out)
 *.zip
+
+# ===========================================
+# Internal/Development Content (not for public repo)
+# ===========================================
+
+# Book manuscript and publishing files
+book/
+
+# Course materials
+course/
+
+# Planning and development docs
+planning/
+
+# Website assets
+website/
+
+# Internal documents
+SEO-AUDIT-AND-RECOMMENDATIONS.md
+
+# ===========================================
+# Duplicate Asset Folders (canonical location: assets/)
+# ===========================================
+
+# Raw video source files
+Handbreak/
+
+# Duplicate sample videos
+Visual Reasoning Clips/
+
+# Duplicate color profiles (use assets/color-profiles/)
+Color Profiles/
+
+# Duplicate codebase
+code-examples/
+
+# ===========================================
+# Windows Artifacts
+# ===========================================
+nul

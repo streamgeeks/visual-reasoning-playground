@@ -446,6 +446,44 @@ All tools follow a consistent pattern: **Video → AI → Action**
 
 ---
 
+## Project Structure
+
+```
+visual-reasoning-playground/
+├── index.html                    # Landing page with all tools
+├── server.py                     # Local dev server (CORS enabled)
+├── shared/                       # Reusable utilities for all tools
+│
+├── 01-scene-describer/           # Natural language scene descriptions
+├── 02-detection-boxes/           # Bounding box visualization
+├── 03-gesture-obs/               # Gesture-based OBS control
+├── 04-scoreboard-extractor/      # Score extraction (VLM approach)
+├── 04b-scoreboard-ocr/           # Score extraction (Tesseract OCR)
+├── 05-smart-counter/             # Object counting across line
+├── 06-scene-analyzer/            # Visual Q&A chat
+├── 07-zone-monitor/              # Zone-based alerts
+├── 08-framing-assistant/         # PTZ framing suggestions
+├── 09-ptz-color-tuner/           # PTZ color control
+├── 10-color-matcher/             # Color matching to reference
+├── 11-multimodal-studio/         # Full PTZ+OBS+voice automation
+├── 12-multimodal-fusion/         # Audio+video fusion engine
+├── 13-smart-photographer/        # Auto-capture on detection
+├── 14-tracking-comparison/       # MediaPipe vs Moondream test
+├── 15-voice-triggers/            # Voice command automation
+│
+├── PTZOptics-Moondream-Tracker/  # Featured PTZ auto-tracking
+├── obs-visual-reasoning/         # OBS Browser Dock plugin
+├── 00-visual-reasoning-harness/  # Harness pattern documentation
+│
+└── assets/                       # Sample videos & color profiles
+    ├── sample-videos/            # Demo videos for playground mode
+    └── color-profiles/           # Reference images for color tool
+```
+
+> See [CONTRIBUTING.md](CONTRIBUTING.md) for details on adding new tools.
+
+---
+
 ## API Cost Guide
 
 Moondream charges per API call. Control costs with the rate slider in each tool:
