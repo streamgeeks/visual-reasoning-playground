@@ -12,10 +12,13 @@ Extract scores from physical scoreboards using Tesseract.js OCR running entirely
 
 ## Quick Start
 
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
+
 ```bash
-cd 04b-scoreboard-ocr
-python -m http.server 8000
-# Open http://localhost:8000
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/04b-scoreboard-ocr/
 ```
 
 1. Point camera at a scoreboard (or use sample video)

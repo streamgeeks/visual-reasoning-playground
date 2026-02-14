@@ -23,12 +23,20 @@ Control OBS Studio scene switching using hand gestures detected by Moondream.
 
 ## Quick Start
 
-1. Open `index.html` in a browser (via local server for camera access)
-2. Enter your Moondream API key when prompted
-3. Connect to OBS using the WebSocket URL and password
-4. Map gestures to scenes using the dropdowns
-5. Click "Start Detection"
-6. Show thumbs up or thumbs down to switch scenes!
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
+
+```bash
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/03-gesture-obs/
+```
+
+1. Enter your Moondream API key when prompted
+2. Connect to OBS using the WebSocket URL and password
+3. Map gestures to scenes using the dropdowns
+4. Click "Start Detection"
+5. Show thumbs up or thumbs down to switch scenes!
 
 ## Guardrails Explained
 

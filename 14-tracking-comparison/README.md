@@ -1,168 +1,106 @@
-# Tool #8: PTZ Framing Assistant
+# Tool #14: Tracking Comparison
 
-**Auto-frame subjects using AI detection + PTZ camera control**
+**Compare MediaPipe (local CV) vs Moondream (cloud VLM) for PTZ tracking.**
 
-Part of the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
+Part of the [Visual Reasoning Playground](../README.md) - companion code for the book *Visual Reasoning AI for Broadcast and ProAV* by Paul Richards.
 
-## Overview
+---
 
-The PTZ Framing Assistant automatically tracks and frames subjects using:
-- **Moondream AI** for real-time object detection
-- **PTZOptics cameras** for pan, tilt, and zoom control
+## What It Does
 
-Simply specify what you want to track (person, face, speaker, etc.) and the camera will automatically keep it centered in frame.
+Run MediaPipe and Moondream side-by-side to compare local computer vision vs. cloud-based vision language models for PTZ camera tracking. See real latency, accuracy, and flexibility differences to choose the right approach for your use case.
 
-## Features
+## Quick Start
 
-- **Auto-Framing**: Continuously detects target object and adjusts camera position
-- **Zoom Presets**: Wide, Medium, and Tight framing options
-- **Manual PTZ Control**: Direct pan/tilt/zoom buttons for fine adjustment
-- **Detection Overlay**: Visual feedback showing detected objects
-- **Center Crosshair**: Reference point for framing
-- **Deadzone**: Prevents jitter by ignoring small offsets
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
+
+```bash
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/14-tracking-comparison/
+```
+
+1. Enter your Moondream API key
+2. Connect your PTZOptics camera IP
+3. Select tracking method (MediaPipe, Moondream, or both)
+4. Start tracking and compare results
 
 ## Requirements
 
 1. **Moondream API Key** - Get one at [console.moondream.ai](https://console.moondream.ai)
 2. **PTZOptics Camera** - Any model with HTTP API support
-3. **Webcam or Video Source** - For displaying camera feed (can be NDI or capture card)
-
-## Setup
-
-### 1. Configure Video Source
-
-Select your camera or video input from the dropdown. This can be:
-- USB webcam viewing the PTZ output
-- NDI source via NDI Virtual Input
-- Capture card showing PTZ camera feed
-
-### 2. Connect PTZ Camera
-
-Enter your PTZOptics camera's IP address and click "Test" to verify connection.
-
-The camera must be on the same network and have HTTP control enabled.
-
-#### HTTP Authentication
-
-If your PTZOptics camera has HTTP authentication enabled, you must check the "Enable HTTP Authentication" checkbox and enter your credentials:
-
-| Setting | Description |
-|---------|-------------|
-| Enable HTTP Authentication | Check this if your camera requires login |
-| Username | Your camera's HTTP username (default: `admin`) |
-| Password | Your camera's HTTP password (default: `admin`) |
-
-**How to check if authentication is required:**
-1. Open a browser and go to `http://<camera-ip>/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop`
-2. If you see a login prompt, authentication is enabled
-3. If the page loads without a prompt, authentication is disabled
-
-**Note:** Credentials are stored locally in your browser for convenience. For production use, consider your security requirements.
-
-### 3. Set Target Object
-
-Enter what you want to track:
-- `person` - Track any person in frame
-- `face` - Track a face (tighter framing)
-- `speaker` - Track the person speaking
-- `hand` - Track hand gestures
-- Custom descriptions work too!
-
-### 4. Choose Zoom Preset
-
-- **Wide**: Full room view
-- **Medium**: Standard framing
-- **Tight**: Close-up shot
-
-### 5. Start Auto-Framing
-
-Click "Auto-Frame" to begin. The camera will:
-1. Detect the target object using Moondream
-2. Calculate offset from frame center
-3. Send PTZ commands to center the object
-4. Repeat continuously until stopped
+3. **Webcam or Video Source** - For displaying camera feed
 
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Detection Loop                        │
-├──────────────────────────────────────────────────────────┤
-│  1. Capture frame from video                            │
-│  2. Send to Moondream /detect API                       │
-│  3. Get bounding box coordinates (normalized 0-1)       │
-│  4. Calculate center point of detection                 │
-│  5. Compare to frame center (0.5, 0.5)                  │
-│  6. If offset > deadzone:                               │
-│     - Pan left/right to correct X offset                │
-│     - Tilt up/down to correct Y offset                  │
-│  7. Repeat every 500ms                                  │
-└──────────────────────────────────────────────────────────┘
+┌─────────────┐     ┌──────────────┐
+│   Camera    │────▶│  MediaPipe   │──── Local: ~10ms ────┐
+│   Frame     │     │  (Browser)   │                      │
+└─────────────┘     └──────────────┘                      ├──▶ Compare!
+      │             ┌──────────────┐                      │
+      └────────────▶│  Moondream   │──── Cloud: ~200ms ───┘
+                    │  (API)       │
+                    └──────────────┘
 ```
 
-## PTZOptics API Reference
+### MediaPipe (Local CV)
+- Runs entirely in-browser using TensorFlow.js
+- **Pros**: Very fast (~10ms), no API costs, works offline
+- **Cons**: Limited to pre-trained tasks (faces, hands, poses), no custom objects
 
-The app uses the PTZOptics HTTP API:
+### Moondream (Cloud VLM)
+- Sends frames to Moondream API for zero-shot detection
+- **Pros**: Track anything by description ("person in red shirt"), understands context
+- **Cons**: Network latency (~200ms+), API costs, requires internet
 
-| Command | URL Pattern |
-|---------|-------------|
-| Pan Right | `/cgi-bin/ptzctrl.cgi?ptzcmd&right&{speed}&{speed}` |
-| Pan Left | `/cgi-bin/ptzctrl.cgi?ptzcmd&left&{speed}&{speed}` |
-| Tilt Up | `/cgi-bin/ptzctrl.cgi?ptzcmd&up&{speed}&{speed}` |
-| Tilt Down | `/cgi-bin/ptzctrl.cgi?ptzcmd&down&{speed}&{speed}` |
-| Stop | `/cgi-bin/ptzctrl.cgi?ptzcmd&ptzstop` |
-| Zoom In | `/cgi-bin/ptzctrl.cgi?ptzcmd&zoomin&{speed}` |
-| Zoom Out | `/cgi-bin/ptzctrl.cgi?ptzcmd&zoomout&{speed}` |
-| Absolute Zoom | `/cgi-bin/ptzctrl.cgi?ptzctrl&abszoom&{position}` |
+## Key Comparisons
 
-## Tuning Parameters
+| Aspect | MediaPipe | Moondream |
+|--------|-----------|-----------|
+| **Latency** | ~10ms | ~200ms+ |
+| **Cost** | Free | Per API call |
+| **Flexibility** | Fixed tasks only | Any object by description |
+| **Offline** | Yes | No |
+| **Accuracy** | High for supported tasks | High for any described object |
+| **Best For** | Face/hand/pose tracking | Custom object tracking |
 
-In `app.js`, you can adjust:
+## When to Use Which
 
-```javascript
-// Zoom preset values (0-16384 for PTZOptics)
-const ZOOM_PRESETS = {
-    wide: 0,
-    medium: 4000,
-    tight: 10000
-};
+- **MediaPipe**: You need speed and are tracking faces, hands, or body poses
+- **Moondream**: You need flexibility to track arbitrary objects by description
+- **Both**: Use MediaPipe for fast initial detection, Moondream for confirmation
 
-// Deadzone - how close to center before moving (0.08 = 8%)
-const deadzone = 0.08;
+## Files
 
-// Detection interval (milliseconds)
-const loopDelay = 500;
-
-// PTZ movement duration (milliseconds)
-const moveDuration = 150;
 ```
-
-## Tips
-
-1. **Start Wide**: Begin with the Wide preset to easily find your subject
-2. **Good Lighting**: Detection works better with adequate lighting
-3. **Stable Network**: Use wired ethernet for reliable PTZ control
-4. **Adjust Speed**: Modify PTZ speed in `ptz-controller.js` for smoother tracking
-5. **Multiple Subjects**: If multiple objects detected, it tracks the first one
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Camera not connecting | Check IP address, ensure camera is on same network |
-| PTZ commands not working | Enable HTTP Authentication and enter credentials |
-| Manual controls unresponsive | Camera likely requires auth - check "Enable HTTP Authentication" |
-| "Connection failed" error | Verify IP, check if camera requires authentication |
-| Jerky movement | Increase deadzone value, reduce PTZ speed |
-| Object not detected | Try different target description, improve lighting |
-| Slow response | Reduce video resolution, check API rate limits |
+14-tracking-comparison/
+├── index.html              # Comparison UI
+├── app.js                  # Main application logic
+├── mediapipe-detector.js   # MediaPipe integration
+├── ptz-controller.js       # PTZ camera control
+└── README.md               # This file
+```
 
 ## Related
 
-- [Module 5 Slides](../../course/slide-decks/module-05-framing-color.md)
-- [PTZOptics API Documentation](https://ptzoptics.com/api)
-- [Moondream API Reference](https://docs.moondream.ai)
+- [PTZ Auto-Tracker](../PTZOptics-Moondream-Tracker/) - Full Moondream-based tracker
+- [Tool #8: Framing Assistant](../08-framing-assistant/) - AI framing suggestions
+- [Book: Visual Reasoning AI](https://visualreasoning.ai/book)
 
 ---
 
-*From "Visual Reasoning AI for Broadcast and ProAV" by Paul Richards*
+## Get the Book
+
+**[Visual Reasoning AI for Broadcast and ProAV](https://visualreasoning.ai/book)** by Paul Richards - Learn to build AI-powered camera systems from the ground up.
+
+**Resources:**
+- [VisualReasoning.ai](https://visualreasoning.ai) - Book, online course, and free tools
+- [Moondream](https://moondream.ai) - Vision AI powering these tools
+- [PTZOptics](https://ptzoptics.com) - PTZ cameras with API control
+- [StreamGeeks](https://streamgeeks.com) - Live streaming education
+
+---
+
+*Part of the [Visual Reasoning Playground](../README.md) by [Paul Richards](https://github.com/paulwrichards)*

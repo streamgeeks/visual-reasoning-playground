@@ -12,10 +12,13 @@ Define a virtual line in the camera view. The system counts objects (people, car
 
 ## Quick Start
 
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
+
 ```bash
-cd 05-smart-counter
-python -m http.server 8000
-# Open http://localhost:8000
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/05-smart-counter/
 ```
 
 1. Enter your Moondream API key

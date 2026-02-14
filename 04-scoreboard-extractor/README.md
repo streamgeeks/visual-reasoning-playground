@@ -22,20 +22,19 @@ Extract live scores and game time from video feeds using visual reasoning.
 
 ## Quick Start
 
-### Option 1: Live Camera
-1. Point a camera at a scoreboard
-2. Open `index.html` via local server
-3. Enter Moondream API key
-4. Click "Extract Once" or "Start Auto-Extract"
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
 
-### Option 2: Virtual Camera (Recommended for Testing)
-1. Download sample video: [ptzoptics.imagerelay.com/share/scoreboard](https://ptzoptics.imagerelay.com/share/scoreboard)
-2. Open OBS Studio
-3. Add Media Source → Select the video file
-4. Set to loop
-5. Click "Start Virtual Camera"
-6. In the extractor, select "OBS Virtual Camera"
-7. Start extraction!
+```bash
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/04-scoreboard-extractor/
+```
+
+### Using the Tool
+1. Point a camera at a scoreboard (or use sample video)
+2. Enter Moondream API key
+3. Click "Extract Once" or "Start Auto-Extract"
 
 ## Output Format
 

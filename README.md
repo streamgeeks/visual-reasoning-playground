@@ -7,7 +7,7 @@
 
 **AI-powered visual reasoning tools for broadcast, live streaming, and ProAV professionals.**
 
-12 ready-to-use tools demonstrating real-world applications of Vision Language Models (VLMs) using [Moondream](https://moondream.ai). From PTZ camera auto-tracking to multimodal audio+video automation.
+17 ready-to-use tools demonstrating real-world applications of Vision Language Models (VLMs) using [Moondream](https://moondream.ai). From PTZ camera auto-tracking to multimodal audio+video automation.
 
 > 🚀 **[Try All Tools Online Now](https://streamgeeks.github.io/visual-reasoning-playground/)** - No installation required!
 
@@ -224,7 +224,27 @@ Autonomous PTZ camera tracking using AI vision.
 
 ---
 
-### 🏆 Scoreboard Extractor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04-scoreboard-extractor/)
+### ⚡ Tool 14: Tracking Comparison — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/14-tracking-comparison/)
+Compare MediaPipe (local CV) vs Moondream (cloud VLM) for PTZ tracking.
+
+```
+┌─────────────┐     ┌──────────────┐
+│   Camera    │────▶│  MediaPipe   │──── Local: ~10ms ────┐
+│   Frame     │     │  (Browser)   │                      │
+└─────────────┘     └──────────────┘                      ├──▶ Compare!
+      │             ┌──────────────┐                      │
+      └────────────▶│  Moondream   │──── Cloud: ~200ms ───┘
+                    │  (API)       │
+                    └──────────────┘
+```
+
+> 🧪 **See the tradeoffs** — latency, accuracy, and flexibility side-by-side.
+
+📁 `14-tracking-comparison/`
+
+---
+
+### 🏆 Tool 4: Scoreboard Extractor — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04-scoreboard-extractor/)
 Extract scores from physical scoreboards using AI vision.
 
 ```
@@ -240,6 +260,23 @@ Extract scores from physical scoreboards using AI vision.
                                             └─────────────────┘
 ```
 📁 `04-scoreboard-extractor/`
+
+---
+
+### 📝 Tool 4b: Scoreboard OCR — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/04b-scoreboard-ocr/)
+Extract scores using local Tesseract.js OCR — no API key needed.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Scoreboard │────▶│  Tesseract.js   │────▶│  HOME: 24       │
+│   Camera    │     │  (Local OCR)    │     │  AWAY: 18       │
+└─────────────┘     │  Region-based   │     │  QTR: 3         │
+                    └─────────────────┘     └─────────────────┘
+```
+
+> 🔄 **Compare approaches!** Use this alongside Tool 4 to see VLM vs OCR tradeoffs.
+
+📁 `04b-scoreboard-ocr/`
 
 ---
 
@@ -262,6 +299,24 @@ AI-powered framing suggestions for PTZ cameras.
      better composition"
 ```
 📁 `08-framing-assistant/`
+
+---
+
+### 🎛️ Tool 9: PTZ Color Tuner — [Try it now](https://streamgeeks.github.io/visual-reasoning-playground/09-ptz-color-tuner/)
+Direct PTZ camera color control via API with AI-assisted adjustments.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  PTZOptics  │────▶│  Moondream AI   │────▶│  Recommended    │
+│   Camera    │     │  Analyze Scene  │     │  Adjustments    │
+└─────────────┘     └─────────────────┘     └────────┬────────┘
+      ▲                                              │
+      │             ┌─────────────────┐              │
+      └─────────────│  PTZOptics API  │◀─────────────┘
+                    │  Apply Settings │
+                    └─────────────────┘
+```
+📁 `09-ptz-color-tuner/`
 
 ---
 
@@ -364,6 +419,8 @@ Complete AI control panel as an OBS Browser Dock.
 3. **Enter Your API Key** - Paste it once, and you're ready to go!
 
 ### Option B: Run Locally
+
+> **Important:** Clone the **full repository** — individual tool folders won't work alone because they depend on shared libraries in `shared/`.
 
 ```bash
 git clone https://github.com/streamgeeks/visual-reasoning-playground.git
@@ -505,8 +562,9 @@ Moondream charges per API call. Control costs with the rate slider in each tool:
 - Local web server
 
 **Tool-Specific:**
-- **Tool 3 (Auto-Tracker)**: [PTZOptics camera](https://ptzoptics.com) with network access
-- **Tool 8 (Multimodal)**: Microphone for speech recognition
+- **PTZ Auto-Tracker, Framing Assistant, Color Tuner**: [PTZOptics camera](https://ptzoptics.com) with network access
+- **Multimodal Studio, Multimodal Fusion, Voice Triggers**: Microphone for speech recognition
+- **Gesture OBS Control, OBS Plugin**: [OBS Studio](https://obsproject.com) with WebSocket Server enabled
 
 ---
 

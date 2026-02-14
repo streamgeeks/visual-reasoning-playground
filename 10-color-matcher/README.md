@@ -12,10 +12,13 @@ Upload a reference image showing the style you want, capture your current camera
 
 ## Quick Start
 
+> **Important:** This tool requires the full repository. Clone the complete playground first — individual folders won't work because shared libraries are needed.
+
 ```bash
-cd 10-color-matcher
-python -m http.server 8000
-# Open http://localhost:8000
+git clone https://github.com/streamgeeks/visual-reasoning-playground.git
+cd visual-reasoning-playground
+python server.py
+# Open http://localhost:8000/10-color-matcher/
 ```
 
 1. Enter your Moondream API key

@@ -1,6 +1,6 @@
 # Multimodal Fusion System
 
-**Tool #8** in the Visual Reasoning Playground
+**Tool #12** in the [Visual Reasoning Playground](../README.md)
 
 Combines audio (speech recognition) and video (Moondream) understanding to trigger intelligent automation. When both signals agree, confidence increases dramatically—enabling reliable hands-free control.
 

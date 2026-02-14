@@ -1,10 +1,10 @@
 # PTZOptics Moondream Tracker
 
-**Tool #3** in the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
+**Featured Tool** in the [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
 
 An AI-powered PTZ (Pan-Tilt-Zoom) camera tracking application that uses Moondream's vision AI to detect and track objects in real-time. Optimized for PTZOptics cameras and other PTZ cameras with HTTP API support.
 
-> This tool is part of the Visual Reasoning Playground, a collection of 8 tools demonstrating visual AI for broadcast and ProAV. See the [complete playground](../) for all tools, or read the book *Visual Reasoning AI for Broadcast and ProAV* by Paul Richards.
+> This tool is part of the Visual Reasoning Playground, a collection of 17 tools demonstrating visual AI for broadcast and ProAV. See the [complete playground](../) for all tools, or read the book *Visual Reasoning AI for Broadcast and ProAV* by Paul Richards.
 
 ## Overview
 
