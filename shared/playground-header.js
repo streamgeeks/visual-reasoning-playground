@@ -24,6 +24,8 @@
         { id: '05-framing-assistant', name: 'Framing Assistant', path: '/05-framing-assistant/', icon: '🖼️' },
         { id: '05-color-assistant', name: 'PTZ Color Control', path: '/05-color-assistant/', icon: '🎛️' },
         { id: '07-multimodal-studio', name: 'Multimodal Studio', path: '/07-multimodal-studio/', icon: '🎬' },
+        { id: '16-ai-safety', name: 'AI Safety Monitor', path: '/16-ai-safety/', icon: '⚠️' },
+        { id: '17-public-spaces-logging', name: 'Public Spaces Logger', path: '/17-public-spaces-logging/', icon: '🏛️' },
     ];
 
     function isEmbedMode() {

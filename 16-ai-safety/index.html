@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Safety Monitor - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        /* Rating card */
+        .rating-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 2px solid var(--surface-light);
+            transition: border-color 0.3s, background 0.3s;
+            margin-bottom: 15px;
+        }
+        .rating-card.rating-5 { border-color: #2A9D8F; }
+        .rating-card.rating-4 { border-color: #8BC34A; }
+        .rating-card.rating-3 { border-color: #E9C46A; }
+        .rating-card.rating-2 { border-color: #E76F51; }
+        .rating-card.rating-1 { border-color: #E63946; background: rgba(230, 57, 70, 0.1); }
+
+        .rating-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #fff;
+            transition: background 0.3s;
+        }
+        .rating-5 .rating-circle { background: #2A9D8F; }
+        .rating-4 .rating-circle { background: #8BC34A; }
+        .rating-3 .rating-circle { background: #E9C46A; color: #333; }
+        .rating-2 .rating-circle { background: #E76F51; }
+        .rating-1 .rating-circle { background: #E63946; }
+
+        .rating-label {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .rating-concern {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+        .rating-action {
+            color: var(--primary-light);
+            font-size: 0.8rem;
+            margin-top: 6px;
+            font-style: italic;
+        }
+
+        /* Hazard tags */
+        .hazard-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+        .hazard-tag {
+            background: rgba(230, 57, 70, 0.2);
+            border: 1px solid rgba(230, 57, 70, 0.4);
+            color: #E63946;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+
+        /* Preset selector */
+        .preset-info {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Session stats */
+        .session-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .session-stat {
+            background: var(--background);
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+        .session-stat .value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+        .session-stat .label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Assessment history strip */
+        .history-section {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .history-header h3 {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+        .history-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .history-actions button {
+            padding: 4px 8px;
+            font-size: 0.7rem;
+        }
+        .history-strip {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+        .history-strip::-webkit-scrollbar {
+            height: 4px;
+        }
+        .history-strip::-webkit-scrollbar-thumb {
+            background: var(--surface-light);
+            border-radius: 2px;
+        }
+        .history-item {
+            flex-shrink: 0;
+            width: 60px;
+            cursor: pointer;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .history-item:hover {
+            transform: scale(1.05);
+        }
+        .history-item.rating-5 { border-color: #2A9D8F; }
+        .history-item.rating-4 { border-color: #8BC34A; }
+        .history-item.rating-3 { border-color: #E9C46A; }
+        .history-item.rating-2 { border-color: #E76F51; }
+        .history-item.rating-1 { border-color: #E63946; }
+        .history-thumb {
+            width: 60px;
+            height: 34px;
+            object-fit: cover;
+            display: block;
+        }
+        .history-meta {
+            background: var(--background);
+            padding: 2px 4px;
+            text-align: center;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+        }
+        .history-meta .rating-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 2px;
+            vertical-align: middle;
+        }
+        .dot-5 { background: #2A9D8F; }
+        .dot-4 { background: #8BC34A; }
+        .dot-3 { background: #E9C46A; }
+        .dot-2 { background: #E76F51; }
+        .dot-1 { background: #E63946; }
+
+        .history-empty {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Alarm overlay */
+        .alarm-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(230, 57, 70, 0.15);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            animation: alarmFlash 1s infinite;
+        }
+        .alarm-overlay.active {
+            display: flex;
+        }
+        .alarm-modal {
+            background: var(--surface);
+            border: 3px solid #E63946;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 420px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(230, 57, 70, 0.4);
+        }
+        .alarm-icon {
+            font-size: 4rem;
+            margin-bottom: 10px;
+        }
+        .alarm-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #E63946;
+            margin-bottom: 8px;
+        }
+        .alarm-concern {
+            font-size: 1rem;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .alarm-action {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+        }
+        .alarm-thumb {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 2px solid #E63946;
+        }
+        @keyframes alarmFlash {
+            0%, 100% { background: rgba(230, 57, 70, 0.1); }
+            50% { background: rgba(230, 57, 70, 0.25); }
+        }
+
+        /* Detail modal (click history item) */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 10001;
+            justify-content: center;
+            align-items: center;
+        }
+        .detail-overlay.active {
+            display: flex;
+        }
+        .detail-modal {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .detail-image {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .detail-close {
+            float: right;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+        }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed var(--surface-light);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .upload-area.visible {
+            display: block;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary-light);
+            background: rgba(147, 204, 234, 0.05);
+        }
+        .upload-area input {
+            display: none;
+        }
+        .upload-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Mode toggle */
+        .mode-toggle {
+            display: flex;
+            background: var(--background);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .mode-toggle button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-toggle button.active {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        /* Threshold display */
+        .threshold-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .threshold-dots {
+            display: flex;
+            gap: 3px;
+        }
+        .threshold-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid var(--surface-light);
+            transition: all 0.2s;
+        }
+        .threshold-dot.active {
+            transform: scale(1.1);
+        }
+        .threshold-dot:nth-child(1) { background: #E63946; }
+        .threshold-dot:nth-child(2) { background: #E76F51; }
+        .threshold-dot:nth-child(3) { background: #E9C46A; }
+        .threshold-dot:nth-child(4) { background: #8BC34A; }
+        .threshold-dot:nth-child(5) { background: #2A9D8F; }
+
+        /* Results panel override for history */
+        .results-panel {
+            padding: 0;
+            background: transparent;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>AI Safety Monitor</h1>
+        <p class="subtitle">Tool #16 - Environment safety analysis using AI vision</p>
+        <a href="../" class="project-link">&larr; Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <!-- Image upload area (shown in upload mode) -->
+                <div id="uploadArea" class="upload-area">
+                    <input type="file" id="fileInput" accept="image/*" multiple>
+                    <div class="upload-label">Drop images here or click to upload</div>
+                </div>
+
+                <div class="results-panel">
+                    <div class="history-section">
+                        <div class="history-header">
+                            <h3>Assessment History</h3>
+                            <div class="history-actions">
+                                <button id="exportJsonBtn" class="btn btn-secondary" title="Export JSON">JSON</button>
+                                <button id="exportCsvBtn" class="btn btn-secondary" title="Export CSV">CSV</button>
+                                <button id="clearHistoryBtn" class="btn btn-secondary" title="Clear history">Clear</button>
+                            </div>
+                        </div>
+                        <div id="historyStrip" class="history-strip">
+                            <div class="history-empty">Assessments will appear here</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+
+                <!-- Mode toggle -->
+                <div class="mode-toggle">
+                    <button id="modeCameraBtn" class="active">Camera</button>
+                    <button id="modeUploadBtn">Upload</button>
+                </div>
+
+                <div class="control-group" id="cameraGroup">
+                    <label for="cameraSelect">Camera</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="cameraSelect" style="flex: 1;"></select>
+                        <button id="refreshCamerasBtn" class="btn btn-secondary" style="padding: 8px 12px;">&#8635;</button>
+                    </div>
+                </div>
+
+                <!-- Rating card -->
+                <div id="ratingCard" class="rating-card rating-5">
+                    <div class="rating-circle">--</div>
+                    <div class="rating-label">Waiting</div>
+                    <div class="rating-concern">Start monitoring to analyze safety</div>
+                    <div class="rating-action"></div>
+                    <div class="hazard-tags" id="hazardTags"></div>
+                </div>
+
+                <!-- Preset selection -->
+                <div class="control-group">
+                    <label for="presetSelect">Environment Preset</label>
+                    <select id="presetSelect">
+                        <option value="general">General</option>
+                        <option value="construction">Construction</option>
+                        <option value="warehouse">Warehouse</option>
+                        <option value="school">School / Sports</option>
+                    </select>
+                    <div id="presetInfo" class="preset-info">All-purpose environment monitoring</div>
+                </div>
+
+                <!-- Frame rate -->
+                <div class="control-group">
+                    <label for="fpmSelect">Capture Rate</label>
+                    <select id="fpmSelect">
+                        <option value="1">1 frame/min</option>
+                        <option value="2">2 frames/min</option>
+                        <option value="5" selected>5 frames/min</option>
+                        <option value="10">10 frames/min</option>
+                        <option value="20">20 frames/min</option>
+                        <option value="30">30 frames/min</option>
+                    </select>
+                </div>
+
+                <!-- Alarm settings -->
+                <div class="control-group">
+                    <label for="thresholdSelect">Alarm Threshold</label>
+                    <select id="thresholdSelect">
+                        <option value="1" selected>1 - DANGER only</option>
+                        <option value="2">2 - Hazard and below</option>
+                        <option value="3">3 - Caution and below</option>
+                    </select>
+                    <div class="threshold-display">
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Triggers at:</span>
+                        <div class="threshold-dots" id="thresholdDots">
+                            <div class="threshold-dot active"></div>
+                            <div class="threshold-dot"></div>
+                            <div class="threshold-dot"></div>
+                            <div class="threshold-dot"></div>
+                            <div class="threshold-dot"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="consecutiveInput">Consecutive Frames for Alarm</label>
+                    <input type="number" id="consecutiveInput" min="1" max="10" value="3">
+                </div>
+
+                <div class="control-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="audioToggle" checked>
+                        Audio alert
+                    </label>
+                </div>
+
+                <div class="control-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="notifToggle">
+                        Browser notifications
+                    </label>
+                </div>
+
+                <!-- Session stats -->
+                <div class="session-stats">
+                    <div class="session-stat">
+                        <div class="value" id="statDuration">00:00</div>
+                        <div class="label">Duration</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statFrames">0</div>
+                        <div class="label">Frames</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statAlarms">0</div>
+                        <div class="label">Alarms</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statAvgRating">--</div>
+                        <div class="label">Avg Rating</div>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Monitoring</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                    <button id="snapBtn" class="btn btn-secondary">Snap</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready - Configure preset and start monitoring</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alarm overlay -->
+    <div id="alarmOverlay" class="alarm-overlay">
+        <div class="alarm-modal">
+            <div class="alarm-icon">&#9888;</div>
+            <div class="alarm-title">SAFETY ALARM</div>
+            <div id="alarmConcern" class="alarm-concern"></div>
+            <div id="alarmAction" class="alarm-action"></div>
+            <img id="alarmThumb" class="alarm-thumb" src="" alt="Triggering frame">
+            <button id="alarmAckBtn" class="btn btn-danger" style="width: 100%; margin-top: 10px;">Acknowledge</button>
+        </div>
+    </div>
+
+    <!-- Detail overlay (click history item) -->
+    <div id="detailOverlay" class="detail-overlay">
+        <div class="detail-modal">
+            <button id="detailCloseBtn" class="detail-close">&times;</button>
+            <img id="detailImage" class="detail-image" src="" alt="Assessment frame">
+            <div id="detailRating" class="rating-card" style="margin-bottom: 0;"></div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>

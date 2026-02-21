@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public Spaces Logger - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        /* ── Space type theming ── */
+        .space-courtroom { --space-color: #C9A84C; --space-bg: rgba(201,168,76,0.08); }
+        .space-council   { --space-color: #2A9D8F; --space-bg: rgba(42,157,143,0.08); }
+        .space-classroom { --space-color: #3066BE; --space-bg: rgba(48,102,190,0.08); }
+        .space-sports    { --space-color: #E63946; --space-bg: rgba(230,57,70,0.08); }
+
+        /* ── Session bar ── */
+        .session-bar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--surface-light);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .session-bar .session-label {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .session-bar .session-meta {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+        .session-bar .session-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .session-bar .badge-active {
+            background: rgba(42,157,143,0.2);
+            color: #2A9D8F;
+        }
+        .session-bar .badge-ended {
+            background: rgba(119,141,169,0.2);
+            color: var(--text-muted);
+        }
+
+        /* ── Current event card ── */
+        .current-event-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 16px;
+            border-left: 4px solid var(--space-color, var(--primary));
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        .current-event-type {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .current-event-desc {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        .current-event-confidence {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .confidence-bar-bg {
+            flex: 1;
+            height: 6px;
+            background: var(--background);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .confidence-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s, background 0.3s;
+        }
+        .confidence-pct {
+            font-size: 0.8rem;
+            font-weight: 600;
+            min-width: 36px;
+            text-align: right;
+        }
+
+        /* ── Session stats ── */
+        .session-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .session-stat {
+            background: var(--background);
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+        .session-stat .value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+        .session-stat .label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Event log ── */
+        .event-log-section {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+        .event-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .event-log-header h3 { margin: 0; font-size: 0.95rem; }
+        .event-log-filters {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .event-log-filters label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .event-log {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .event-log::-webkit-scrollbar { width: 4px; }
+        .event-log::-webkit-scrollbar-thumb { background: var(--surface-light); border-radius: 2px; }
+
+        .log-entry {
+            display: flex;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            background: var(--background);
+            align-items: flex-start;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .log-entry:hover { background: var(--surface-light); }
+        .log-entry.significant { border-left: 3px solid var(--space-color, var(--primary)); }
+        .log-entry.new-entry { animation: entrySlide 0.3s ease-out; }
+        @keyframes entrySlide {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .log-elapsed {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: Consolas, Monaco, monospace;
+            min-width: 60px;
+            flex-shrink: 0;
+            padding-top: 2px;
+        }
+        .log-body { flex: 1; min-width: 0; }
+        .log-event-type {
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 2px;
+        }
+        .log-event-type .sig-marker {
+            color: var(--space-color, var(--warning));
+            margin-right: 4px;
+        }
+        .log-description {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .log-confidence {
+            font-size: 0.7rem;
+            font-weight: 600;
+            min-width: 36px;
+            text-align: right;
+            flex-shrink: 0;
+            padding-top: 2px;
+        }
+        .log-thumb {
+            width: 48px;
+            height: 28px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid var(--surface-light);
+        }
+        .log-empty {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 30px;
+            font-size: 0.85rem;
+        }
+
+        /* ── Space selector tabs ── */
+        .space-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .space-tab {
+            flex: 1;
+            padding: 8px 4px;
+            border: 2px solid var(--surface-light);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .space-tab:hover { border-color: var(--text-muted); }
+        .space-tab.active {
+            border-color: var(--space-color, var(--primary));
+            color: var(--space-color, var(--primary));
+            background: var(--space-bg, rgba(48,102,190,0.08));
+        }
+        .space-tab-icon { display: block; font-size: 1.2rem; margin-bottom: 2px; }
+
+        /* ── Upload area ── */
+        .upload-area {
+            border: 2px dashed var(--surface-light);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .upload-area.visible { display: block; }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary-light);
+            background: rgba(147,204,234,0.05);
+        }
+        .upload-area input { display: none; }
+        .upload-label { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* ── Mode toggle ── */
+        .mode-toggle {
+            display: flex;
+            background: var(--background);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .mode-toggle button {
+            flex: 1;
+            padding: 7px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-toggle button.active {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        /* ── New Session modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 460px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-box h2 { margin-top: 0; font-size: 1.2rem; }
+        .modal-box .control-group { margin-bottom: 12px; }
+        .modal-box .control-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .modal-box input, .modal-box select {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--surface-light);
+            background: var(--background);
+            color: var(--text);
+            font-size: 0.85rem;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+
+        /* ── Compliance modal ── */
+        .compliance-list {
+            list-style: none;
+            padding: 0;
+            margin: 12px 0;
+        }
+        .compliance-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 0.85rem;
+            color: var(--text);
+        }
+        .compliance-list li input[type="checkbox"] { margin-top: 3px; }
+        .compliance-note {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            background: var(--background);
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .dont-show-label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        /* ── Detail overlay ── */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 10001;
+            justify-content: center;
+            align-items: center;
+        }
+        .detail-overlay.active { display: flex; }
+        .detail-modal {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+        }
+        .detail-image {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .detail-close {
+            float: right;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+        }
+        .detail-event-type {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .detail-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .detail-meta {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Event type breakdown ── */
+        .event-breakdown {
+            max-height: 120px;
+            overflow-y: auto;
+            margin-top: 6px;
+        }
+        .event-breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0;
+            font-size: 0.75rem;
+        }
+        .event-breakdown-row .etype { color: var(--text-muted); }
+        .event-breakdown-row .ecount { font-weight: 600; color: var(--text); }
+
+        /* Override results-panel for this tool */
+        .results-panel { padding: 0; background: transparent; }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Public Spaces Logger</h1>
+        <p class="subtitle">Tool #17 - AI event classification for courtrooms, councils, classrooms &amp; sports</p>
+        <a href="../" class="project-link">&larr; Back to Visual Reasoning Playground</a>
+    </header>
+
+    <!-- Session bar -->
+    <div id="sessionBar" class="session-bar" style="display:none;">
+        <span id="sessionBadge" class="session-badge badge-active">RECORDING</span>
+        <span id="sessionLabelDisplay" class="session-label">--</span>
+        <span id="sessionMetaDisplay" class="session-meta">--</span>
+    </div>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <!-- Upload area -->
+                <div id="uploadArea" class="upload-area">
+                    <input type="file" id="fileInput" accept="image/*" multiple>
+                    <div class="upload-label">Drop images here or click to upload</div>
+                </div>
+
+                <div class="results-panel">
+                    <div class="event-log-section">
+                        <div class="event-log-header">
+                            <h3>Event Log</h3>
+                            <div class="event-log-filters">
+                                <label><input type="checkbox" id="sigOnlyToggle"> Significant only</label>
+                                <button id="exportJsonBtn" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;">JSON</button>
+                                <button id="exportCsvBtn" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;">CSV</button>
+                            </div>
+                        </div>
+                        <div id="eventLog" class="event-log">
+                            <div class="log-empty">Events will appear here once a session starts</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+
+                <!-- Mode toggle -->
+                <div class="mode-toggle">
+                    <button id="modeCameraBtn" class="active">Camera</button>
+                    <button id="modeUploadBtn">Upload</button>
+                </div>
+
+                <div class="control-group" id="cameraGroup">
+                    <label for="cameraSelect">Camera</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="cameraSelect" style="flex: 1;"></select>
+                        <button id="refreshCamerasBtn" class="btn btn-secondary" style="padding: 8px 12px;">&#8635;</button>
+                    </div>
+                </div>
+
+                <!-- Space type selector -->
+                <div class="space-tabs" id="spaceTabs">
+                    <button class="space-tab active" data-space="courtroom">
+                        <span class="space-tab-icon">&#9878;&#65039;</span>Court
+                    </button>
+                    <button class="space-tab" data-space="council">
+                        <span class="space-tab-icon">&#127963;&#65039;</span>Council
+                    </button>
+                    <button class="space-tab" data-space="classroom">
+                        <span class="space-tab-icon">&#128218;</span>Class
+                    </button>
+                    <button class="space-tab" data-space="sports">
+                        <span class="space-tab-icon">&#127941;</span>Sports
+                    </button>
+                </div>
+
+                <!-- Current event card -->
+                <div id="currentEventCard" class="current-event-card">
+                    <div id="currentEventType" class="current-event-type">Waiting...</div>
+                    <div id="currentEventDesc" class="current-event-desc">Start a session to begin classification</div>
+                    <div class="current-event-confidence">
+                        <div class="confidence-bar-bg">
+                            <div id="confidenceBar" class="confidence-bar-fill" style="width:0%;background:var(--text-muted);"></div>
+                        </div>
+                        <span id="confidencePct" class="confidence-pct">--%</span>
+                    </div>
+                </div>
+
+                <!-- Interval -->
+                <div class="control-group">
+                    <label for="intervalSelect">Analysis Interval</label>
+                    <select id="intervalSelect">
+                        <option value="3000">3 seconds</option>
+                        <option value="5000" selected>5 seconds</option>
+                        <option value="10000">10 seconds</option>
+                        <option value="15000">15 seconds</option>
+                        <option value="30000">30 seconds</option>
+                    </select>
+                </div>
+
+                <!-- Settings toggles -->
+                <div class="control-group">
+                    <label style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="captureFramesToggle" checked>
+                        Save frame snapshots
+                    </label>
+                </div>
+                <div class="control-group">
+                    <label style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="autoScrollToggle" checked>
+                        Auto-scroll log
+                    </label>
+                </div>
+                <div class="control-group">
+                    <label for="dedupInput">Dedup window (seconds)</label>
+                    <input type="number" id="dedupInput" min="5" max="120" value="30">
+                </div>
+
+                <!-- Session stats -->
+                <div class="session-stats">
+                    <div class="session-stat">
+                        <div class="value" id="statDuration">00:00:00</div>
+                        <div class="label">Duration</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statFrames">0</div>
+                        <div class="label">Frames</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statEvents">0</div>
+                        <div class="label">Events</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statSignificant">0</div>
+                        <div class="label">Significant</div>
+                    </div>
+                </div>
+
+                <!-- Event type breakdown (collapsible) -->
+                <details style="margin-bottom:12px;">
+                    <summary style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;">Event breakdown</summary>
+                    <div id="eventBreakdown" class="event-breakdown">
+                        <div style="font-size:0.78rem;color:var(--text-muted);padding:8px;">No events yet</div>
+                    </div>
+                </details>
+
+                <div class="btn-group" style="flex-wrap:wrap;">
+                    <button id="newSessionBtn" class="btn btn-primary">New Session</button>
+                    <button id="startBtn" class="btn btn-success hidden">Start</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                    <button id="endSessionBtn" class="btn btn-secondary hidden">End Session</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready - Create a new session to begin</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Session modal -->
+    <div id="newSessionModal" class="modal-overlay">
+        <div class="modal-box">
+            <h2>New Session</h2>
+            <div class="space-tabs" id="modalSpaceTabs">
+                <button class="space-tab active" data-space="courtroom">
+                    <span class="space-tab-icon">&#9878;&#65039;</span>Court
+                </button>
+                <button class="space-tab" data-space="council">
+                    <span class="space-tab-icon">&#127963;&#65039;</span>Council
+                </button>
+                <button class="space-tab" data-space="classroom">
+                    <span class="space-tab-icon">&#128218;</span>Class
+                </button>
+                <button class="space-tab" data-space="sports">
+                    <span class="space-tab-icon">&#127941;</span>Sports
+                </button>
+            </div>
+            <div class="control-group">
+                <label for="sessionLabelInput">Session Label</label>
+                <input type="text" id="sessionLabelInput" placeholder="e.g., Smith v. Jones - Motion Hearing">
+            </div>
+            <div class="control-group">
+                <label for="sessionLocationInput">Location</label>
+                <input type="text" id="sessionLocationInput" placeholder="e.g., County Courthouse, Room 302">
+            </div>
+            <div class="control-group">
+                <label for="sessionDateInput">Date</label>
+                <input type="date" id="sessionDateInput">
+            </div>
+            <div class="modal-actions">
+                <button id="cancelSessionBtn" class="btn btn-secondary">Cancel</button>
+                <button id="createSessionBtn" class="btn btn-success">Start Recording</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compliance modal -->
+    <div id="complianceModal" class="modal-overlay">
+        <div class="modal-box">
+            <h2 id="complianceTitle">Recording Compliance</h2>
+            <p id="complianceIntro" style="font-size:0.85rem;color:var(--text-muted);"></p>
+            <ul id="complianceList" class="compliance-list"></ul>
+            <div class="compliance-note">
+                AI-generated logs are <strong>supplementary only</strong>. They do not replace official records, transcripts, or minutes.
+            </div>
+            <label class="dont-show-label">
+                <input type="checkbox" id="complianceDontShow">
+                Don't show again for this space type
+            </label>
+            <div class="modal-actions">
+                <button id="complianceAckBtn" class="btn btn-primary">I Understand</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail overlay -->
+    <div id="detailOverlay" class="detail-overlay">
+        <div class="detail-modal">
+            <button id="detailCloseBtn" class="detail-close">&times;</button>
+            <img id="detailImage" class="detail-image" src="" alt="Event frame">
+            <div id="detailEventType" class="detail-event-type"></div>
+            <div id="detailDesc" class="detail-desc"></div>
+            <div id="detailMeta" class="detail-meta"></div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>
