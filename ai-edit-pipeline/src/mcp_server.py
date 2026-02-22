@@ -33,6 +33,8 @@ from src.utils.logging_config import configure_logging
 from src.tools.resolve_tools import register_resolve_tools
 from src.tools.vision_tools import register_vision_tools
 from src.tools.orchestration_tools import register_orchestration_tools
+from src.tools.pipeline_tools import register_pipeline_tools
+from src.tools.ingest_tools import register_ingest_tools
 
 # Initialize logging
 log_root = configure_logging()
@@ -57,6 +59,12 @@ log_root.info("Registered Vision AI tools")
 
 register_orchestration_tools(mcp)
 log_root.info("Registered Orchestration tools")
+
+register_pipeline_tools(mcp)
+log_root.info("Registered Pipeline tools (end-to-end + refinement)")
+
+register_ingest_tools(mcp)
+log_root.info("Registered Ingest tools (file watcher + sessions + multi-camera)")
 
 log_root.info("MCP server ready — all tools registered")
 
