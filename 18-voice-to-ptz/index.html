@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice to PTZ - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        /* ── Config Bar ── */
+        .config-bar {
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px;
+            padding: 14px 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+        }
+        .config-field { display: flex; flex-direction: column; gap: 4px; }
+        .config-field label {
+            font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .config-field input, .config-field select {
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            color: var(--text);
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            min-width: 140px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .config-field input:focus { border-color: var(--primary); }
+        .config-field input[type="password"] { font-family: Consolas, Monaco, monospace; }
+        .status-dot {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; background: var(--text-muted); margin-right: 6px;
+            transition: background 0.3s;
+        }
+        .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .status-dot.error { background: var(--error); }
+        #cameraStatus { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* ── Tab Navigation ── */
+        .tabs {
+            display: flex; gap: 4px;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            flex: 1; padding: 10px 14px; border: none; border-radius: 6px;
+            background: transparent; color: var(--text-muted);
+            font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+        }
+        .tab-btn:hover { color: var(--text); background: var(--surface-light); }
+        .tab-btn.active { background: var(--primary); color: #fff; }
+        .tab-btn .tab-num {
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%; width: 20px; height: 20px;
+            font-size: 0.7rem;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* ── Tab Panels ── */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 18px;
+        }
+        .card-title {
+            font-size: 1rem; font-weight: 700; margin-bottom: 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ── Scan Mode Grid ── */
+        .mode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 10px; margin-bottom: 18px;
+        }
+        .mode-card {
+            background: var(--background);
+            border: 2px solid var(--surface-light);
+            border-radius: 8px; padding: 16px;
+            cursor: pointer; transition: all 0.2s; position: relative;
+        }
+        .mode-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+        .mode-card.selected { border-color: var(--primary); background: rgba(48,102,190,0.06); }
+        .mode-card .mode-icon { font-size: 1.6rem; margin-bottom: 6px; }
+        .mode-card .mode-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 3px; }
+        .mode-card .mode-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+        .mode-card .mode-detail { font-size: 0.7rem; color: var(--primary); margin-top: 5px; font-weight: 600; }
+        .mode-card .check {
+            position: absolute; top: 8px; right: 8px;
+            width: 18px; height: 18px; border-radius: 50%;
+            background: var(--primary); display: none;
+            align-items: center; justify-content: center;
+            font-size: 0.6rem; color: #fff;
+        }
+        .mode-card.selected .check { display: flex; }
+
+        /* ── VLM Selector ── */
+        .vlm-options { display: flex; gap: 8px; margin-bottom: 18px; }
+        .vlm-btn {
+            flex: 1; padding: 10px; border: 2px solid var(--surface-light);
+            border-radius: 8px; background: var(--background);
+            color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .vlm-btn.active { border-color: var(--primary); color: var(--text); background: rgba(48,102,190,0.08); }
+        .vlm-btn .vlm-name { font-size: 0.85rem; margin-bottom: 2px; }
+        .vlm-btn .vlm-sub { font-size: 0.68rem; opacity: 0.7; font-weight: 400; }
+
+        /* ── Scan Progress ── */
+        .scan-progress {
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px; padding: 18px; margin-top: 14px;
+            display: none;
+        }
+        .scan-progress.active { display: block; }
+        .progress-bar-wrap {
+            background: var(--surface-light); border-radius: 4px;
+            height: 6px; margin: 10px 0; overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 4px; transition: width 0.4s ease; width: 0%;
+        }
+        .progress-steps { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .step-pill {
+            font-size: 0.7rem; padding: 3px 9px; border-radius: 20px;
+            border: 1px solid var(--surface-light); color: var(--text-muted);
+            background: var(--surface); transition: all 0.3s;
+        }
+        .step-pill.active { border-color: var(--primary); color: var(--primary); background: rgba(48,102,190,0.08); }
+        .step-pill.done { border-color: var(--success); color: var(--success); background: rgba(42,157,143,0.06); }
+        .log-box {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 0.73rem; color: var(--text-muted);
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 6px; padding: 10px;
+            height: 120px; overflow-y: auto; margin-top: 10px; line-height: 1.6;
+        }
+        .log-box .log-ok { color: var(--success); }
+        .log-box .log-info { color: var(--primary); }
+        .log-box .log-warn { color: var(--warning); }
+        .log-box .log-err { color: var(--error); }
+
+        /* ── Scene Review ── */
+        .object-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+            gap: 10px; margin-top: 12px;
+        }
+        .object-card {
+            background: var(--background);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px; padding: 12px; position: relative;
+            transition: border-color 0.2s;
+        }
+        .object-card:hover { border-color: var(--primary); }
+        .object-card .obj-thumb {
+            width: 100%; aspect-ratio: 16/9; background: var(--surface);
+            border-radius: 5px; margin-bottom: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem; overflow: hidden;
+        }
+        .object-card .obj-name-input {
+            width: 100%; background: var(--surface);
+            border: 1px solid var(--surface-light); color: var(--text);
+            border-radius: 4px; padding: 5px 7px; font-size: 0.8rem;
+            font-weight: 600; margin-bottom: 5px;
+        }
+        .object-card .obj-aliases { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 6px; }
+        .object-card .obj-preset {
+            font-size: 0.68rem; font-family: Consolas, Monaco, monospace;
+            color: var(--primary); background: rgba(48,102,190,0.08);
+            padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 6px;
+        }
+        .object-card .obj-confidence { font-size: 0.66rem; color: var(--text-muted); }
+        .object-card .obj-delete {
+            position: absolute; top: 6px; right: 6px;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: var(--surface); border: 1px solid var(--surface-light);
+            color: var(--text-muted); cursor: pointer; font-size: 0.65rem;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        .object-card .obj-delete:hover { background: var(--error); color: #fff; border-color: var(--error); }
+
+        /* ── Slot Indicator ── */
+        .slot-indicator {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;
+        }
+        .slot-bar { flex: 1; height: 4px; background: var(--surface-light); border-radius: 2px; overflow: hidden; }
+        .slot-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width 0.3s; }
+        .slot-fill.warn { background: var(--warning); }
+        .slot-fill.danger { background: var(--error); }
+
+        /* ── Tag chips ── */
+        .tag-chip {
+            display: inline-block; font-size: 0.66rem; padding: 2px 6px;
+            border-radius: 4px; font-weight: 600;
+            background: rgba(48,102,190,0.1); color: var(--primary);
+            border: 1px solid rgba(48,102,190,0.2);
+        }
+        .tag-chip.green { background: rgba(42,157,143,0.08); color: var(--success); border-color: rgba(42,157,143,0.2); }
+
+        /* ── Scenes List ── */
+        .scenes-list { display: flex; flex-direction: column; gap: 8px; }
+        .scene-item {
+            background: var(--background);
+            border: 2px solid var(--surface-light);
+            border-radius: 8px; padding: 12px 16px;
+            display: flex; align-items: center; gap: 12px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .scene-item:hover { border-color: var(--primary); }
+        .scene-item.active-scene { border-color: var(--success); background: rgba(42,157,143,0.04); }
+        .scene-item .scene-icon { font-size: 1.4rem; }
+        .scene-item .scene-info { flex: 1; }
+        .scene-item .scene-name { font-weight: 700; font-size: 0.9rem; }
+        .scene-item .scene-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+        .scene-item .scene-actions { display: flex; gap: 6px; }
+        .empty-state {
+            text-align: center; padding: 36px; color: var(--text-muted); font-size: 0.85rem;
+        }
+        .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 8px; }
+
+        /* ── Voice Layout ── */
+        .voice-layout {
+            display: grid; grid-template-columns: 1fr 320px; gap: 18px;
+        }
+        @media (max-width: 768px) { .voice-layout { grid-template-columns: 1fr; } }
+
+        .mic-zone {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 14px; padding: 28px;
+        }
+        .mic-btn {
+            width: 96px; height: 96px; border-radius: 50%;
+            border: 3px solid var(--surface-light);
+            background: var(--background); color: var(--text-muted);
+            font-size: 2.2rem; cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+        }
+        .mic-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .mic-btn.listening {
+            background: rgba(48,102,190,0.1);
+            border-color: var(--primary); color: var(--primary);
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        .mic-btn.listening::after {
+            content: ''; position: absolute; inset: -8px;
+            border-radius: 50%; border: 2px solid var(--primary);
+            animation: ripple 1.4s ease-out infinite; opacity: 0;
+        }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+        @keyframes ripple { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.5);opacity:0} }
+
+        .transcript-box {
+            width: 100%; background: var(--background);
+            border: 1px solid var(--surface-light); border-radius: 8px;
+            padding: 12px 16px; min-height: 56px;
+            font-size: 0.95rem; color: var(--text); text-align: center;
+        }
+        .transcript-box.heard { border-color: var(--primary); color: var(--primary); font-style: italic; }
+        .voice-status {
+            font-size: 0.8rem; color: var(--text-muted); text-align: center; min-height: 18px;
+        }
+
+        /* ── Match Result ── */
+        .match-result {
+            background: var(--background); border: 1px solid var(--surface-light);
+            border-radius: 8px; padding: 14px; margin-top: 10px; display: none;
+        }
+        .match-result.show { display: block; }
+        .match-result .match-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 4px; }
+        .match-result .match-name { font-size: 1.05rem; font-weight: 700; color: var(--success); margin-bottom: 3px; }
+        .match-result .match-tier { font-size: 0.72rem; color: var(--text-muted); }
+        .match-result .match-preset { font-size: 0.78rem; font-family: Consolas, Monaco, monospace; color: var(--primary); }
+
+        /* ── Camera Phase Animation ── */
+        .camera-status-bar {
+            background: var(--background); border: 1px solid var(--surface-light);
+            border-radius: 8px; padding: 12px; margin-top: 10px; display: none;
+        }
+        .camera-status-bar.show { display: block; }
+        .camera-phase {
+            display: flex; gap: 8px; align-items: center;
+            font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;
+        }
+        .camera-phase .phase-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--text-muted); flex-shrink: 0;
+        }
+        .camera-phase.active .phase-dot { background: var(--primary); animation: pulse 1s infinite; }
+        .camera-phase.done .phase-dot { background: var(--success); animation: none; }
+        .camera-phase.active { color: var(--text); }
+        .camera-phase.done { color: var(--success); }
+
+        /* ── Object Quick-Tap List ── */
+        .object-list { display: flex; flex-direction: column; gap: 5px; }
+        .object-list-item {
+            background: var(--background); border: 1px solid var(--surface-light);
+            border-radius: 7px; padding: 9px 12px;
+            display: flex; align-items: center; gap: 9px;
+            cursor: pointer; transition: all 0.18s; font-size: 0.82rem;
+        }
+        .object-list-item:hover { border-color: var(--primary); transform: translateX(2px); }
+        .object-list-item.last-moved { border-color: var(--success); background: rgba(42,157,143,0.05); }
+        .object-list-item .oli-name { font-weight: 600; flex: 1; }
+        .object-list-item .oli-preset { font-size: 0.68rem; font-family: Consolas, Monaco, monospace; color: var(--primary); }
+        .object-list-item .oli-tap { font-size: 0.68rem; color: var(--text-muted); }
+
+        /* ── Always-on Toggle ── */
+        .toggle-wrap {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; background: var(--background);
+            border: 1px solid var(--surface-light); border-radius: 7px; margin-bottom: 12px;
+        }
+        .toggle { position: relative; width: 36px; height: 20px; cursor: pointer; flex-shrink: 0; }
+        .toggle input { display: none; }
+        .toggle-track {
+            width: 100%; height: 100%;
+            background: var(--text-muted); border-radius: 10px; transition: background 0.2s;
+        }
+        .toggle input:checked + .toggle-track { background: var(--primary); }
+        .toggle-thumb {
+            position: absolute; top: 2px; left: 2px;
+            width: 16px; height: 16px; background: #fff;
+            border-radius: 50%; transition: transform 0.2s;
+        }
+        .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+        .toggle-label { font-size: 0.8rem; flex: 1; }
+        .toggle-label b { display: block; }
+        .toggle-label span { color: var(--text-muted); font-size: 0.7rem; }
+
+        /* ── Cross-scene search prompt ── */
+        .cross-scene-prompt {
+            background: var(--background); border: 1px solid var(--warning);
+            border-radius: 8px; padding: 12px; margin-top: 10px;
+            display: none; text-align: center;
+        }
+        .cross-scene-prompt.show { display: block; }
+        .cross-scene-prompt p { font-size: 0.82rem; margin-bottom: 8px; }
+
+        /* ── Active scene bar ── */
+        .active-scene-bar {
+            padding: 10px 16px; margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Voice to PTZ</h1>
+        <p class="subtitle">Tool #18 - Scan your room, name objects, control your camera by voice</p>
+        <a href="../" class="project-link">&larr; Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+
+        <!-- Config Bar (camera connection only -- API keys via shared manager) -->
+        <div class="config-bar">
+            <div class="config-field">
+                <label>Camera IP</label>
+                <input type="text" id="cameraIp" placeholder="192.168.1.100" value="192.168.1.100">
+            </div>
+            <div class="config-field">
+                <label>Camera Port</label>
+                <input type="number" id="cameraPort" placeholder="80" value="80" style="min-width:70px">
+            </div>
+            <div class="config-field">
+                <label>Username</label>
+                <input type="text" id="cameraUser" placeholder="admin" value="admin">
+            </div>
+            <div class="config-field">
+                <label>Password</label>
+                <input type="password" id="cameraPass" placeholder="password">
+            </div>
+            <div class="config-field" style="flex-direction:row;align-items:flex-end;gap:10px;">
+                <button class="btn btn-secondary" id="testCameraBtn" style="padding:7px 14px;font-size:0.8rem;">Test Camera</button>
+                <div id="cameraStatus"><span class="status-dot" id="camDot"></span>Not connected</div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="scan" id="tab-scan">
+                Scene Scan <span class="tab-num">1</span>
+            </button>
+            <button class="tab-btn" data-tab="scenes" id="tab-scenes">
+                My Scenes <span class="tab-num" id="sceneCountBadge">0</span>
+            </button>
+            <button class="tab-btn" data-tab="voice" id="tab-voice">
+                Voice Control <span class="tab-num">3</span>
+            </button>
+        </div>
+
+        <!-- ══════════ TAB 1: SCENE SCAN ══════════ -->
+        <div class="tab-panel active" id="panel-scan">
+
+            <div class="card">
+                <div class="card-title">Step 1 &mdash; Choose Scan Mode</div>
+                <div class="mode-grid" id="modeGrid">
+                    <div class="mode-card selected" data-mode="0">
+                        <div class="check">&#10003;</div>
+                        <div class="mode-icon">&#128205;</div>
+                        <div class="mode-name">Current View</div>
+                        <div class="mode-desc">Scan exactly what the camera sees right now. Best for a single area.</div>
+                        <div class="mode-detail">1 image &middot; 1 preset</div>
+                    </div>
+                    <div class="mode-card" data-mode="1">
+                        <div class="check">&#10003;</div>
+                        <div class="mode-icon">&#8596;&#65039;</div>
+                        <div class="mode-name">Wide Scan (90&deg;)</div>
+                        <div class="mode-desc">Three overlapping images covering a 90&deg; arc. Great for a wall or stage.</div>
+                        <div class="mode-detail">3 images &middot; up to 15 objects</div>
+                    </div>
+                    <div class="mode-card" data-mode="2">
+                        <div class="check">&#10003;</div>
+                        <div class="mode-icon">&#128260;</div>
+                        <div class="mode-name">Room Scan (120&deg;)</div>
+                        <div class="mode-desc">Three wider-spaced images covering most of a room. Ideal for conferences.</div>
+                        <div class="mode-detail">3 images &middot; up to 20 objects</div>
+                    </div>
+                    <div class="mode-card" data-mode="3">
+                        <div class="check">&#10003;</div>
+                        <div class="mode-icon">&#127760;</div>
+                        <div class="mode-name">Full Panorama (180&deg;)</div>
+                        <div class="mode-desc">Full sweep of the space. Best for large venues and broadcast studios.</div>
+                        <div class="mode-detail">3 images &middot; up to 30 objects</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Step 2 &mdash; VLM Engine</div>
+                <div class="vlm-options" id="vlmOptions">
+                    <div class="vlm-btn active" data-vlm="moondream">
+                        <div class="vlm-name">Moondream</div>
+                        <div class="vlm-sub">Fast &middot; Free tier</div>
+                    </div>
+                    <div class="vlm-btn" data-vlm="openai">
+                        <div class="vlm-name">OpenAI Vision</div>
+                        <div class="vlm-sub">GPT-4o &middot; Higher accuracy</div>
+                    </div>
+                    <div class="vlm-btn" data-vlm="auto">
+                        <div class="vlm-name">Auto (Fallback)</div>
+                        <div class="vlm-sub">Moondream &rarr; OpenAI</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="config-field">
+                        <label>Max Objects</label>
+                        <input type="number" id="maxObjects" value="5" min="3" max="10" style="min-width:70px">
+                    </div>
+                    <div class="config-field">
+                        <label>Scene Name (optional)</label>
+                        <input type="text" id="sceneName" placeholder="e.g. Conference Room A" style="min-width:200px;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="justify-content:space-between;">
+                    <span>Step 3 &mdash; Run Scan</span>
+                    <button class="btn btn-primary" id="scanBtn">Start Scene Scan</button>
+                </div>
+                <div style="font-size:0.82rem;color:var(--text-muted);">
+                    The camera will capture frames, analyze with VLM, detect objects, assign presets, and build your scene. Estimated: <strong id="scanEstimate">~10 sec</strong>.
+                </div>
+
+                <!-- Scan Progress -->
+                <div class="scan-progress" id="scanProgress">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:0.82rem;font-weight:600;" id="scanStatusText">Preparing scan...</span>
+                        <span style="font-size:0.75rem;color:var(--text-muted);" id="scanPct">0%</span>
+                    </div>
+                    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+                    <div class="progress-steps">
+                        <div class="step-pill" id="step-capture">Capture</div>
+                        <div class="step-pill" id="step-vlm">VLM Analysis</div>
+                        <div class="step-pill" id="step-dedup">Deduplication</div>
+                        <div class="step-pill" id="step-preset">Set Presets</div>
+                        <div class="step-pill" id="step-save">Save Scene</div>
+                    </div>
+                    <div class="log-box" id="logBox"></div>
+                </div>
+            </div>
+
+            <!-- Scene Review (shown after scan) -->
+            <div class="card" id="reviewCard" style="display:none;">
+                <div class="card-title" style="justify-content:space-between;">
+                    <span>Scene Review</span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-secondary" id="cancelReviewBtn" style="padding:6px 12px;font-size:0.8rem;">Discard</button>
+                        <button class="btn btn-success" id="saveSceneBtn">Save Scene</button>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="config-field">
+                        <label>Scene Name</label>
+                        <input type="text" id="reviewSceneName" style="min-width:240px;" placeholder="Scene name">
+                    </div>
+                    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">
+                        Rename objects, remove unwanted items, or review aliases before saving.
+                    </div>
+                </div>
+                <div class="object-grid" id="objectGrid"></div>
+                <div class="slot-indicator" style="margin-top:10px;">
+                    <span>Preset slots:</span>
+                    <div class="slot-bar"><div class="slot-fill" id="slotFill" style="width:0%"></div></div>
+                    <span id="slotText">0 / 150</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════ TAB 2: MY SCENES ══════════ -->
+        <div class="tab-panel" id="panel-scenes">
+            <div class="card">
+                <div class="card-title" style="justify-content:space-between;">
+                    <span>Saved Scenes</span>
+                    <button class="btn btn-primary" id="newSceneFromListBtn" style="padding:6px 14px;font-size:0.8rem;">+ New Scene</button>
+                </div>
+                <div id="scenesList">
+                    <div class="empty-state">
+                        <div class="empty-icon">&#127916;</div>
+                        <div>No scenes yet. Run a scan to create your first scene.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════ TAB 3: VOICE CONTROL ══════════ -->
+        <div class="tab-panel" id="panel-voice">
+
+            <!-- No scene loaded -->
+            <div id="voiceNoScene" class="card" style="text-align:center;padding:36px;">
+                <div style="font-size:2.5rem;margin-bottom:10px;">&#128194;</div>
+                <div style="font-weight:700;margin-bottom:6px;">No scene loaded</div>
+                <div style="color:var(--text-muted);font-size:0.82rem;margin-bottom:16px;">Go to My Scenes and activate a scene to start voice control.</div>
+                <button class="btn btn-primary" id="goToScenesBtn">Open My Scenes</button>
+            </div>
+
+            <!-- Voice Control Active -->
+            <div id="voiceActive" style="display:none;">
+                <div class="card active-scene-bar">
+                    <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:600;letter-spacing:0.04em;">Active Scene</div>
+                            <div style="font-weight:700;font-size:0.95rem;" id="activeSceneLabel">&mdash;</div>
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-secondary" id="changeSceneBtn" style="padding:5px 10px;font-size:0.78rem;">Change Scene</button>
+                            <button class="btn btn-secondary" id="refreshVoiceBtn" style="padding:5px 10px;font-size:0.78rem;">Refresh</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="voice-layout">
+                    <!-- Left: Mic + Output -->
+                    <div class="card" style="padding:0;overflow:hidden;">
+                        <div class="mic-zone">
+                            <div class="toggle-wrap" style="width:100%;max-width:320px;">
+                                <label class="toggle">
+                                    <input type="checkbox" id="alwaysOnToggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                                <div class="toggle-label">
+                                    <b>Always-on listening</b>
+                                    <span>Uses more battery. Push-to-talk recommended.</span>
+                                </div>
+                            </div>
+
+                            <button class="mic-btn" id="micBtn">&#127908;</button>
+                            <div class="voice-status" id="voiceStatusText">Press mic to speak a command</div>
+                            <div class="transcript-box" id="transcriptBox">Say something like "Show me the whiteboard"</div>
+
+                            <div class="match-result" id="matchResult">
+                                <div class="match-label">Matched Object</div>
+                                <div class="match-name" id="matchName">&mdash;</div>
+                                <div class="match-tier" id="matchTier">&mdash;</div>
+                                <div class="match-preset" id="matchPreset">&mdash;</div>
+                            </div>
+
+                            <!-- Cross-scene search prompt -->
+                            <div class="cross-scene-prompt" id="crossScenePrompt">
+                                <p id="crossSceneText">Not found in current scene. Search all scenes?</p>
+                                <div style="display:flex;gap:6px;justify-content:center;">
+                                    <button class="btn btn-primary" id="crossSceneYesBtn" style="padding:5px 14px;font-size:0.8rem;">Search All</button>
+                                    <button class="btn btn-secondary" id="crossSceneNoBtn" style="padding:5px 14px;font-size:0.8rem;">Cancel</button>
+                                </div>
+                            </div>
+
+                            <div class="camera-status-bar" id="cameraStatusBar">
+                                <div class="camera-phase" id="phase1">
+                                    <div class="phase-dot"></div>
+                                    Phase 1 &mdash; Preset recall (coarse position)
+                                </div>
+                                <div class="camera-phase" id="phase2" style="margin-top:4px;">
+                                    <div class="phase-dot"></div>
+                                    Phase 2 &mdash; PID refinement (center + zoom)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Object Quick-Tap List -->
+                    <div>
+                        <div class="card" style="height:100%;">
+                            <div class="card-title">Quick Tap</div>
+                            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;">Tap any object to move directly.</div>
+                            <div class="object-list" id="voiceObjectList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Command History -->
+                <div class="card" style="margin-top:14px;">
+                    <div class="card-title" style="justify-content:space-between;">
+                        <span>Command History</span>
+                        <button class="btn btn-secondary" id="clearHistoryBtn" style="padding:4px 10px;font-size:0.72rem;">Clear</button>
+                    </div>
+                    <div class="log-box" id="commandHistory" style="height:130px;">
+                        <span style="color:var(--text-muted);font-size:0.7rem;font-style:italic;">No commands yet...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>

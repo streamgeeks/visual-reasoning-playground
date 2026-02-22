@@ -26,6 +26,7 @@
         { id: '07-multimodal-studio', name: 'Multimodal Studio', path: '/07-multimodal-studio/', icon: '🎬' },
         { id: '16-ai-safety', name: 'AI Safety Monitor', path: '/16-ai-safety/', icon: '⚠️' },
         { id: '17-public-spaces-logging', name: 'Public Spaces Logger', path: '/17-public-spaces-logging/', icon: '🏛️' },
+        { id: '18-voice-to-ptz', name: 'Voice to PTZ', path: '/18-voice-to-ptz/', icon: '🎤' },
     ];
 
     function isEmbedMode() {
