@@ -21,12 +21,14 @@ class APIKeyManager {
         this.STORAGE_KEYS = {
             moondream: 'vrp_moondream_api_key',
             openai: 'vrp_openai_api_key',
+            roboflow: 'vrp_roboflow_api_key',
             validated: 'vrp_keys_validated'
         };
 
         this.keys = {
             moondream: null,
-            openai: null
+            openai: null,
+            roboflow: null
         };
 
         this.modalElement = null;
@@ -49,6 +51,7 @@ class APIKeyManager {
     _loadKeys() {
         this.keys.moondream = localStorage.getItem(this.STORAGE_KEYS.moondream) || null;
         this.keys.openai = localStorage.getItem(this.STORAGE_KEYS.openai) || null;
+        this.keys.roboflow = localStorage.getItem(this.STORAGE_KEYS.roboflow) || null;
     }
 
     /**
@@ -65,6 +68,12 @@ class APIKeyManager {
             localStorage.setItem(this.STORAGE_KEYS.openai, this.keys.openai);
         } else {
             localStorage.removeItem(this.STORAGE_KEYS.openai);
+        }
+
+        if (this.keys.roboflow) {
+            localStorage.setItem(this.STORAGE_KEYS.roboflow, this.keys.roboflow);
+        } else {
+            localStorage.removeItem(this.STORAGE_KEYS.roboflow);
         }
     }
 
@@ -462,6 +471,7 @@ class APIKeyManager {
     _updateStatusBar() {
         const moondreamSet = !!this.keys.moondream;
         const openaiSet = !!this.keys.openai;
+        const roboflowSet = !!this.keys.roboflow;
 
         let statusHTML = `
             <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
@@ -475,6 +485,15 @@ class APIKeyManager {
                 <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
                     <span class="akm-status-dot ${openaiSet ? 'set' : 'missing'}"></span>
                     <span>OpenAI: ${openaiSet ? 'Ready' : 'Not Set'}</span>
+                </div>
+            `;
+        }
+
+        if (this.options.requireRoboflow || this.options.showRoboflow) {
+            statusHTML += `
+                <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
+                    <span class="akm-status-dot ${roboflowSet ? 'set' : 'missing'}"></span>
+                    <span>Roboflow: ${roboflowSet ? 'Ready' : 'Not Set'}</span>
                 </div>
             `;
         }
@@ -558,6 +577,31 @@ class APIKeyManager {
                         </a>
                         <div id="akm-openai-validation" class="akm-validation-msg"></div>
                     </div>
+
+                    <div class="akm-key-section" id="akm-roboflow-section" style="display:${this.options.requireRoboflow || this.options.showRoboflow ? 'block' : 'none'}">
+                        <div class="akm-key-header">
+                            <h3>Roboflow API Key</h3>
+                            <span class="akm-badge ${this.options.requireRoboflow ? 'required' : 'optional'}">
+                                ${this.options.requireRoboflow ? 'Required' : 'Optional'}
+                            </span>
+                        </div>
+                        <p class="akm-key-description">
+                            Powers object detection models — player detection, jersey number recognition, and sports analytics.
+                        </p>
+                        <div class="akm-input-group">
+                            <input type="password" 
+                                   id="akm-roboflow-key" 
+                                   placeholder="Enter your Roboflow API key"
+                                   value="${this.keys.roboflow || ''}">
+                            <button class="akm-toggle-visibility" onclick="window.apiKeyManager._toggleVisibility('akm-roboflow-key')">
+                                👁
+                            </button>
+                        </div>
+                        <a href="https://app.roboflow.com/settings/api" target="_blank" class="akm-key-link">
+                            Get your free key at app.roboflow.com →
+                        </a>
+                        <div id="akm-roboflow-validation" class="akm-validation-msg"></div>
+                    </div>
                 </div>
                 <div class="akm-modal-footer">
                     <button class="akm-clear-btn" onclick="window.apiKeyManager._clearKeys()">
@@ -602,10 +646,12 @@ class APIKeyManager {
         // Update input values
         document.getElementById('akm-moondream-key').value = this.keys.moondream || '';
         document.getElementById('akm-openai-key').value = this.keys.openai || '';
+        document.getElementById('akm-roboflow-key').value = this.keys.roboflow || '';
         
         // Clear validation messages
         document.getElementById('akm-moondream-validation').innerHTML = '';
         document.getElementById('akm-openai-validation').innerHTML = '';
+        document.getElementById('akm-roboflow-validation').innerHTML = '';
 
         this.modalElement.classList.add('visible');
     }
@@ -716,11 +762,13 @@ class APIKeyManager {
     _saveFromModal() {
         const moondreamInput = document.getElementById('akm-moondream-key');
         const openaiInput = document.getElementById('akm-openai-key');
+        const roboflowInput = document.getElementById('akm-roboflow-key');
         const moondreamValidation = document.getElementById('akm-moondream-validation');
         const openaiValidation = document.getElementById('akm-openai-validation');
 
         const moondreamKey = moondreamInput.value.trim();
         const openaiKey = openaiInput.value.trim();
+        const roboflowKey = roboflowInput ? roboflowInput.value.trim() : '';
 
         // Validate Moondream
         const moondreamResult = this._validateMoondreamKey(moondreamKey);
@@ -760,6 +808,7 @@ class APIKeyManager {
         // Save keys
         this.keys.moondream = moondreamKey || null;
         this.keys.openai = openaiKey || null;
+        this.keys.roboflow = roboflowKey || null;
         this._saveKeys();
         this._updateStatusBar();
 
@@ -784,8 +833,10 @@ class APIKeyManager {
 
             document.getElementById('akm-moondream-key').value = '';
             document.getElementById('akm-openai-key').value = '';
+            if (document.getElementById('akm-roboflow-key')) document.getElementById('akm-roboflow-key').value = '';
             document.getElementById('akm-moondream-validation').innerHTML = '';
             document.getElementById('akm-openai-validation').innerHTML = '';
+            if (document.getElementById('akm-roboflow-validation')) document.getElementById('akm-roboflow-validation').innerHTML = '';
 
             if (this.options.onKeysChanged) {
                 this.options.onKeysChanged(this.keys);
@@ -822,6 +873,20 @@ class APIKeyManager {
     }
 
     /**
+     * Get the Roboflow API key
+     */
+    getRoboflowKey() {
+        return this.keys.roboflow;
+    }
+
+    /**
+     * Check if Roboflow key is set
+     */
+    hasRoboflowKey() {
+        return !!this.keys.roboflow;
+    }
+
+    /**
      * Set a key programmatically
      */
     setKey(type, key) {
@@ -829,6 +894,8 @@ class APIKeyManager {
             this.keys.moondream = key || null;
         } else if (type === 'openai') {
             this.keys.openai = key || null;
+        } else if (type === 'roboflow') {
+            this.keys.roboflow = key || null;
         }
         this._saveKeys();
         this._updateStatusBar();

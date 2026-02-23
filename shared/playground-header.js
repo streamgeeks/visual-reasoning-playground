@@ -27,6 +27,7 @@
         { id: '16-ai-safety', name: 'AI Safety Monitor', path: '/16-ai-safety/', icon: '⚠️' },
         { id: '17-public-spaces-logging', name: 'Public Spaces Logger', path: '/17-public-spaces-logging/', icon: '🏛️' },
         { id: '18-voice-to-ptz', name: 'Voice to PTZ', path: '/18-voice-to-ptz/', icon: '🎤' },
+        { id: '19-sports-player-id', name: 'Sports Player ID', path: '/19-sports-player-id/', icon: '🏀' },
     ];
 
     function isEmbedMode() {

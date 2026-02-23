@@ -1,0 +1,938 @@
+document.addEventListener('DOMContentLoaded', async function() {
+    // ══════════════════════════════════════════════════
+    //  DOM REFERENCES
+    // ══════════════════════════════════════════════════
+    const video = document.getElementById('video');
+    const overlayCanvas = document.getElementById('overlayCanvas');
+    const ctx = overlayCanvas.getContext('2d');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
+    const cameraGroup = document.getElementById('cameraGroup');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const modeCameraBtn = document.getElementById('modeCameraBtn');
+    const modeUploadBtn = document.getElementById('modeUploadBtn');
+    const engineRoboflowBtn = document.getElementById('engineRoboflowBtn');
+    const engineMoondreamBtn = document.getElementById('engineMoondreamBtn');
+    const roboflowInfo = document.getElementById('roboflowInfo');
+    const intervalSelect = document.getElementById('intervalSelect');
+    const confidenceSlider = document.getElementById('confidenceSlider');
+    const confidenceValue = document.getElementById('confidenceValue');
+    const confirmCount = document.getElementById('confirmCount');
+    const detPlayerCount = document.getElementById('detPlayerCount');
+    const teamALabel = document.getElementById('teamALabel');
+    const teamBLabel = document.getElementById('teamBLabel');
+    const teamACount = document.getElementById('teamACount');
+    const teamBCount = document.getElementById('teamBCount');
+    const teamABlock = document.getElementById('teamABlock');
+    const teamBBlock = document.getElementById('teamBBlock');
+    const playerList = document.getElementById('playerList');
+    const teamAName = document.getElementById('teamAName');
+    const teamBName = document.getElementById('teamBName');
+    const teamAColor = document.getElementById('teamAColor');
+    const teamBColor = document.getElementById('teamBColor');
+    const rosterEntriesA = document.getElementById('rosterEntriesA');
+    const rosterEntriesB = document.getElementById('rosterEntriesB');
+    const addPlayerA = document.getElementById('addPlayerA');
+    const addPlayerB = document.getElementById('addPlayerB');
+    const statDuration = document.getElementById('statDuration');
+    const statFrames = document.getElementById('statFrames');
+    const statIdentified = document.getElementById('statIdentified');
+    const statAvgConf = document.getElementById('statAvgConf');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const snapBtn = document.getElementById('snapBtn');
+    const statusBar = document.getElementById('status');
+    const historyLog = document.getElementById('historyLog');
+    const exportJsonBtn = document.getElementById('exportJsonBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    // ══════════════════════════════════════════════════
+    //  STATE
+    // ══════════════════════════════════════════════════
+    let engine = 'roboflow';
+    let mode = 'camera';
+    let moondreamClient = null;
+    let currentStream = null;
+    let running = false;
+    let analysisTimeout = null;
+    let durationInterval = null;
+    let sessionStart = null;
+    let framesAnalyzed = 0;
+    let totalConfidence = 0;
+    let uploadedImages = [];
+    let uploadIndex = 0;
+
+    // Tracked players across frames
+    let trackedPlayers = []; // [{id, bbox, team, numberReadings[], confirmedNumber, name, lastSeen}]
+    let nextTrackId = 1;
+    let teamColors = { A: '#E63946', B: '#2A9D8F' };
+    let identifiedCount = 0;
+
+    // Roster: { A: [{number, name}], B: [{number, name}] }
+    let roster = { A: [], B: [] };
+
+    // History log
+    let historyEntries = [];
+
+    // Roboflow model config
+    var ROBOFLOW_MODEL = 'basketball-player-detection-3-ycjdo';
+    var ROBOFLOW_VERSION = '1';
+    var ROBOFLOW_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block'];
+    var ROBOFLOW_NUMBER_CLASS = 'number';
+    var ROBOFLOW_ALL_CLASSES = ['ball', 'ball-in-basket', 'number', 'player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block', 'referee', 'rim'];
+
+    // ══════════════════════════════════════════════════
+    //  SHARED MODULE INIT
+    // ══════════════════════════════════════════════════
+    window.reasoningConsole = new ReasoningConsole({ startCollapsed: true, maxEntries: 200 });
+
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: false,
+        requireOpenAI: false,
+        showRoboflow: true,
+        onKeysChanged: function(keys) {
+            if (keys.moondream) {
+                moondreamClient = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+            }
+            if (keys.roboflow) {
+                window.reasoningConsole.logInfo('Roboflow API key configured');
+            }
+            updateStatus('Ready');
+        }
+    });
+
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        moondreamClient = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+    }
+    window.reasoningConsole.logInfo('Sports Player Identifier initialized');
+
+    // ══════════════════════════════════════════════════
+    //  CAMERA
+    // ══════════════════════════════════════════════════
+    async function enumerateCameras() {
+        try {
+            var devices = await navigator.mediaDevices.enumerateDevices();
+            var videoDevices = devices.filter(function(d) { return d.kind === 'videoinput'; });
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach(function(device, i) {
+                var option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || 'Camera ' + (i + 1);
+                cameraSelect.appendChild(option);
+            });
+        } catch (e) { window.reasoningConsole.logError('Camera enumeration failed: ' + e.message); }
+    }
+
+    async function startCamera(deviceId) {
+        try {
+            if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
+            var constraints = {
+                video: deviceId ? { deviceId: { exact: deviceId }, width: 1280, height: 720 } : { width: 1280, height: 720 },
+                audio: false
+            };
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            video.onloadedmetadata = function() {
+                overlayCanvas.width = video.videoWidth;
+                overlayCanvas.height = video.videoHeight;
+            };
+            await enumerateCameras();
+            if (deviceId) cameraSelect.value = deviceId;
+            updateStatus('Camera ready');
+        } catch (e) {
+            updateStatus('Camera error: ' + e.message, true);
+        }
+    }
+
+    function captureFrame() {
+        var c = document.createElement('canvas');
+        c.width = video.videoWidth || 640;
+        c.height = video.videoHeight || 480;
+        c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.85);
+    }
+
+    // ══════════════════════════════════════════════════
+    //  ROBOFLOW DETECTION ENGINE
+    // ══════════════════════════════════════════════════
+    async function roboflowDetect(imageBase64) {
+        var apiKey = window.apiKeyManager.getRoboflowKey();
+        if (!apiKey) {
+            window.apiKeyManager.showModal();
+            throw new Error('No Roboflow API key configured');
+        }
+
+        var confidence = parseInt(confidenceSlider.value) / 100;
+        var url = 'https://detect.roboflow.com/' + ROBOFLOW_MODEL + '/' + ROBOFLOW_VERSION
+            + '?api_key=' + apiKey + '&confidence=' + confidence;
+
+        var startTime = Date.now();
+        window.reasoningConsole.logApiCall('/roboflow/detect', 0);
+
+        var resp = await fetch(url, {
+            method: 'POST',
+            body: imageBase64,
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!resp.ok) throw new Error('Roboflow API error ' + resp.status);
+        var data = await resp.json();
+        var latency = Date.now() - startTime;
+        window.reasoningConsole.logApiCall('/roboflow/detect', latency);
+
+        // Separate players and numbers
+        var players = [];
+        var numbers = [];
+        var others = [];
+
+        (data.predictions || []).forEach(function(pred) {
+            var bbox = {
+                x: pred.x - pred.width / 2,
+                y: pred.y - pred.height / 2,
+                w: pred.width,
+                h: pred.height,
+                confidence: pred.confidence,
+                class: pred.class
+            };
+            if (ROBOFLOW_PLAYER_CLASSES.indexOf(pred.class) !== -1) {
+                players.push(bbox);
+            } else if (pred.class === ROBOFLOW_NUMBER_CLASS) {
+                numbers.push(bbox);
+            } else {
+                others.push(bbox);
+            }
+        });
+
+        window.reasoningConsole.logInfo('Roboflow: ' + players.length + ' players, ' + numbers.length + ' numbers, ' + others.length + ' other (' + latency + 'ms)');
+        return { players: players, numbers: numbers, others: others, imageWidth: data.image ? data.image.width : 640, imageHeight: data.image ? data.image.height : 480 };
+    }
+
+    // ══════════════════════════════════════════════════
+    //  MOONDREAM DETECTION ENGINE
+    // ══════════════════════════════════════════════════
+    async function moondreamDetect(imageBase64) {
+        if (!moondreamClient) {
+            window.apiKeyManager.showModal();
+            throw new Error('No Moondream API key configured');
+        }
+
+        var startTime = Date.now();
+        window.reasoningConsole.logApiCall('/moondream/detect', 0);
+        var result = await moondreamClient.detect(imageBase64, 'person');
+        var latency = Date.now() - startTime;
+        window.reasoningConsole.logApiCall('/moondream/detect', latency);
+
+        // Convert Moondream detections (normalized 0-1) to pixel coordinates
+        var vw = video.videoWidth || 640;
+        var vh = video.videoHeight || 480;
+        var players = (result.objects || []).map(function(obj) {
+            return {
+                x: obj.x_min * vw,
+                y: obj.y_min * vh,
+                w: (obj.x_max - obj.x_min) * vw,
+                h: (obj.y_max - obj.y_min) * vh,
+                confidence: 0.8,
+                class: 'player'
+            };
+        });
+
+        window.reasoningConsole.logInfo('Moondream: ' + players.length + ' players (' + latency + 'ms)');
+        return { players: players, numbers: [], others: [], imageWidth: vw, imageHeight: vh };
+    }
+
+    // ══════════════════════════════════════════════════
+    //  MOONDREAM JERSEY OCR (fallback engine only)
+    // ══════════════════════════════════════════════════
+    async function moondreamOCR(imageBase64, playerBbox) {
+        if (!moondreamClient) return null;
+
+        // Crop the player region from the image
+        var img = new Image();
+        await new Promise(function(res) { img.onload = res; img.src = imageBase64; });
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, playerBbox.w);
+        c.height = Math.max(1, playerBbox.h);
+        c.getContext('2d').drawImage(img, playerBbox.x, playerBbox.y, playerBbox.w, playerBbox.h, 0, 0, c.width, c.height);
+        var crop = c.toDataURL('image/jpeg', 0.9);
+
+        try {
+            var result = await moondreamClient.ask(crop, 'What jersey number is visible on this player? Reply with ONLY the number, or "unknown" if not visible.');
+            var answer = (result.answer || '').trim();
+            // Extract just the number
+            var match = answer.match(/\d+/);
+            return match ? match[0] : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    //  K-MEANS TEAM CLUSTERING (2 teams from uniform color)
+    // ══════════════════════════════════════════════════
+    function sampleDominantColor(imageBase64, bbox) {
+        // Create temp canvas, draw image, sample center of player crop (uniform area)
+        var c = document.createElement('canvas');
+        var cx = c.getContext('2d');
+        var img = new Image();
+        img.src = imageBase64;
+        c.width = Math.max(1, Math.round(bbox.w));
+        c.height = Math.max(1, Math.round(bbox.h));
+
+        try {
+            cx.drawImage(img, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, c.width, c.height);
+            // Sample the center 40% of the crop (where the jersey is)
+            var sx = Math.round(c.width * 0.3);
+            var sy = Math.round(c.height * 0.2);
+            var sw = Math.max(1, Math.round(c.width * 0.4));
+            var sh = Math.max(1, Math.round(c.height * 0.4));
+            var data = cx.getImageData(sx, sy, sw, sh).data;
+            var r = 0, g = 0, b = 0, count = 0;
+            for (var i = 0; i < data.length; i += 4) {
+                r += data[i]; g += data[i + 1]; b += data[i + 2]; count++;
+            }
+            return count > 0 ? [r / count, g / count, b / count] : [128, 128, 128];
+        } catch (e) {
+            return [128, 128, 128];
+        }
+    }
+
+    function kMeans2(colors) {
+        // Simple 2-cluster K-means on RGB arrays
+        if (colors.length <= 1) return colors.map(function() { return 0; });
+        if (colors.length === 2) return [0, 1];
+
+        // Init centroids as first and last sorted by brightness
+        var sorted = colors.map(function(c, i) { return { c: c, i: i, brightness: c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114 }; });
+        sorted.sort(function(a, b) { return a.brightness - b.brightness; });
+        var c0 = sorted[0].c.slice();
+        var c1 = sorted[sorted.length - 1].c.slice();
+
+        var assignments = new Array(colors.length).fill(0);
+        for (var iter = 0; iter < 10; iter++) {
+            // Assign
+            for (var i = 0; i < colors.length; i++) {
+                var d0 = colorDist(colors[i], c0);
+                var d1 = colorDist(colors[i], c1);
+                assignments[i] = d0 <= d1 ? 0 : 1;
+            }
+            // Update centroids
+            var sum0 = [0, 0, 0], sum1 = [0, 0, 0], n0 = 0, n1 = 0;
+            for (var j = 0; j < colors.length; j++) {
+                if (assignments[j] === 0) { sum0[0] += colors[j][0]; sum0[1] += colors[j][1]; sum0[2] += colors[j][2]; n0++; }
+                else { sum1[0] += colors[j][0]; sum1[1] += colors[j][1]; sum1[2] += colors[j][2]; n1++; }
+            }
+            if (n0 > 0) c0 = [sum0[0] / n0, sum0[1] / n0, sum0[2] / n0];
+            if (n1 > 0) c1 = [sum1[0] / n1, sum1[1] / n1, sum1[2] / n1];
+        }
+        return assignments;
+    }
+
+    function colorDist(a, b) {
+        return Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2) + Math.pow(a[2] - b[2], 2));
+    }
+
+    // ══════════════════════════════════════════════════
+    //  IoS (Intersection over Smaller) — pair numbers to players
+    // ══════════════════════════════════════════════════
+    function ios(boxA, boxB) {
+        var x1 = Math.max(boxA.x, boxB.x);
+        var y1 = Math.max(boxA.y, boxB.y);
+        var x2 = Math.min(boxA.x + boxA.w, boxB.x + boxB.w);
+        var y2 = Math.min(boxA.y + boxA.h, boxB.y + boxB.h);
+        if (x2 <= x1 || y2 <= y1) return 0;
+        var intersection = (x2 - x1) * (y2 - y1);
+        var areaA = boxA.w * boxA.h;
+        var areaB = boxB.w * boxB.h;
+        var smaller = Math.min(areaA, areaB);
+        return smaller > 0 ? intersection / smaller : 0;
+    }
+
+    function pairNumbersToPlayers(players, numbers) {
+        var pairs = {}; // playerIndex -> numberBbox
+        numbers.forEach(function(num) {
+            var bestIdx = -1, bestIos = 0;
+            players.forEach(function(p, pi) {
+                var score = ios(p, num);
+                if (score > bestIos) { bestIos = score; bestIdx = pi; }
+            });
+            if (bestIdx >= 0 && bestIos >= 0.7) {
+                pairs[bestIdx] = num;
+            }
+        });
+        return pairs;
+    }
+
+    // ══════════════════════════════════════════════════
+    //  IoU TRACKER — maintain player IDs across frames
+    // ══════════════════════════════════════════════════
+    function iou(a, b) {
+        var x1 = Math.max(a.x, b.x);
+        var y1 = Math.max(a.y, b.y);
+        var x2 = Math.min(a.x + a.w, b.x + b.w);
+        var y2 = Math.min(a.y + a.h, b.y + b.h);
+        if (x2 <= x1 || y2 <= y1) return 0;
+        var intersection = (x2 - x1) * (y2 - y1);
+        var union = a.w * a.h + b.w * b.h - intersection;
+        return union > 0 ? intersection / union : 0;
+    }
+
+    function updateTrackedPlayers(detectedPlayers, teamAssignments, numberPairs, imageBase64) {
+        var matched = new Set();
+        var newTracked = [];
+
+        // Try to match each detection to an existing tracked player
+        detectedPlayers.forEach(function(det, di) {
+            var bestTrack = null, bestIou = 0.3; // minimum IoU threshold
+            trackedPlayers.forEach(function(tp) {
+                if (matched.has(tp.id)) return;
+                var score = iou(det, tp.bbox);
+                if (score > bestIou) { bestIou = score; bestTrack = tp; }
+            });
+
+            var team = teamAssignments[di] === 0 ? 'A' : 'B';
+
+            if (bestTrack) {
+                // Update existing track
+                matched.add(bestTrack.id);
+                bestTrack.bbox = det;
+                bestTrack.team = team;
+                bestTrack.lastSeen = Date.now();
+                bestTrack.confidence = det.confidence;
+                bestTrack.playerClass = det.class;
+
+                // Update jersey number reading
+                if (numberPairs[di]) {
+                    // Roboflow detected a number bbox — we need to OCR it or use the class info
+                    // For Roboflow, the number detection gives us the bbox but not the actual digit
+                    // We'll handle OCR separately
+                }
+
+                newTracked.push(bestTrack);
+            } else {
+                // New player
+                var tp = {
+                    id: nextTrackId++,
+                    bbox: det,
+                    team: team,
+                    numberReadings: [],
+                    confirmedNumber: null,
+                    name: null,
+                    lastSeen: Date.now(),
+                    confidence: det.confidence,
+                    playerClass: det.class
+                };
+                newTracked.push(tp);
+            }
+        });
+
+        // Keep tracks that weren't matched but were seen recently (< 2s)
+        var now = Date.now();
+        trackedPlayers.forEach(function(tp) {
+            if (!matched.has(tp.id) && now - tp.lastSeen < 2000) {
+                newTracked.push(tp);
+            }
+        });
+
+        trackedPlayers = newTracked;
+    }
+
+    // ══════════════════════════════════════════════════
+    //  NUMBER CONFIRMATION HEURISTIC
+    // ══════════════════════════════════════════════════
+    function addNumberReading(trackId, number) {
+        if (!number) return;
+        var tp = trackedPlayers.find(function(p) { return p.id === trackId; });
+        if (!tp || tp.confirmedNumber) return;
+
+        tp.numberReadings.push(number);
+        var needed = parseInt(confirmCount.value) || 3;
+        var recent = tp.numberReadings.slice(-needed);
+        if (recent.length >= needed && recent.every(function(n) { return n === recent[0]; })) {
+            tp.confirmedNumber = recent[0];
+            tp.name = lookupRoster(tp.team, tp.confirmedNumber);
+            identifiedCount++;
+            updateSessionStats();
+
+            var label = (tp.name ? tp.name + ' (#' + tp.confirmedNumber + ')' : '#' + tp.confirmedNumber);
+            addHistoryEntry(tp.team, label, tp.confidence);
+            window.reasoningConsole.logDecision('ID Confirmed', 'Team ' + tp.team + ' ' + label);
+        }
+    }
+
+    function lookupRoster(team, number) {
+        var entries = roster[team] || [];
+        for (var i = 0; i < entries.length; i++) {
+            if (String(entries[i].number) === String(number)) return entries[i].name;
+        }
+        return null;
+    }
+
+    // ══════════════════════════════════════════════════
+    //  ROBOFLOW NUMBER OCR (uses VLM query on number crop)
+    // ══════════════════════════════════════════════════
+    async function ocrNumberCrops(imageBase64, players, numberPairs) {
+        // For each player that has a paired number bbox, try to read the number
+        var promises = [];
+        Object.keys(numberPairs).forEach(function(pi) {
+            var numBbox = numberPairs[pi];
+            var playerIdx = parseInt(pi);
+            var tp = trackedPlayers[playerIdx];
+            if (!tp || tp.confirmedNumber) return;
+
+            // If Moondream is available, use it for OCR on the number crop
+            if (moondreamClient) {
+                promises.push(
+                    moondreamOCR(imageBase64, numBbox).then(function(num) {
+                        if (num) addNumberReading(tp.id, num);
+                    }).catch(function() {})
+                );
+            }
+        });
+        if (promises.length > 0) await Promise.all(promises);
+    }
+
+    // ══════════════════════════════════════════════════
+    //  MAIN ANALYSIS PIPELINE
+    // ══════════════════════════════════════════════════
+    async function analyzeFrame() {
+        if (!running) return;
+
+        var imageBase64;
+        if (mode === 'upload' && uploadedImages.length > 0) {
+            imageBase64 = uploadedImages[uploadIndex % uploadedImages.length];
+            uploadIndex++;
+        } else {
+            imageBase64 = captureFrame();
+        }
+
+        try {
+            // Step 1: Detect
+            var detResult;
+            if (engine === 'roboflow') {
+                detResult = await roboflowDetect(imageBase64);
+            } else {
+                detResult = await moondreamDetect(imageBase64);
+            }
+
+            framesAnalyzed++;
+
+            // Step 2: Team clustering via K-means on uniform colors
+            var colors = detResult.players.map(function(p) {
+                return sampleDominantColor(imageBase64, p);
+            });
+            var teamAssignments = kMeans2(colors);
+
+            // Step 3: Pair numbers to players (Roboflow only — numbers come from detector)
+            var numberPairs = {};
+            if (detResult.numbers.length > 0) {
+                numberPairs = pairNumbersToPlayers(detResult.players, detResult.numbers);
+            }
+
+            // Step 4: Update tracker
+            updateTrackedPlayers(detResult.players, teamAssignments, numberPairs, imageBase64);
+
+            // Step 5: OCR jersey numbers
+            if (engine === 'roboflow' && Object.keys(numberPairs).length > 0 && moondreamClient) {
+                // Use Moondream for OCR on number crops (non-blocking)
+                ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+            } else if (engine === 'moondream') {
+                // With Moondream engine, try OCR on each unconfirmed player (limited to 3 per frame)
+                var unconfirmed = trackedPlayers.filter(function(tp) { return !tp.confirmedNumber; }).slice(0, 3);
+                for (var i = 0; i < unconfirmed.length; i++) {
+                    var num = await moondreamOCR(imageBase64, unconfirmed[i].bbox);
+                    if (num) addNumberReading(unconfirmed[i].id, num);
+                }
+            }
+
+            // Step 6: Update confidence stats
+            detResult.players.forEach(function(p) { totalConfidence += p.confidence; });
+
+            // Step 7: Draw overlays
+            drawOverlays(detResult);
+            updateDetectionCard();
+            updateSessionStats();
+            updateStatus('Analyzing (' + engine + ') — ' + detResult.players.length + ' players');
+
+        } catch (e) {
+            window.reasoningConsole.logError('Analysis error: ' + e.message);
+            updateStatus('Error: ' + e.message, true);
+        }
+
+        if (running) {
+            var interval = parseInt(intervalSelect.value) || 1000;
+            analysisTimeout = setTimeout(analyzeFrame, interval);
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    //  DRAW OVERLAYS
+    // ══════════════════════════════════════════════════
+    function drawOverlays(detResult) {
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        var scaleX = overlayCanvas.width / (detResult.imageWidth || overlayCanvas.width);
+        var scaleY = overlayCanvas.height / (detResult.imageHeight || overlayCanvas.height);
+
+        // Draw other detections (ball, rim, referee)
+        detResult.others.forEach(function(o) {
+            var x = o.x * scaleX, y = o.y * scaleY, w = o.w * scaleX, h = o.h * scaleY;
+            ctx.strokeStyle = o.class === 'referee' ? '#FFD700' : o.class === 'ball' || o.class === 'ball-in-basket' ? '#FF8C00' : '#888';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+            drawLabel(ctx, o.class, x, y - 4, ctx.strokeStyle);
+        });
+
+        // Draw tracked players
+        trackedPlayers.forEach(function(tp) {
+            var color = tp.team === 'A' ? teamColors.A : teamColors.B;
+            var x = tp.bbox.x * scaleX, y = tp.bbox.y * scaleY;
+            var w = tp.bbox.w * scaleX, h = tp.bbox.h * scaleY;
+
+            // Bounding box
+            ctx.strokeStyle = color;
+            ctx.lineWidth = tp.confirmedNumber ? 3 : 2;
+            ctx.strokeRect(x, y, w, h);
+
+            // Label
+            var label = '';
+            if (tp.confirmedNumber) {
+                label = tp.name ? tp.name + ' #' + tp.confirmedNumber : '#' + tp.confirmedNumber;
+            } else if (tp.numberReadings.length > 0) {
+                label = '#' + tp.numberReadings[tp.numberReadings.length - 1] + '?';
+            } else {
+                label = 'P' + tp.id;
+            }
+
+            var teamName = tp.team === 'A' ? (teamAName.value || 'Team A') : (teamBName.value || 'Team B');
+            label = teamName + ' ' + label;
+
+            drawLabel(ctx, label, x, y - 4, color);
+
+            // Player class badge (e.g., jump-shot, layup)
+            if (tp.playerClass && tp.playerClass !== 'player') {
+                var badge = tp.playerClass.replace('player-', '').replace(/-/g, ' ');
+                drawLabel(ctx, badge, x, y + h + 14, '#FFD700');
+            }
+        });
+
+        // Draw number bounding boxes
+        detResult.numbers.forEach(function(n) {
+            var x = n.x * scaleX, y = n.y * scaleY, w = n.w * scaleX, h = n.h * scaleY;
+            ctx.strokeStyle = '#00FFFF';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, w, h);
+        });
+    }
+
+    function drawLabel(context, text, x, y, color) {
+        context.font = 'bold 13px sans-serif';
+        var metrics = context.measureText(text);
+        var pad = 4;
+        context.fillStyle = 'rgba(0,0,0,0.7)';
+        context.fillRect(x, y - 14, metrics.width + pad * 2, 18);
+        context.fillStyle = color || '#fff';
+        context.fillText(text, x + pad, y);
+    }
+
+    // ══════════════════════════════════════════════════
+    //  UI UPDATES
+    // ══════════════════════════════════════════════════
+    function updateStatus(msg, isError) {
+        statusBar.textContent = msg;
+        statusBar.className = 'status-bar' + (isError ? ' error' : '');
+    }
+
+    function updateDetectionCard() {
+        var teamA = trackedPlayers.filter(function(p) { return p.team === 'A'; });
+        var teamB = trackedPlayers.filter(function(p) { return p.team === 'B'; });
+        detPlayerCount.textContent = trackedPlayers.length;
+        teamACount.textContent = teamA.length;
+        teamBCount.textContent = teamB.length;
+        teamALabel.textContent = teamAName.value || 'Team A';
+        teamBLabel.textContent = teamBName.value || 'Team B';
+
+        // Player list
+        if (trackedPlayers.length === 0) {
+            playerList.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:0.78rem;padding:8px;">No players detected</div>';
+            return;
+        }
+        playerList.innerHTML = trackedPlayers.map(function(tp) {
+            var color = tp.team === 'A' ? teamColors.A : teamColors.B;
+            var numStr = tp.confirmedNumber ? '#' + tp.confirmedNumber : (tp.numberReadings.length > 0 ? '#' + tp.numberReadings[tp.numberReadings.length - 1] + '?' : '--');
+            var nameStr = tp.name || (tp.confirmedNumber ? 'Unknown' : '...');
+            var confStr = Math.round((tp.confidence || 0) * 100) + '%';
+            return '<div class="player-item ' + (tp.confirmedNumber ? 'confirmed' : '') + '">'
+                + '<div class="pi-dot" style="background:' + color + '"></div>'
+                + '<span class="pi-number">' + numStr + '</span>'
+                + '<span class="pi-name">' + nameStr + '</span>'
+                + '<span class="pi-conf">' + confStr + '</span>'
+                + '</div>';
+        }).join('');
+    }
+
+    function updateSessionStats() {
+        if (sessionStart) {
+            var elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+            var m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            var s = (elapsed % 60).toString().padStart(2, '0');
+            statDuration.textContent = m + ':' + s;
+        }
+        statFrames.textContent = framesAnalyzed;
+        statIdentified.textContent = identifiedCount;
+        statAvgConf.textContent = framesAnalyzed > 0 ? Math.round(totalConfidence / (framesAnalyzed * Math.max(1, trackedPlayers.length)) * 100) + '%' : '--%';
+    }
+
+    // ══════════════════════════════════════════════════
+    //  ROSTER EDITOR
+    // ══════════════════════════════════════════════════
+    function renderRoster(team) {
+        var container = team === 'A' ? rosterEntriesA : rosterEntriesB;
+        var entries = roster[team];
+        container.innerHTML = entries.map(function(e, i) {
+            return '<div class="roster-entry">'
+                + '<input class="re-num" type="text" value="' + (e.number || '') + '" placeholder="#" data-team="' + team + '" data-idx="' + i + '" data-field="number">'
+                + '<span style="color:var(--text-muted);font-size:0.78rem;">→</span>'
+                + '<input class="re-name" type="text" value="' + (e.name || '') + '" placeholder="Player name" data-team="' + team + '" data-idx="' + i + '" data-field="name">'
+                + '<button class="re-del" data-team="' + team + '" data-idx="' + i + '">✕</button>'
+                + '</div>';
+        }).join('');
+
+        container.querySelectorAll('input').forEach(function(input) {
+            input.addEventListener('change', function() {
+                var t = input.dataset.team;
+                var idx = parseInt(input.dataset.idx);
+                var field = input.dataset.field;
+                roster[t][idx][field] = input.value;
+                saveRoster();
+            });
+        });
+        container.querySelectorAll('.re-del').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                roster[btn.dataset.team].splice(parseInt(btn.dataset.idx), 1);
+                renderRoster(btn.dataset.team);
+                saveRoster();
+            });
+        });
+    }
+
+    function addRosterEntry(team) {
+        roster[team].push({ number: '', name: '' });
+        renderRoster(team);
+    }
+
+    function saveRoster() {
+        try { localStorage.setItem('vrp_spi_roster', JSON.stringify(roster)); } catch (e) {}
+    }
+    function loadRoster() {
+        try {
+            var saved = localStorage.getItem('vrp_spi_roster');
+            if (saved) roster = JSON.parse(saved);
+        } catch (e) {}
+    }
+
+    // ══════════════════════════════════════════════════
+    //  HISTORY LOG
+    // ══════════════════════════════════════════════════
+    function addHistoryEntry(team, label, confidence) {
+        var entry = {
+            time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            timestamp: new Date().toISOString(),
+            team: team,
+            label: label,
+            confidence: confidence
+        };
+        historyEntries.unshift(entry);
+        renderHistory();
+    }
+
+    function renderHistory() {
+        if (historyEntries.length === 0) {
+            historyLog.innerHTML = '<div class="hist-empty">Player identifications will appear here</div>';
+            return;
+        }
+        historyLog.innerHTML = historyEntries.slice(0, 100).map(function(e) {
+            var color = e.team === 'A' ? teamColors.A : teamColors.B;
+            return '<div class="hist-entry">'
+                + '<span class="he-time">' + e.time + '</span>'
+                + '<span class="he-dot" style="background:' + color + '"></span>'
+                + '<span class="he-text">' + e.label + '</span>'
+                + '<span class="he-conf">' + Math.round((e.confidence || 0) * 100) + '%</span>'
+                + '</div>';
+        }).join('');
+    }
+
+    // ══════════════════════════════════════════════════
+    //  EXPORT
+    // ══════════════════════════════════════════════════
+    function exportJSON() {
+        var data = historyEntries.map(function(e) { return { timestamp: e.timestamp, team: e.team, label: e.label, confidence: e.confidence }; });
+        downloadFile(JSON.stringify(data, null, 2), 'player-identifications.json', 'application/json');
+    }
+    function exportCSV() {
+        var rows = ['timestamp,team,label,confidence'];
+        historyEntries.forEach(function(e) {
+            rows.push('"' + e.timestamp + '","' + e.team + '","' + e.label.replace(/"/g, '""') + '",' + (e.confidence || 0));
+        });
+        downloadFile(rows.join('\n'), 'player-identifications.csv', 'text/csv');
+    }
+    function downloadFile(content, filename, type) {
+        var blob = new Blob([content], { type: type });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ══════════════════════════════════════════════════
+    //  START / STOP
+    // ══════════════════════════════════════════════════
+    function startAnalysis() {
+        if (engine === 'roboflow' && !window.apiKeyManager.hasRoboflowKey()) {
+            window.apiKeyManager.showModal();
+            return;
+        }
+        if (engine === 'moondream' && !moondreamClient) {
+            window.apiKeyManager.showModal();
+            return;
+        }
+
+        running = true;
+        sessionStart = Date.now();
+        framesAnalyzed = 0;
+        totalConfidence = 0;
+        identifiedCount = 0;
+        trackedPlayers = [];
+        nextTrackId = 1;
+
+        startBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        durationInterval = setInterval(updateSessionStats, 1000);
+        window.reasoningConsole.logInfo('Started analysis (' + engine + ' engine)');
+        analyzeFrame();
+    }
+
+    function stopAnalysis() {
+        running = false;
+        clearTimeout(analysisTimeout);
+        clearInterval(durationInterval);
+        startBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        updateStatus('Stopped');
+        window.reasoningConsole.logInfo('Stopped. ' + framesAnalyzed + ' frames, ' + identifiedCount + ' IDs confirmed.');
+    }
+
+    async function snapAnalysis() {
+        var wasRunning = running;
+        if (!running) {
+            // Single frame analysis
+            running = true;
+            await analyzeFrame();
+            running = wasRunning;
+            clearTimeout(analysisTimeout);
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    //  MODE / ENGINE SWITCHING
+    // ══════════════════════════════════════════════════
+    function switchMode(newMode) {
+        mode = newMode;
+        modeCameraBtn.classList.toggle('active', mode === 'camera');
+        modeUploadBtn.classList.toggle('active', mode === 'upload');
+        cameraGroup.style.display = mode === 'camera' ? '' : 'none';
+        uploadArea.classList.toggle('visible', mode === 'upload');
+        video.style.display = mode === 'camera' ? '' : 'none';
+    }
+
+    function switchEngine(eng) {
+        engine = eng;
+        engineRoboflowBtn.classList.toggle('active', engine === 'roboflow');
+        engineMoondreamBtn.classList.toggle('active', engine === 'moondream');
+        roboflowInfo.style.display = engine === 'roboflow' ? '' : 'none';
+        window.reasoningConsole.logInfo('Switched to ' + engine + ' engine');
+    }
+
+    function handleFiles(files) {
+        uploadedImages = [];
+        uploadIndex = 0;
+        Array.from(files).forEach(function(file) {
+            var reader = new FileReader();
+            reader.onload = function(e) { uploadedImages.push(e.target.result); };
+            reader.readAsDataURL(file);
+        });
+        setTimeout(function() {
+            updateStatus(uploadedImages.length + ' image(s) loaded');
+            if (uploadedImages.length > 0) {
+                var img = new Image();
+                img.onload = function() {
+                    overlayCanvas.width = img.width;
+                    overlayCanvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = uploadedImages[0];
+            }
+        }, 500);
+    }
+
+    // ══════════════════════════════════════════════════
+    //  EVENT LISTENERS
+    // ══════════════════════════════════════════════════
+    modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
+    modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
+    engineRoboflowBtn.addEventListener('click', function() { switchEngine('roboflow'); });
+    engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
+    cameraSelect.addEventListener('change', function() { if (cameraSelect.value) startCamera(cameraSelect.value); });
+    refreshCamerasBtn.addEventListener('click', enumerateCameras);
+    uploadArea.addEventListener('click', function() { fileInput.click(); });
+    fileInput.addEventListener('change', function(e) { if (e.target.files.length > 0) handleFiles(e.target.files); });
+    uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', function() { uploadArea.classList.remove('dragover'); });
+    uploadArea.addEventListener('drop', function(e) { e.preventDefault(); uploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files); });
+    confidenceSlider.addEventListener('input', function() { confidenceValue.textContent = confidenceSlider.value + '%'; });
+    startBtn.addEventListener('click', startAnalysis);
+    stopBtn.addEventListener('click', stopAnalysis);
+    snapBtn.addEventListener('click', snapAnalysis);
+    addPlayerA.addEventListener('click', function() { addRosterEntry('A'); });
+    addPlayerB.addEventListener('click', function() { addRosterEntry('B'); });
+    exportJsonBtn.addEventListener('click', exportJSON);
+    exportCsvBtn.addEventListener('click', exportCSV);
+    clearHistoryBtn.addEventListener('click', function() { historyEntries = []; renderHistory(); });
+
+    teamAColor.addEventListener('input', function() {
+        teamColors.A = teamAColor.value;
+        teamABlock.style.borderLeftColor = teamColors.A;
+        document.getElementById('rosterTeamA').style.borderLeftColor = teamColors.A;
+    });
+    teamBColor.addEventListener('input', function() {
+        teamColors.B = teamBColor.value;
+        teamBBlock.style.borderLeftColor = teamColors.B;
+        document.getElementById('rosterTeamB').style.borderLeftColor = teamColors.B;
+    });
+
+    // ══════════════════════════════════════════════════
+    //  INIT
+    // ══════════════════════════════════════════════════
+    loadRoster();
+    renderRoster('A');
+    renderRoster('B');
+    renderHistory();
+
+    if (window.VideoSourceAdapter) {
+        VideoSourceAdapter.init({
+            videoElement: video, toolId: 'sports-player-id', insertInto: '.video-container',
+            onSourceChange: function(source) {
+                cameraSelect.disabled = source === 'sample';
+                refreshCamerasBtn.disabled = source === 'sample';
+                if (source === 'camera') enumerateCameras();
+            }
+        });
+        VideoSourceAdapter.switchToCamera().catch(function() { VideoSourceAdapter.switchToSample(); });
+    } else {
+        await startCamera();
+    }
+});

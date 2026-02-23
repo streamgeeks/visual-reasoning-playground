@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sports Player Identifier - Visual Reasoning Playground</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        /* ── Engine selector ── */
+        .engine-toggle {
+            display: flex; gap: 4px; background: var(--background);
+            border-radius: 6px; overflow: hidden; margin-bottom: 12px;
+        }
+        .engine-toggle button {
+            flex: 1; padding: 9px 6px; border: none; background: transparent;
+            color: var(--text-muted); font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .engine-toggle button.active { background: var(--primary); color: #fff; }
+        .engine-toggle button .engine-sub {
+            display: block; font-size: 0.65rem; font-weight: 400; opacity: 0.7; margin-top: 1px;
+        }
+
+        /* ── Detection card ── */
+        .detection-card {
+            background: var(--surface); border-radius: 10px; padding: 14px;
+            border: 1px solid var(--surface-light); margin-bottom: 12px;
+        }
+        .detection-card .det-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+        }
+        .detection-card .det-header h3 { margin: 0; font-size: 0.9rem; }
+        .detection-card .det-count {
+            font-size: 1.6rem; font-weight: 700; color: var(--primary-light);
+        }
+        .team-split {
+            display: flex; gap: 8px; margin-top: 8px;
+        }
+        .team-block {
+            flex: 1; background: var(--background); border-radius: 6px; padding: 8px;
+            text-align: center; border-left: 3px solid var(--text-muted);
+        }
+        .team-block .team-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; }
+        .team-block .team-count { font-size: 1.1rem; font-weight: 700; }
+
+        /* ── Player list ── */
+        .player-list { max-height: 180px; overflow-y: auto; }
+        .player-list::-webkit-scrollbar { width: 3px; }
+        .player-list::-webkit-scrollbar-thumb { background: var(--surface-light); border-radius: 2px; }
+        .player-item {
+            display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+            border-radius: 5px; margin-bottom: 3px; font-size: 0.8rem;
+            background: var(--background); transition: background 0.15s;
+        }
+        .player-item .pi-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .player-item .pi-number { font-weight: 700; min-width: 24px; }
+        .player-item .pi-name { flex: 1; color: var(--text-muted); }
+        .player-item .pi-conf { font-size: 0.7rem; color: var(--text-muted); }
+        .player-item.confirmed .pi-name { color: var(--text); }
+
+        /* ── Roster editor ── */
+        .roster-section {
+            background: var(--surface); border-radius: 10px; padding: 14px;
+            border: 1px solid var(--surface-light); margin-bottom: 12px;
+        }
+        .roster-section h3 { margin: 0 0 10px; font-size: 0.9rem; }
+        .roster-team {
+            margin-bottom: 12px; padding: 10px; background: var(--background);
+            border-radius: 8px; border-left: 3px solid var(--text-muted);
+        }
+        .roster-team-header {
+            display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+        }
+        .roster-team-header input {
+            flex: 1; background: transparent; border: 1px solid var(--surface-light);
+            color: var(--text); padding: 5px 8px; border-radius: 4px; font-size: 0.82rem; font-weight: 600;
+        }
+        .roster-team-header .color-swatch {
+            width: 24px; height: 24px; border-radius: 4px; border: 2px solid var(--surface-light);
+            cursor: pointer; flex-shrink: 0;
+        }
+        .roster-entry {
+            display: flex; gap: 4px; align-items: center; margin-bottom: 4px;
+        }
+        .roster-entry input {
+            background: var(--surface); border: 1px solid var(--surface-light);
+            color: var(--text); padding: 4px 6px; border-radius: 4px; font-size: 0.78rem;
+        }
+        .roster-entry .re-num { width: 40px; text-align: center; font-weight: 600; }
+        .roster-entry .re-name { flex: 1; }
+        .roster-entry .re-del {
+            width: 22px; height: 22px; border-radius: 50%; background: transparent;
+            border: 1px solid var(--surface-light); color: var(--text-muted);
+            cursor: pointer; font-size: 0.65rem; display: flex; align-items: center;
+            justify-content: center; transition: all 0.15s; flex-shrink: 0;
+        }
+        .roster-entry .re-del:hover { background: var(--error); color: #fff; border-color: var(--error); }
+        .roster-add-btn {
+            background: transparent; border: 1px dashed var(--surface-light);
+            color: var(--text-muted); width: 100%; padding: 5px; border-radius: 4px;
+            cursor: pointer; font-size: 0.75rem; margin-top: 4px; transition: all 0.15s;
+        }
+        .roster-add-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ── Session stats ── */
+        .session-stats {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;
+        }
+        .session-stat {
+            background: var(--background); border-radius: 6px; padding: 8px; text-align: center;
+        }
+        .session-stat .value { font-size: 1.1rem; font-weight: 700; color: var(--primary-light); }
+        .session-stat .label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* ── Detection history ── */
+        .history-section {
+            background: var(--surface); border-radius: 8px; padding: 12px; margin-top: 15px;
+        }
+        .history-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px; flex-wrap: wrap; gap: 6px;
+        }
+        .history-header h3 { margin: 0; font-size: 0.9rem; }
+        .history-log { max-height: 220px; overflow-y: auto; }
+        .history-log::-webkit-scrollbar { width: 3px; }
+        .history-log::-webkit-scrollbar-thumb { background: var(--surface-light); border-radius: 2px; }
+        .hist-entry {
+            display: flex; gap: 8px; align-items: center; padding: 6px 8px;
+            border-radius: 5px; margin-bottom: 3px; background: var(--background);
+            font-size: 0.78rem;
+        }
+        .hist-entry .he-time { color: var(--text-muted); font-family: Consolas, Monaco, monospace; font-size: 0.72rem; min-width: 55px; }
+        .hist-entry .he-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .hist-entry .he-text { flex: 1; }
+        .hist-entry .he-conf { font-size: 0.7rem; color: var(--text-muted); }
+        .hist-empty { text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.82rem; }
+
+        /* ── Upload area ── */
+        .upload-area {
+            border: 2px dashed var(--surface-light); border-radius: 8px; padding: 15px;
+            text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 12px; display: none;
+        }
+        .upload-area.visible { display: block; }
+        .upload-area:hover, .upload-area.dragover { border-color: var(--primary-light); background: rgba(147,204,234,0.05); }
+        .upload-area input { display: none; }
+        .upload-label { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* ── Mode toggle ── */
+        .mode-toggle {
+            display: flex; background: var(--background); border-radius: 6px;
+            overflow: hidden; margin-bottom: 12px;
+        }
+        .mode-toggle button {
+            flex: 1; padding: 7px; border: none; background: transparent;
+            color: var(--text-muted); font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+        }
+        .mode-toggle button.active { background: var(--primary); color: #fff; }
+
+        /* ── Attribution ── */
+        .attribution {
+            background: var(--surface); border-radius: 8px; padding: 12px; margin-top: 12px;
+            font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
+        }
+        .attribution a { color: var(--secondary); }
+
+        /* Override results-panel */
+        .results-panel { padding: 0; background: transparent; }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>Sports Player Identifier</h1>
+        <p class="subtitle">Tool #19 - Detect, track, and identify basketball players using computer vision</p>
+        <p class="subtitle" style="font-size:0.78rem;margin-top:2px;">
+            Inspired by <a href="https://blog.roboflow.com/identify-basketball-players/" target="_blank" style="color:var(--secondary);">Roboflow's Basketball Player Identification pipeline</a>
+        </p>
+        <a href="../" class="project-link">&larr; Back to Visual Reasoning Playground</a>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <video id="video" autoplay muted playsinline></video>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <div id="uploadArea" class="upload-area">
+                    <input type="file" id="fileInput" accept="image/*,video/*" multiple>
+                    <div class="upload-label">Drop images or video here, or click to upload</div>
+                </div>
+
+                <div class="results-panel">
+                    <div class="history-section">
+                        <div class="history-header">
+                            <h3>Detection History</h3>
+                            <div style="display:flex;gap:6px;">
+                                <button id="exportJsonBtn" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;">JSON</button>
+                                <button id="exportCsvBtn" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;">CSV</button>
+                                <button id="clearHistoryBtn" class="btn btn-secondary" style="padding:4px 8px;font-size:0.7rem;">Clear</button>
+                            </div>
+                        </div>
+                        <div id="historyLog" class="history-log">
+                            <div class="hist-empty">Player identifications will appear here</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2>Settings</h2>
+
+                <!-- Mode toggle -->
+                <div class="mode-toggle">
+                    <button id="modeCameraBtn" class="active">Camera</button>
+                    <button id="modeUploadBtn">Upload</button>
+                </div>
+
+                <div class="control-group" id="cameraGroup">
+                    <label for="cameraSelect">Camera</label>
+                    <div style="display:flex;gap:8px;">
+                        <select id="cameraSelect" style="flex:1;"></select>
+                        <button id="refreshCamerasBtn" class="btn btn-secondary" style="padding:8px 12px;">&#8635;</button>
+                    </div>
+                </div>
+
+                <!-- Engine selector -->
+                <div class="engine-toggle">
+                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow">
+                        Roboflow<span class="engine-sub">RF-DETR &middot; Fast</span>
+                    </button>
+                    <button id="engineMoondreamBtn" data-engine="moondream">
+                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
+                    </button>
+                </div>
+
+                <!-- Roboflow model info -->
+                <div id="roboflowInfo" class="control-group" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px;">
+                    Model: <strong>basketball-player-detection</strong> (RF-DETR) &mdash; 10 classes incl. player, number, ball, rim
+                </div>
+
+                <!-- Analysis settings -->
+                <div class="control-group">
+                    <label for="intervalSelect">Analysis Rate</label>
+                    <select id="intervalSelect">
+                        <option value="500">~2 FPS (Roboflow)</option>
+                        <option value="1000" selected>~1 FPS</option>
+                        <option value="2000">Every 2s</option>
+                        <option value="5000">Every 5s</option>
+                        <option value="10000">Every 10s</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="confidenceSlider">Min Confidence: <span id="confidenceValue">40%</span></label>
+                    <input type="range" id="confidenceSlider" min="10" max="90" value="40" style="width:100%;">
+                </div>
+
+                <div class="control-group">
+                    <label for="confirmCount">Confirm after N reads</label>
+                    <input type="number" id="confirmCount" min="1" max="10" value="3">
+                </div>
+
+                <!-- Live detection card -->
+                <div class="detection-card">
+                    <div class="det-header">
+                        <h3>Live Detection</h3>
+                        <div class="det-count" id="detPlayerCount">0</div>
+                    </div>
+                    <div class="team-split">
+                        <div class="team-block" id="teamABlock" style="border-left-color:#E63946;">
+                            <div class="team-label" id="teamALabel">Team A</div>
+                            <div class="team-count" id="teamACount">0</div>
+                        </div>
+                        <div class="team-block" id="teamBBlock" style="border-left-color:#2A9D8F;">
+                            <div class="team-label" id="teamBLabel">Team B</div>
+                            <div class="team-count" id="teamBCount">0</div>
+                        </div>
+                    </div>
+                    <div class="player-list" id="playerList" style="margin-top:8px;"></div>
+                </div>
+
+                <!-- Roster editor -->
+                <details class="roster-section" open>
+                    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;">Roster Editor</summary>
+                    <div style="margin-top:10px;">
+                        <div class="roster-team" id="rosterTeamA" style="border-left-color:#E63946;">
+                            <div class="roster-team-header">
+                                <input type="text" id="teamAName" value="Team A" placeholder="Team name">
+                                <input type="color" id="teamAColor" value="#E63946" class="color-swatch" title="Team color">
+                            </div>
+                            <div id="rosterEntriesA"></div>
+                            <button class="roster-add-btn" id="addPlayerA">+ Add Player</button>
+                        </div>
+                        <div class="roster-team" id="rosterTeamB" style="border-left-color:#2A9D8F;">
+                            <div class="roster-team-header">
+                                <input type="text" id="teamBName" value="Team B" placeholder="Team name">
+                                <input type="color" id="teamBColor" value="#2A9D8F" class="color-swatch" title="Team color">
+                            </div>
+                            <div id="rosterEntriesB"></div>
+                            <button class="roster-add-btn" id="addPlayerB">+ Add Player</button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Session stats -->
+                <div class="session-stats">
+                    <div class="session-stat">
+                        <div class="value" id="statDuration">00:00</div>
+                        <div class="label">Duration</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statFrames">0</div>
+                        <div class="label">Frames</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statIdentified">0</div>
+                        <div class="label">IDs Confirmed</div>
+                    </div>
+                    <div class="session-stat">
+                        <div class="value" id="statAvgConf">--%</div>
+                        <div class="label">Avg Confidence</div>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                    <button id="snapBtn" class="btn btn-secondary">Snap</button>
+                </div>
+
+                <div id="status" class="status-bar">Ready - Configure engine and start detection</div>
+
+                <!-- Attribution -->
+                <div class="attribution">
+                    <strong>About this tool:</strong> This demonstrates the computer vision pipeline described in
+                    <a href="https://blog.roboflow.com/identify-basketball-players/" target="_blank">
+                        "How to Detect, Track, and Identify Basketball Players with Computer Vision"
+                    </a> by Piotr Skalski (Roboflow, Sep 2025).
+                    The original pipeline uses RF-DETR, SAM2, SigLIP, ResNet, and SmolVLM2.
+                    This web adaptation uses Roboflow hosted inference and Moondream VLM.
+                    <br><br>
+                    <em>Cite: Piotr Skalski. (Sep 30, 2025). How to Detect, Track, and Identify Basketball Players with Computer Vision. Roboflow Blog.</em>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>
