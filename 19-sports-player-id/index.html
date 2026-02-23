@@ -241,6 +241,31 @@
             border-radius: 4px; font-size: 0.72rem; font-weight: 600; z-index: 5;
         }
         .edit-mode-badge.visible { display: block; }
+
+        /* ── Model download progress ── */
+        .model-progress {
+            background: var(--background); border-radius: 6px; padding: 10px 12px;
+            margin-bottom: 12px; display: none;
+        }
+        .model-progress.visible { display: block; }
+        .model-progress .mp-label {
+            font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px;
+            display: flex; justify-content: space-between;
+        }
+        .model-progress .mp-bar-bg {
+            height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;
+        }
+        .model-progress .mp-bar-fill {
+            height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 3px; transition: width 0.3s; width: 0%;
+        }
+
+        /* ── FPS badge ── */
+        .fps-badge {
+            display: inline-block; background: var(--surface); border: 1px solid var(--surface-light);
+            border-radius: 4px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700;
+            font-family: Consolas, Monaco, monospace; color: var(--primary-light); margin-left: 6px;
+        }
     </style>
 </head>
 <body>
@@ -366,14 +391,26 @@
                     </div>
                 </div>
 
-                <!-- Engine selector -->
+                <!-- Engine selector (3-way) -->
                 <div class="engine-toggle">
-                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow">
-                        Roboflow<span class="engine-sub">RF-DETR &middot; Fast</span>
+                    <button id="engineLocalBtn" class="active" data-engine="roboflow-local">
+                        Local<span class="engine-sub">In-browser &middot; Fast</span>
+                    </button>
+                    <button id="engineCloudBtn" data-engine="roboflow-cloud">
+                        Cloud<span class="engine-sub">Roboflow API</span>
                     </button>
                     <button id="engineMoondreamBtn" data-engine="moondream">
-                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
+                        Moondream<span class="engine-sub">VLM</span>
                     </button>
+                </div>
+
+                <!-- Model download progress (local inference) -->
+                <div class="model-progress" id="modelProgress">
+                    <div class="mp-label">
+                        <span id="modelProgressLabel">Downloading model weights...</span>
+                        <span id="modelProgressPct">0%</span>
+                    </div>
+                    <div class="mp-bar-bg"><div class="mp-bar-fill" id="modelProgressBar"></div></div>
                 </div>
 
                 <!-- Roboflow model info -->
@@ -385,17 +422,19 @@
                 <div class="control-group">
                     <label for="intervalSelect">Analysis Rate</label>
                     <select id="intervalSelect">
-                        <option value="500">~2 FPS (Roboflow)</option>
-                        <option value="1000" selected>~1 FPS</option>
+                        <option value="0">Max FPS (Local only)</option>
+                        <option value="100">~10 FPS</option>
+                        <option value="200" selected>~5 FPS</option>
+                        <option value="500">~2 FPS</option>
+                        <option value="1000">~1 FPS</option>
                         <option value="2000">Every 2s</option>
                         <option value="5000">Every 5s</option>
-                        <option value="10000">Every 10s</option>
                     </select>
                 </div>
 
                 <div class="control-group">
-                    <label for="confidenceSlider">Min Confidence: <span id="confidenceValue">40%</span></label>
-                    <input type="range" id="confidenceSlider" min="10" max="90" value="40" style="width:100%;">
+                    <label for="confidenceSlider">Min Confidence: <span id="confidenceValue">25%</span></label>
+                    <input type="range" id="confidenceSlider" min="5" max="90" value="25" style="width:100%;">
                 </div>
 
                 <div class="control-group">
@@ -489,8 +528,8 @@
                         <div class="label">IDs Confirmed</div>
                     </div>
                     <div class="session-stat">
-                        <div class="value" id="statAvgConf">--%</div>
-                        <div class="label">Avg Confidence</div>
+                        <div class="value" id="statFps">--</div>
+                        <div class="label">FPS</div>
                     </div>
                 </div>
 
@@ -517,6 +556,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.roboflow.com/0.2.26/roboflow.js"></script>
     <script src="bytetrack.js"></script>
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>

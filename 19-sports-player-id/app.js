@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const fileInput = document.getElementById('fileInput');
     const modeCameraBtn = document.getElementById('modeCameraBtn');
     const modeUploadBtn = document.getElementById('modeUploadBtn');
-    const engineRoboflowBtn = document.getElementById('engineRoboflowBtn');
     const engineMoondreamBtn = document.getElementById('engineMoondreamBtn');
     const roboflowInfo = document.getElementById('roboflowInfo');
     const intervalSelect = document.getElementById('intervalSelect');
@@ -38,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const statDuration = document.getElementById('statDuration');
     const statFrames = document.getElementById('statFrames');
     const statIdentified = document.getElementById('statIdentified');
-    const statAvgConf = document.getElementById('statAvgConf');
+    // statFps is updated by updateFPS() directly
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const snapBtn = document.getElementById('snapBtn');
@@ -53,18 +52,28 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  STATE
     // ══════════════════════════════════════════════════
-    let engine = 'roboflow';
+    let engine = 'roboflow-local'; // 'roboflow-local' | 'roboflow-cloud' | 'moondream'
     let mode = 'camera';
     let moondreamClient = null;
     let currentStream = null;
     let running = false;
     let analysisTimeout = null;
+    let analysisRAF = null;  // requestAnimationFrame ID for max-fps mode
     let durationInterval = null;
     let sessionStart = null;
     let framesAnalyzed = 0;
     let totalConfidence = 0;
     let uploadedImages = [];
     let uploadIndex = 0;
+
+    // Local inference state
+    let localModel = null;
+    let modelLoading = false;
+    var ROBOFLOW_PUBLISHABLE_KEY = 'rf_vhoE8yzALoBhrI8UfbY4';
+
+    // FPS tracking
+    let fpsHistory = [];
+    let lastFrameTime = 0;
 
     // ByteTrack tracker instance
     let byteTracker = new ByteTrackTracker({
@@ -189,23 +198,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  ROBOFLOW DETECTION ENGINE
     // ══════════════════════════════════════════════════
-    async function roboflowDetect(imageBase64) {
-        var apiKey = window.apiKeyManager.getRoboflowKey();
-        if (!apiKey) {
-            window.apiKeyManager.showModal();
-            throw new Error('No Roboflow API key configured');
+    function resizeBase64(base64, maxWidth) {
+        // Synchronous resize using an offscreen canvas for faster cloud uploads
+        try {
+            var img = new Image();
+            img.src = base64;
+            if (!img.width || img.width <= maxWidth) return base64;
+            var scale = maxWidth / img.width;
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.width * scale);
+            c.height = Math.round(img.height * scale);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            return c.toDataURL('image/jpeg', 0.8);
+        } catch (e) {
+            return base64; // fallback to original if resize fails
         }
+    }
+
+    async function roboflowCloudDetect(imageBase64) {
+        var apiKey = window.apiKeyManager.hasRoboflowKey()
+            ? window.apiKeyManager.getRoboflowKey()
+            : ROBOFLOW_PUBLISHABLE_KEY;
 
         var confidence = parseInt(confidenceSlider.value) / 100;
         var url = 'https://detect.roboflow.com/' + ROBOFLOW_MODEL + '/' + ROBOFLOW_VERSION
             + '?api_key=' + apiKey + '&confidence=' + confidence;
 
         var startTime = Date.now();
-        window.reasoningConsole.logApiCall('/roboflow/detect', 0);
+        window.reasoningConsole.logApiCall('/roboflow/cloud', 0);
+
+        // Resize frame for faster upload (cloud only)
+        var resized = resizeBase64(imageBase64, 640);
 
         var resp = await fetch(url, {
             method: 'POST',
-            body: imageBase64,
+            body: resized,
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
@@ -297,6 +324,144 @@ document.addEventListener('DOMContentLoaded', async function() {
             return match ? match[0] : null;
         } catch (e) {
             return null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    //  ROBOFLOW LOCAL INFERENCE (in-browser via roboflow.js)
+    // ══════════════════════════════════════════════════
+    async function loadLocalModel() {
+        if (localModel) return localModel;
+        if (modelLoading) return null;
+
+        modelLoading = true;
+        var progressEl = document.getElementById('modelProgress');
+        var progressBar = document.getElementById('modelProgressBar');
+        var progressLabel = document.getElementById('modelProgressLabel');
+        var progressPct = document.getElementById('modelProgressPct');
+        progressEl.classList.add('visible');
+        progressLabel.textContent = 'Downloading model weights...';
+        progressPct.textContent = '0%';
+        progressBar.style.width = '0%';
+
+        updateStatus('Loading local model...');
+        window.reasoningConsole.logInfo('Loading Roboflow local model (basketball-player-detection)...');
+
+        try {
+            // Use the publishable key (safe for client-side)
+            var publishableKey = window.apiKeyManager.hasRoboflowKey()
+                ? window.apiKeyManager.getRoboflowKey()
+                : ROBOFLOW_PUBLISHABLE_KEY;
+
+            // Simulate progress during model download (roboflow.js doesn't expose progress events)
+            var progressInterval = setInterval(function() {
+                var current = parseFloat(progressBar.style.width) || 0;
+                if (current < 85) {
+                    var next = current + Math.random() * 8 + 2;
+                    progressBar.style.width = next + '%';
+                    progressPct.textContent = Math.round(next) + '%';
+                }
+            }, 500);
+
+            await new Promise(function(resolve, reject) {
+                roboflow.auth({ publishable_key: publishableKey }).load({
+                    model: ROBOFLOW_MODEL,
+                    version: parseInt(ROBOFLOW_VERSION)
+                }).then(function(model) {
+                    localModel = model;
+                    resolve();
+                }).catch(function(err) {
+                    reject(err);
+                });
+            });
+
+            clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+            progressPct.textContent = '100%';
+            progressLabel.textContent = 'Model loaded!';
+            window.reasoningConsole.logInfo('Local model loaded successfully');
+            updateStatus('Local model ready - Start detection');
+
+            setTimeout(function() { progressEl.classList.remove('visible'); }, 1500);
+            modelLoading = false;
+            return localModel;
+        } catch (e) {
+            clearInterval(progressInterval);
+            progressLabel.textContent = 'Model load failed: ' + e.message;
+            progressPct.textContent = '';
+            progressBar.style.width = '0%';
+            window.reasoningConsole.logError('Local model load failed: ' + e.message);
+            updateStatus('Local model failed - try Cloud engine', true);
+            modelLoading = false;
+            return null;
+        }
+    }
+
+    async function roboflowLocalDetect() {
+        if (!localModel) {
+            var model = await loadLocalModel();
+            if (!model) throw new Error('Local model not available');
+        }
+
+        var source = (mode === 'sample') ? sampleVideo : video;
+        var confidence = parseInt(confidenceSlider.value) / 100;
+
+        var startTime = Date.now();
+        window.reasoningConsole.logApiCall('/local/detect', 0);
+
+        // roboflow.js detect() accepts an HTML video/image element directly
+        // No base64 encoding, no network upload — runs in TensorFlow.js
+        var predictions = await localModel.detect(source, {
+            confidence: confidence
+        });
+
+        var latency = Date.now() - startTime;
+        window.reasoningConsole.logApiCall('/local/detect', latency);
+
+        // Parse into same format as cloud API
+        var vw = source.videoWidth || source.width || 640;
+        var vh = source.videoHeight || source.height || 480;
+        var players = [];
+        var numbers = [];
+        var others = [];
+
+        (predictions || []).forEach(function(pred) {
+            var bbox = {
+                x: pred.bbox ? pred.bbox.x - pred.bbox.width / 2 : pred.x - (pred.width || 0) / 2,
+                y: pred.bbox ? pred.bbox.y - pred.bbox.height / 2 : pred.y - (pred.height || 0) / 2,
+                w: pred.bbox ? pred.bbox.width : pred.width || 0,
+                h: pred.bbox ? pred.bbox.height : pred.height || 0,
+                confidence: pred.confidence || 0,
+                class: pred.class || ''
+            };
+            if (ROBOFLOW_PLAYER_CLASSES.indexOf(bbox.class) !== -1) {
+                players.push(bbox);
+            } else if (bbox.class === ROBOFLOW_NUMBER_CLASS) {
+                numbers.push(bbox);
+            } else {
+                others.push(bbox);
+            }
+        });
+
+        window.reasoningConsole.logInfo('Local: ' + players.length + ' players, ' + numbers.length + ' numbers (' + latency + 'ms)');
+        return { players: players, numbers: numbers, others: others, imageWidth: vw, imageHeight: vh };
+    }
+
+    // ══════════════════════════════════════════════════
+    //  FPS TRACKING
+    // ══════════════════════════════════════════════════
+    function updateFPS() {
+        var now = performance.now();
+        if (lastFrameTime > 0) {
+            var delta = now - lastFrameTime;
+            fpsHistory.push(1000 / delta);
+            if (fpsHistory.length > 30) fpsHistory.shift();
+        }
+        lastFrameTime = now;
+
+        if (fpsHistory.length > 0) {
+            var avg = fpsHistory.reduce(function(a, b) { return a + b; }, 0) / fpsHistory.length;
+            document.getElementById('statFps').textContent = avg.toFixed(1);
         }
     }
 
@@ -534,23 +699,30 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         try {
-            // Step 1: Detect
+            // Step 1: Detect — dispatch to selected engine
             var detResult;
-            if (engine === 'roboflow') {
-                detResult = await roboflowDetect(imageBase64);
+            if (engine === 'roboflow-local') {
+                detResult = await roboflowLocalDetect();
+            } else if (engine === 'roboflow-cloud') {
+                detResult = await roboflowCloudDetect(imageBase64);
             } else {
                 detResult = await moondreamDetect(imageBase64);
             }
 
             framesAnalyzed++;
+            updateFPS();
 
             // Step 2: Team clustering via K-means on uniform colors
+            // For local engine, we need a base64 for color sampling
+            if (!imageBase64 && engine === 'roboflow-local') {
+                imageBase64 = captureFrame();
+            }
             var colors = detResult.players.map(function(p) {
                 return sampleDominantColor(imageBase64, p);
             });
             var teamAssignments = kMeans2(colors);
 
-            // Step 3: Pair numbers to players (Roboflow only — numbers come from detector)
+            // Step 3: Pair numbers to players (Roboflow engines — numbers come from detector)
             var numberPairs = {};
             if (detResult.numbers.length > 0) {
                 numberPairs = pairNumbersToPlayers(detResult.players, detResult.numbers);
@@ -559,12 +731,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Step 4: Update tracker
             updateTrackedPlayers(detResult.players, teamAssignments, numberPairs, imageBase64);
 
-            // Step 5: OCR jersey numbers
-            if (engine === 'roboflow' && Object.keys(numberPairs).length > 0 && moondreamClient) {
-                // Use Moondream for OCR on number crops (non-blocking)
-                ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+            // Step 5: OCR jersey numbers (only for cloud/moondream — local is too fast to OCR every frame)
+            if ((engine === 'roboflow-cloud' || engine === 'roboflow-local') && Object.keys(numberPairs).length > 0 && moondreamClient) {
+                // Use Moondream for OCR on number crops (non-blocking, skip for speed if local)
+                if (engine === 'roboflow-cloud' || framesAnalyzed % 10 === 0) {
+                    ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+                }
             } else if (engine === 'moondream') {
-                // With Moondream engine, try OCR on each unconfirmed player (limited to 3 per frame)
                 var unconfirmed = trackedPlayers.filter(function(tp) { return !tp.confirmedNumber; }).slice(0, 3);
                 for (var i = 0; i < unconfirmed.length; i++) {
                     var num = await moondreamOCR(imageBase64, unconfirmed[i].bbox);
@@ -581,16 +754,24 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateDetectionCard();
             updateSessionStats();
             renderDetList();
-            updateStatus('Analyzing (' + engine + ') — ' + detResult.players.length + ' players');
+
+            var fpsStr = fpsHistory.length > 0 ? ' @ ' + (fpsHistory.reduce(function(a,b){return a+b;},0) / fpsHistory.length).toFixed(1) + ' FPS' : '';
+            updateStatus('Analyzing (' + engine + ') — ' + detResult.players.length + ' players' + fpsStr);
 
         } catch (e) {
             window.reasoningConsole.logError('Analysis error: ' + e.message);
             updateStatus('Error: ' + e.message, true);
         }
 
+        // Schedule next frame
         if (running) {
-            var interval = parseInt(intervalSelect.value) || 1000;
-            analysisTimeout = setTimeout(analyzeFrame, interval);
+            var interval = parseInt(intervalSelect.value);
+            if (interval === 0) {
+                // Max FPS mode — use requestAnimationFrame for fastest possible
+                analysisRAF = requestAnimationFrame(function() { analyzeFrame(); });
+            } else {
+                analysisTimeout = setTimeout(analyzeFrame, interval);
+            }
         }
     }
 
@@ -760,7 +941,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         statFrames.textContent = framesAnalyzed;
         statIdentified.textContent = identifiedCount;
-        statAvgConf.textContent = framesAnalyzed > 0 ? Math.round(totalConfidence / (framesAnalyzed * Math.max(1, trackedPlayers.length)) * 100) + '%' : '--%';
+        // FPS is updated by updateFPS() in the analysis loop
     }
 
     // ══════════════════════════════════════════════════
@@ -903,12 +1084,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  START / STOP
     // ══════════════════════════════════════════════════
-    function startAnalysis() {
-        if (engine === 'roboflow' && !window.apiKeyManager.hasRoboflowKey()) {
-            window.apiKeyManager.showModal();
-            return;
-        }
-        if (engine === 'moondream' && !moondreamClient) {
+    async function startAnalysis() {
+        // Validate engine requirements
+        if (engine === 'roboflow-local') {
+            // Pre-load the local model before starting
+            updateStatus('Loading local model...');
+            var model = await loadLocalModel();
+            if (!model) {
+                updateStatus('Local model failed to load. Try Cloud engine.', true);
+                return;
+            }
+        } else if (engine === 'roboflow-cloud') {
+            if (!window.apiKeyManager.hasRoboflowKey() && !ROBOFLOW_PUBLISHABLE_KEY) {
+                window.apiKeyManager.showModal();
+                return;
+            }
+        } else if (engine === 'moondream' && !moondreamClient) {
             window.apiKeyManager.showModal();
             return;
         }
@@ -920,6 +1111,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         identifiedCount = 0;
         trackedPlayers = [];
         trackMeta = {};
+        fpsHistory = [];
+        lastFrameTime = 0;
 
         // (Re)create ByteTrack tracker with current config
         var btHigh = parseInt(document.getElementById('btHighThresh').value) / 100;
@@ -942,12 +1135,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     function stopAnalysis() {
         running = false;
         clearTimeout(analysisTimeout);
+        if (analysisRAF) cancelAnimationFrame(analysisRAF);
         clearInterval(durationInterval);
         startBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
         ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-        updateStatus('Stopped');
-        window.reasoningConsole.logInfo('Stopped. ' + framesAnalyzed + ' frames, ' + identifiedCount + ' IDs confirmed.');
+        var avgFps = fpsHistory.length > 0 ? (fpsHistory.reduce(function(a,b){return a+b;},0) / fpsHistory.length).toFixed(1) : '0';
+        updateStatus('Stopped — ' + framesAnalyzed + ' frames @ avg ' + avgFps + ' FPS');
+        window.reasoningConsole.logInfo('Stopped. ' + framesAnalyzed + ' frames, ' + identifiedCount + ' IDs confirmed, avg ' + avgFps + ' FPS.');
     }
 
     async function snapAnalysis() {
@@ -993,9 +1188,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function switchEngine(eng) {
         engine = eng;
-        engineRoboflowBtn.classList.toggle('active', engine === 'roboflow');
+        document.getElementById('engineLocalBtn').classList.toggle('active', engine === 'roboflow-local');
+        document.getElementById('engineCloudBtn').classList.toggle('active', engine === 'roboflow-cloud');
         engineMoondreamBtn.classList.toggle('active', engine === 'moondream');
-        roboflowInfo.style.display = engine === 'roboflow' ? '' : 'none';
+        roboflowInfo.style.display = (engine === 'roboflow-local' || engine === 'roboflow-cloud') ? '' : 'none';
         window.reasoningConsole.logInfo('Switched to ' + engine + ' engine');
     }
 
@@ -1314,7 +1510,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
     modeSampleBtn.addEventListener('click', function() { switchMode('sample'); });
     modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
-    engineRoboflowBtn.addEventListener('click', function() { switchEngine('roboflow'); });
+    document.getElementById('engineLocalBtn').addEventListener('click', function() { switchEngine('roboflow-local'); });
+    document.getElementById('engineCloudBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
     engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
     cameraSelect.addEventListener('change', function() { if (cameraSelect.value) startCamera(cameraSelect.value); });
     refreshCamerasBtn.addEventListener('click', enumerateCameras);
