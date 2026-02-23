@@ -373,14 +373,28 @@
                     </div>
                 </div>
 
-                <!-- Engine selector -->
+                <!-- Engine selector (3-way) -->
                 <div class="engine-toggle">
-                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow-cloud">
-                        Roboflow<span class="engine-sub">RF-DETR v13 &middot; 10 classes</span>
+                    <button id="engineLocalBtn" class="active" data-engine="roboflow-local">
+                        Local<span class="engine-sub">In-browser &middot; Fast</span>
+                    </button>
+                    <button id="engineCloudBtn" data-engine="roboflow-cloud">
+                        Cloud<span class="engine-sub">Roboflow API</span>
                     </button>
                     <button id="engineMoondreamBtn" data-engine="moondream">
-                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
+                        Moondream<span class="engine-sub">VLM</span>
                     </button>
+                </div>
+
+                <!-- Model download progress (local inference) -->
+                <div id="modelProgress" style="display:none;background:var(--background);border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;">
+                        <span id="modelProgressLabel">Loading model...</span>
+                        <span id="modelProgressPct"></span>
+                    </div>
+                    <div style="height:6px;background:var(--surface-light);border-radius:3px;overflow:hidden;">
+                        <div id="modelProgressBar" style="height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));border-radius:3px;transition:width 0.3s;width:0%;"></div>
+                    </div>
                 </div>
 
                 <!-- Roboflow model info -->
@@ -392,11 +406,13 @@
                 <div class="control-group">
                     <label for="intervalSelect">Analysis Rate</label>
                     <select id="intervalSelect">
+                        <option value="0">Max FPS (Local)</option>
+                        <option value="100">~10 FPS</option>
+                        <option value="200" selected>~5 FPS</option>
                         <option value="500">~2 FPS</option>
-                        <option value="1000" selected>~1 FPS</option>
+                        <option value="1000">~1 FPS</option>
                         <option value="2000">Every 2s</option>
                         <option value="5000">Every 5s</option>
-                        <option value="10000">Every 10s</option>
                     </select>
                 </div>
 
@@ -524,6 +540,8 @@
         </div>
     </div>
 
+    <!-- Roboflow inferencejs — local in-browser inference via TensorFlow.js (UMD bundle from jsDelivr) -->
+    <script src="https://cdn.jsdelivr.net/npm/inferencejs@1.2.2/dist/inference.js"></script>
     <script src="bytetrack.js"></script>
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>

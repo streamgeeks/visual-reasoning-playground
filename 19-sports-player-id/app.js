@@ -52,12 +52,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  STATE
     // ══════════════════════════════════════════════════
-    let engine = 'roboflow-cloud'; // 'roboflow-cloud' | 'moondream'
+    let engine = 'roboflow-local'; // 'roboflow-local' | 'roboflow-cloud' | 'moondream'
     let mode = 'camera';
     let moondreamClient = null;
     let currentStream = null;
     let running = false;
     let analysisTimeout = null;
+    let analysisRAF = null;
     let durationInterval = null;
     let sessionStart = null;
     let framesAnalyzed = 0;
@@ -67,6 +68,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Roboflow publishable key (safe for client-side, only grants inference access)
     var ROBOFLOW_PUBLISHABLE_KEY = 'rf_vhoE8yzALoBhrI8UfbY4';
+
+    // Local inference state (inferencejs)
+    let inferEngine = null;   // InferenceEngine instance
+    let inferWorkerId = null; // worker ID from startWorker
+    let modelLoading = false;
 
     // FPS tracking
     let fpsHistory = [];
@@ -323,6 +329,125 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // ══════════════════════════════════════════════════
+    //  ROBOFLOW LOCAL INFERENCE (inferencejs — TensorFlow.js in browser)
+    // ══════════════════════════════════════════════════
+    async function loadLocalModel() {
+        if (inferWorkerId !== null) return inferWorkerId;
+        if (modelLoading) return null;
+
+        modelLoading = true;
+        var progressEl = document.getElementById('modelProgress');
+        var progressBar = document.getElementById('modelProgressBar');
+        var progressLabel = document.getElementById('modelProgressLabel');
+        var progressPct = document.getElementById('modelProgressPct');
+        progressEl.style.display = 'block';
+        progressLabel.textContent = 'Initializing inference engine...';
+        progressPct.textContent = '';
+        progressBar.style.width = '10%';
+
+        updateStatus('Loading local model...');
+        window.reasoningConsole.logInfo('Loading Roboflow local model via inferencejs...');
+
+        try {
+            var publishableKey = window.apiKeyManager.hasRoboflowKey()
+                ? window.apiKeyManager.getRoboflowKey()
+                : ROBOFLOW_PUBLISHABLE_KEY;
+
+            // Create InferenceEngine from the inferencejs UMD global
+            if (!inferEngine) {
+                inferEngine = new inferencejs.InferenceEngine();
+            }
+
+            progressLabel.textContent = 'Downloading model weights...';
+            progressBar.style.width = '30%';
+
+            // Simulate progress (startWorker doesn't expose download progress)
+            var progressInterval = setInterval(function() {
+                var current = parseFloat(progressBar.style.width) || 30;
+                if (current < 85) {
+                    progressBar.style.width = (current + Math.random() * 5 + 1) + '%';
+                }
+            }, 800);
+
+            // startWorker downloads the model and starts a Web Worker for inference
+            inferWorkerId = await inferEngine.startWorker(
+                ROBOFLOW_MODEL,
+                parseInt(ROBOFLOW_VERSION),
+                publishableKey
+            );
+
+            clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+            progressLabel.textContent = 'Model loaded! Ready for inference.';
+            progressPct.textContent = '';
+            window.reasoningConsole.logInfo('Local model loaded (worker #' + inferWorkerId + ')');
+            updateStatus('Local model ready');
+
+            setTimeout(function() { progressEl.style.display = 'none'; }, 1500);
+            modelLoading = false;
+            return inferWorkerId;
+        } catch (e) {
+            clearInterval(progressInterval);
+            progressLabel.textContent = 'Model load failed: ' + e.message;
+            progressBar.style.width = '0%';
+            window.reasoningConsole.logError('Local model load failed: ' + e.message);
+            updateStatus('Local model failed: ' + e.message, true);
+            modelLoading = false;
+            inferWorkerId = null;
+            return null;
+        }
+    }
+
+    async function roboflowLocalDetect() {
+        if (inferWorkerId === null) {
+            var wid = await loadLocalModel();
+            if (wid === null) throw new Error('Local model not available');
+        }
+
+        var source = (mode === 'sample') ? sampleVideo : video;
+        var startTime = Date.now();
+
+        // Create a CVImage from the video element — inferencejs handles the rest
+        var cvImg = new inferencejs.CVImage(source);
+        var predictions = await inferEngine.infer(inferWorkerId, cvImg);
+
+        var latency = Date.now() - startTime;
+
+        // Parse predictions into the standard format
+        // inferencejs returns: [{class, confidence, bbox: {x, y, width, height}}]
+        var vw = source.videoWidth || source.width || 640;
+        var vh = source.videoHeight || source.height || 480;
+        var players = [];
+        var numbers = [];
+        var others = [];
+        var minConf = parseInt(confidenceSlider.value) / 100;
+
+        (predictions || []).forEach(function(pred) {
+            if ((pred.confidence || 0) < minConf) return;
+            var bbox = {
+                x: pred.bbox ? pred.bbox.x - pred.bbox.width / 2 : 0,
+                y: pred.bbox ? pred.bbox.y - pred.bbox.height / 2 : 0,
+                w: pred.bbox ? pred.bbox.width : 0,
+                h: pred.bbox ? pred.bbox.height : 0,
+                confidence: pred.confidence || 0,
+                class: pred.class || ''
+            };
+            if (ROBOFLOW_PLAYER_CLASSES.indexOf(bbox.class) !== -1) {
+                players.push(bbox);
+            } else if (bbox.class === ROBOFLOW_NUMBER_CLASS) {
+                numbers.push(bbox);
+            } else {
+                others.push(bbox);
+            }
+        });
+
+        if (latency < 500 || framesAnalyzed % 20 === 0) {
+            window.reasoningConsole.logInfo('Local: ' + players.length + ' players, ' + numbers.length + ' numbers (' + latency + 'ms)');
+        }
+        return { players: players, numbers: numbers, others: others, imageWidth: vw, imageHeight: vh };
+    }
+
+    // ══════════════════════════════════════════════════
     //  FPS TRACKING
     // ══════════════════════════════════════════════════
     function updateFPS() {
@@ -576,7 +701,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             // Step 1: Detect — dispatch to selected engine
             var detResult;
-            if (engine === 'roboflow-cloud') {
+            if (engine === 'roboflow-local') {
+                detResult = await roboflowLocalDetect();
+            } else if (engine === 'roboflow-cloud') {
                 detResult = await roboflowCloudDetect(imageBase64);
             } else {
                 detResult = await moondreamDetect(imageBase64);
@@ -586,6 +713,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateFPS();
 
             // Step 2: Team clustering via K-means on uniform colors
+            // For local engine, we need a base64 for color sampling
+            if (!imageBase64 || engine === 'roboflow-local') {
+                imageBase64 = captureFrame();
+            }
             var colors = detResult.players.map(function(p) {
                 return sampleDominantColor(imageBase64, p);
             });
@@ -601,9 +732,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateTrackedPlayers(detResult.players, teamAssignments, numberPairs, imageBase64);
 
             // Step 5: OCR jersey numbers
-            if (engine === 'roboflow-cloud' && Object.keys(numberPairs).length > 0 && moondreamClient) {
-                // Use Moondream for OCR on number crops (non-blocking)
-                ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+            if ((engine === 'roboflow-cloud' || engine === 'roboflow-local') && Object.keys(numberPairs).length > 0 && moondreamClient) {
+                // Use Moondream for OCR on number crops (throttle for local — every 15th frame)
+                if (engine === 'roboflow-cloud' || framesAnalyzed % 15 === 0) {
+                    ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+                }
             } else if (engine === 'moondream') {
                 var unconfirmed = trackedPlayers.filter(function(tp) { return !tp.confirmedNumber; }).slice(0, 3);
                 for (var i = 0; i < unconfirmed.length; i++) {
@@ -632,8 +765,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Schedule next frame
         if (running) {
-            var interval = parseInt(intervalSelect.value) || 500;
-            analysisTimeout = setTimeout(analyzeFrame, interval);
+            var interval = parseInt(intervalSelect.value);
+            if (interval === 0 && engine === 'roboflow-local') {
+                analysisRAF = requestAnimationFrame(function() { analyzeFrame(); });
+            } else {
+                analysisTimeout = setTimeout(analyzeFrame, interval || 200);
+            }
         }
     }
 
@@ -948,7 +1085,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     async function startAnalysis() {
         // Validate engine requirements
-        if (engine === 'roboflow-cloud') {
+        if (engine === 'roboflow-local') {
+            updateStatus('Loading local model...');
+            var wid = await loadLocalModel();
+            if (wid === null) {
+                updateStatus('Local model failed to load. Try Cloud engine.', true);
+                return;
+            }
+        } else if (engine === 'roboflow-cloud') {
             if (!window.apiKeyManager.hasRoboflowKey() && !ROBOFLOW_PUBLISHABLE_KEY) {
                 window.apiKeyManager.showModal();
                 return;
@@ -989,7 +1133,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     function stopAnalysis() {
         running = false;
         clearTimeout(analysisTimeout);
-        
+        if (analysisRAF) cancelAnimationFrame(analysisRAF);
         clearInterval(durationInterval);
         startBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
@@ -1042,9 +1186,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function switchEngine(eng) {
         engine = eng;
-        document.getElementById('engineRoboflowBtn').classList.toggle('active', engine === 'roboflow-cloud');
+        document.getElementById('engineLocalBtn').classList.toggle('active', engine === 'roboflow-local');
+        document.getElementById('engineCloudBtn').classList.toggle('active', engine === 'roboflow-cloud');
         engineMoondreamBtn.classList.toggle('active', engine === 'moondream');
-        roboflowInfo.style.display = engine === 'roboflow-cloud' ? '' : 'none';
+        roboflowInfo.style.display = (engine === 'roboflow-local' || engine === 'roboflow-cloud') ? '' : 'none';
         window.reasoningConsole.logInfo('Switched to ' + engine + ' engine');
     }
 
@@ -1363,7 +1508,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
     modeSampleBtn.addEventListener('click', function() { switchMode('sample'); });
     modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
-    document.getElementById('engineRoboflowBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
+    document.getElementById('engineLocalBtn').addEventListener('click', function() { switchEngine('roboflow-local'); });
+    document.getElementById('engineCloudBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
     engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
     cameraSelect.addEventListener('change', function() { if (cameraSelect.value) startCamera(cameraSelect.value); });
     refreshCamerasBtn.addEventListener('click', enumerateCameras);
