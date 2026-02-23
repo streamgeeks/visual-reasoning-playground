@@ -242,24 +242,6 @@
         }
         .edit-mode-badge.visible { display: block; }
 
-        /* ── Model download progress ── */
-        .model-progress {
-            background: var(--background); border-radius: 6px; padding: 10px 12px;
-            margin-bottom: 12px; display: none;
-        }
-        .model-progress.visible { display: block; }
-        .model-progress .mp-label {
-            font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px;
-            display: flex; justify-content: space-between;
-        }
-        .model-progress .mp-bar-bg {
-            height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden;
-        }
-        .model-progress .mp-bar-fill {
-            height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary));
-            border-radius: 3px; transition: width 0.3s; width: 0%;
-        }
-
         /* ── FPS badge ── */
         .fps-badge {
             display: inline-block; background: var(--surface); border: 1px solid var(--surface-light);
@@ -391,26 +373,14 @@
                     </div>
                 </div>
 
-                <!-- Engine selector (3-way) -->
+                <!-- Engine selector -->
                 <div class="engine-toggle">
-                    <button id="engineLocalBtn" class="active" data-engine="roboflow-local">
-                        Local<span class="engine-sub">In-browser &middot; Fast</span>
-                    </button>
-                    <button id="engineCloudBtn" data-engine="roboflow-cloud">
-                        Cloud<span class="engine-sub">Roboflow API</span>
+                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow-cloud">
+                        Roboflow<span class="engine-sub">RF-DETR v13 &middot; 10 classes</span>
                     </button>
                     <button id="engineMoondreamBtn" data-engine="moondream">
-                        Moondream<span class="engine-sub">VLM</span>
+                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
                     </button>
-                </div>
-
-                <!-- Model download progress (local inference) -->
-                <div class="model-progress" id="modelProgress">
-                    <div class="mp-label">
-                        <span id="modelProgressLabel">Downloading model weights...</span>
-                        <span id="modelProgressPct">0%</span>
-                    </div>
-                    <div class="mp-bar-bg"><div class="mp-bar-fill" id="modelProgressBar"></div></div>
                 </div>
 
                 <!-- Roboflow model info -->
@@ -422,13 +392,11 @@
                 <div class="control-group">
                     <label for="intervalSelect">Analysis Rate</label>
                     <select id="intervalSelect">
-                        <option value="0">Max FPS (Local only)</option>
-                        <option value="100">~10 FPS</option>
-                        <option value="200" selected>~5 FPS</option>
                         <option value="500">~2 FPS</option>
-                        <option value="1000">~1 FPS</option>
+                        <option value="1000" selected>~1 FPS</option>
                         <option value="2000">Every 2s</option>
                         <option value="5000">Every 5s</option>
+                        <option value="10000">Every 10s</option>
                     </select>
                 </div>
 
@@ -556,7 +524,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.roboflow.com/0.2.26/roboflow.js"></script>
     <script src="bytetrack.js"></script>
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
