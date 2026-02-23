@@ -1364,6 +1364,82 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  COURT MAP INTEGRATION
     // ══════════════════════════════════════════════════
     var courtMap = new CourtMap('courtCanvas');
+
+    // Court keypoint ONNX model for auto-calibration
+    // The model detects 6 keypoints on the basketball court
+    // Input: [1, 3, 640, 640], Output: [1, 300, 24] (pose with 6 keypoints)
+    var courtKeypointModel = new OnnxModelRunner('model/rfdetr-small.onnx', {
+        inputWidth: 640,
+        inputHeight: 640,
+        task: 'pose',
+        classNames: { 0: 'court' },
+        kptShape: [6, 3]
+    });
+    var courtModelLoaded = false;
+
+    // Map the 6 detected keypoints to known court coordinates
+    // You'll need to define which 6 court points the model was trained to detect.
+    // Common choices: four corners + two mid-court points, or baseline corners + FT line corners
+    // For now, define a configurable mapping:
+    var COURT_KPT_MAPPING = [
+        { x: 0, y: 0 },      // keypoint 0 -> court coordinate (adjust to match your training data)
+        { x: 0, y: 50 },     // keypoint 1
+        { x: 94, y: 0 },     // keypoint 2
+        { x: 94, y: 50 },    // keypoint 3
+        { x: 47, y: 0 },     // keypoint 4
+        { x: 47, y: 50 },    // keypoint 5
+    ];
+
+    async function autoCalibrateCourt() {
+        if (!courtModelLoaded) {
+            window.reasoningConsole.logInfo('Loading court keypoint model...');
+            var loaded = await courtKeypointModel.load(function(msg) {
+                updateStatus('Court model: ' + msg);
+            });
+            if (!loaded) {
+                window.reasoningConsole.logError('Court keypoint model failed to load');
+                return false;
+            }
+            courtModelLoaded = true;
+        }
+
+        var source = (mode === 'sample') ? sampleVideo : video;
+        var result = await courtKeypointModel.infer(source, 0.3);
+
+        if (!result.keypoints || result.keypoints.length < 4) {
+            window.reasoningConsole.logInfo('Auto-calibration: not enough keypoints detected (' + (result.keypoints ? result.keypoints.length : 0) + ')');
+            return false;
+        }
+
+        // Filter keypoints by confidence
+        var goodKpts = [];
+        var goodCourtPts = [];
+        for (var i = 0; i < result.keypoints.length && i < COURT_KPT_MAPPING.length; i++) {
+            var kp = result.keypoints[i];
+            if (kp.confidence > 0.5) {
+                goodKpts.push([kp.x, kp.y]);
+                goodCourtPts.push([COURT_KPT_MAPPING[i].x, COURT_KPT_MAPPING[i].y]);
+            }
+        }
+
+        if (goodKpts.length < 4) {
+            window.reasoningConsole.logInfo('Auto-calibration: ' + goodKpts.length + ' confident keypoints (need 4+)');
+            return false;
+        }
+
+        // Compute homography
+        var H = computeHomography(goodKpts, goodCourtPts);
+        if (H) {
+            courtMap.homography = H;
+            courtMap.calibrated = true;
+            courtMap.calibrationMode = false;
+            updateCalibStatus();
+            window.reasoningConsole.logAction('Auto-calibrated', goodKpts.length + ' keypoints detected');
+            return true;
+        }
+        return false;
+    }
+
     var calibWaitingForVideo = false; // true = next click on video is a calibration point
     var calibBadge = document.getElementById('calibBadge');
     var calibStatus = document.getElementById('calibStatus');
@@ -1387,6 +1463,23 @@ document.addEventListener('DOMContentLoaded', async function() {
             calibStatus.style.color = 'var(--text-muted)';
         }
     }
+
+    document.getElementById('calibAutoBtn').addEventListener('click', async function() {
+        var btn = document.getElementById('calibAutoBtn');
+        btn.disabled = true;
+        btn.textContent = 'Loading model...';
+        updateStatus('Auto-calibrating court...');
+
+        var success = await autoCalibrateCourt();
+        btn.disabled = false;
+        btn.textContent = 'Auto-Calibrate (ONNX)';
+
+        if (success) {
+            updateStatus('Court auto-calibrated!');
+        } else {
+            updateStatus('Auto-calibration failed — try manual mode', true);
+        }
+    });
 
     calibStartBtn.addEventListener('click', function() {
         courtMap.startCalibration();

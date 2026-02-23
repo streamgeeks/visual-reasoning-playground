@@ -456,7 +456,8 @@
                         </div>
                         <div id="calibStatus" style="font-size:0.75rem;margin-bottom:6px;color:var(--text-muted);">Not calibrated</div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn btn-primary" id="calibStartBtn" style="padding:4px 10px;font-size:0.72rem;">Start Calibration</button>
+                            <button class="btn btn-primary" id="calibAutoBtn" style="padding:4px 10px;font-size:0.72rem;">Auto-Calibrate (ONNX)</button>
+                            <button class="btn btn-secondary" id="calibStartBtn" style="padding:4px 10px;font-size:0.72rem;">Manual</button>
                             <button class="btn btn-success" id="calibApplyBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Apply (4+ pts)</button>
                             <button class="btn btn-secondary" id="calibCancelBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Cancel</button>
                             <button class="btn btn-secondary" id="calibResetBtn" style="padding:4px 10px;font-size:0.72rem;">Reset</button>
@@ -559,6 +560,9 @@
         </div>
     </div>
 
+    <!-- ONNX Runtime Web for local in-browser model inference -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+    <script src="onnx-engine.js"></script>
     <script src="homography.js"></script>
     <script src="court-map.js"></script>
     <script src="bytetrack.js"></script>
