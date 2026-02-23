@@ -66,11 +66,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     let uploadedImages = [];
     let uploadIndex = 0;
 
-    // Tracked players across frames
-    let trackedPlayers = []; // [{id, bbox, team, numberReadings[], confirmedNumber, name, lastSeen}]
-    let nextTrackId = 1;
+    // ByteTrack tracker instance
+    let byteTracker = new ByteTrackTracker({
+        trackHighThresh: 0.5,
+        matchThresh: 0.8,
+        trackBuffer: 30
+    });
+    // Per-track metadata keyed by trackId (survives across ByteTrack updates)
+    let trackMeta = {}; // trackId -> {team, numberReadings[], confirmedNumber, name}
     let teamColors = { A: '#E8E8E8', B: '#1A5276' };
     let identifiedCount = 0;
+    let showTrajectories = true;
 
     // Roster: { A: [{number, name}], B: [{number, name}] }
     let roster = { A: [], B: [] };
@@ -391,99 +397,84 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // ══════════════════════════════════════════════════
-    //  IoU TRACKER — maintain player IDs across frames
+    //  BYTETRACK INTEGRATION
     // ══════════════════════════════════════════════════
-    function iou(a, b) {
-        var x1 = Math.max(a.x, b.x);
-        var y1 = Math.max(a.y, b.y);
-        var x2 = Math.min(a.x + a.w, b.x + b.w);
-        var y2 = Math.min(a.y + a.h, b.y + b.h);
-        if (x2 <= x1 || y2 <= y1) return 0;
-        var intersection = (x2 - x1) * (y2 - y1);
-        var union = a.w * a.h + b.w * b.h - intersection;
-        return union > 0 ? intersection / union : 0;
-    }
-
     function updateTrackedPlayers(detectedPlayers, teamAssignments, numberPairs, imageBase64) {
-        var matched = new Set();
-        var newTracked = [];
+        // Convert detections to ByteTrack format
+        var btDetections = detectedPlayers.map(function(det, di) {
+            return {
+                bbox: { x: det.x, y: det.y, w: det.w, h: det.h },
+                score: det.confidence || 0.5,
+                cls: det.class || 'player',
+                extra: { detIndex: di, team: teamAssignments[di] === 0 ? 'A' : 'B', playerClass: det.class }
+            };
+        });
 
-        // Try to match each detection to an existing tracked player
-        detectedPlayers.forEach(function(det, di) {
-            var bestTrack = null, bestIou = 0.3; // minimum IoU threshold
-            trackedPlayers.forEach(function(tp) {
-                if (matched.has(tp.id)) return;
-                var score = iou(det, tp.bbox);
-                if (score > bestIou) { bestIou = score; bestTrack = tp; }
-            });
+        // Run ByteTrack update — the core two-phase association
+        var activeTracks = byteTracker.update(btDetections);
 
-            var team = teamAssignments[di] === 0 ? 'A' : 'B';
-
-            if (bestTrack) {
-                // Update existing track
-                matched.add(bestTrack.id);
-                bestTrack.bbox = det;
-                bestTrack.team = team;
-                bestTrack.lastSeen = Date.now();
-                bestTrack.confidence = det.confidence;
-                bestTrack.playerClass = det.class;
-
-                // Update jersey number reading
-                if (numberPairs[di]) {
-                    // Roboflow detected a number bbox — we need to OCR it or use the class info
-                    // For Roboflow, the number detection gives us the bbox but not the actual digit
-                    // We'll handle OCR separately
-                }
-
-                newTracked.push(bestTrack);
-            } else {
-                // New player
-                var tp = {
-                    id: nextTrackId++,
-                    bbox: det,
-                    team: team,
+        // Sync track metadata (team, number readings, etc.)
+        activeTracks.forEach(function(at) {
+            var tid = at.trackId;
+            if (!trackMeta[tid]) {
+                trackMeta[tid] = {
+                    team: at.extra.team || 'A',
                     numberReadings: [],
                     confirmedNumber: null,
                     name: null,
-                    lastSeen: Date.now(),
-                    confidence: det.confidence,
-                    playerClass: det.class
+                    playerClass: at.cls
                 };
-                newTracked.push(tp);
             }
+            // Update team from latest detection's cluster assignment
+            if (at.extra.team) trackMeta[tid].team = at.extra.team;
+            if (at.extra.playerClass) trackMeta[tid].playerClass = at.extra.playerClass;
         });
 
-        // Keep tracks that weren't matched but were seen recently (< 2s)
-        var now = Date.now();
-        trackedPlayers.forEach(function(tp) {
-            if (!matched.has(tp.id) && now - tp.lastSeen < 2000) {
-                newTracked.push(tp);
-            }
+        // Build the trackedPlayers array for the rest of the pipeline
+        trackedPlayers = activeTracks.map(function(at) {
+            var meta = trackMeta[at.trackId] || {};
+            return {
+                id: at.trackId,
+                bbox: at.bbox,
+                team: meta.team || 'A',
+                numberReadings: meta.numberReadings || [],
+                confirmedNumber: meta.confirmedNumber || null,
+                name: meta.name || null,
+                lastSeen: Date.now(),
+                confidence: at.score,
+                playerClass: meta.playerClass || at.cls,
+                trajectory: at.trajectory || [],
+                trackletLen: at.trackletLen || 0
+            };
         });
-
-        trackedPlayers = newTracked;
     }
+
+    // Helper to get trackedPlayers (used throughout the pipeline)
+    var trackedPlayers = [];
 
     // ══════════════════════════════════════════════════
     //  NUMBER CONFIRMATION HEURISTIC
     // ══════════════════════════════════════════════════
     function addNumberReading(trackId, number) {
         if (!number) return;
-        var tp = trackedPlayers.find(function(p) { return p.id === trackId; });
-        if (!tp || tp.confirmedNumber) return;
+        var meta = trackMeta[trackId];
+        if (!meta) return;
+        if (meta.confirmedNumber) return;
 
-        tp.numberReadings.push(number);
+        meta.numberReadings.push(number);
         var needed = parseInt(confirmCount.value) || 3;
-        var recent = tp.numberReadings.slice(-needed);
+        var recent = meta.numberReadings.slice(-needed);
         if (recent.length >= needed && recent.every(function(n) { return n === recent[0]; })) {
-            tp.confirmedNumber = recent[0];
-            tp.name = lookupRoster(tp.team, tp.confirmedNumber);
+            meta.confirmedNumber = recent[0];
+            meta.name = lookupRoster(meta.team, meta.confirmedNumber);
             identifiedCount++;
             updateSessionStats();
 
-            var label = (tp.name ? tp.name + ' (#' + tp.confirmedNumber + ')' : '#' + tp.confirmedNumber);
-            addHistoryEntry(tp.team, label, tp.confidence);
-            window.reasoningConsole.logDecision('ID Confirmed', 'Team ' + tp.team + ' ' + label);
+            var tp = trackedPlayers.find(function(p) { return p.id === trackId; });
+            var conf = tp ? tp.confidence : 0.8;
+            var label = (meta.name ? meta.name + ' (#' + meta.confirmedNumber + ')' : '#' + meta.confirmedNumber);
+            addHistoryEntry(meta.team, label, conf);
+            window.reasoningConsole.logDecision('ID Confirmed', 'Team ' + meta.team + ' ' + label);
         }
     }
 
@@ -614,20 +605,52 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Draw tracked players
         trackedPlayers.forEach(function(tp) {
             var color = tp.team === 'A' ? teamColors.A : teamColors.B;
+            var meta = trackMeta[tp.id] || {};
             var x = tp.bbox.x * scaleX, y = tp.bbox.y * scaleY;
             var w = tp.bbox.w * scaleX, h = tp.bbox.h * scaleY;
 
+            // Trajectory line (ByteTrack feature)
+            if (showTrajectories && tp.trajectory && tp.trajectory.length > 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.6;
+                for (var ti = 0; ti < tp.trajectory.length; ti++) {
+                    var pt = tp.trajectory[ti];
+                    var px = pt.cx * scaleX;
+                    var py = pt.cy * scaleY;
+                    if (ti === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+                // Draw a small dot at current position
+                ctx.beginPath();
+                ctx.arc(tp.trajectory[tp.trajectory.length - 1].cx * scaleX, tp.trajectory[tp.trajectory.length - 1].cy * scaleY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+
             // Bounding box
             ctx.strokeStyle = color;
-            ctx.lineWidth = tp.confirmedNumber ? 3 : 2;
+            ctx.lineWidth = (meta.confirmedNumber) ? 3 : 2;
             ctx.strokeRect(x, y, w, h);
+
+            // Track ID badge (top-right corner)
+            var idBadge = 'T' + tp.id;
+            ctx.font = 'bold 10px sans-serif';
+            var idW = ctx.measureText(idBadge).width + 6;
+            ctx.fillStyle = color;
+            ctx.fillRect(x + w - idW, y, idW, 14);
+            ctx.fillStyle = '#000';
+            ctx.fillText(idBadge, x + w - idW + 3, y + 11);
 
             // Label
             var label = '';
-            if (tp.confirmedNumber) {
-                label = tp.name ? tp.name + ' #' + tp.confirmedNumber : '#' + tp.confirmedNumber;
-            } else if (tp.numberReadings.length > 0) {
-                label = '#' + tp.numberReadings[tp.numberReadings.length - 1] + '?';
+            if (meta.confirmedNumber) {
+                label = meta.name ? meta.name + ' #' + meta.confirmedNumber : '#' + meta.confirmedNumber;
+            } else if (meta.numberReadings && meta.numberReadings.length > 0) {
+                label = '#' + meta.numberReadings[meta.numberReadings.length - 1] + '?';
             } else {
                 label = 'P' + tp.id;
             }
@@ -638,8 +661,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             drawLabel(ctx, label, x, y - 4, color);
 
             // Player class badge (e.g., jump-shot, layup)
-            if (tp.playerClass && tp.playerClass !== 'player') {
-                var badge = tp.playerClass.replace('player-', '').replace(/-/g, ' ');
+            var pClass = meta.playerClass || tp.playerClass;
+            if (pClass && pClass !== 'player') {
+                var badge = pClass.replace('player-', '').replace(/-/g, ' ');
                 drawLabel(ctx, badge, x, y + h + 14, '#FFD700');
             }
         });
@@ -686,15 +710,17 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
         playerList.innerHTML = trackedPlayers.map(function(tp) {
+            var meta = trackMeta[tp.id] || {};
             var color = tp.team === 'A' ? teamColors.A : teamColors.B;
-            var numStr = tp.confirmedNumber ? '#' + tp.confirmedNumber : (tp.numberReadings.length > 0 ? '#' + tp.numberReadings[tp.numberReadings.length - 1] + '?' : '--');
-            var nameStr = tp.name || (tp.confirmedNumber ? 'Unknown' : '...');
+            var numStr = meta.confirmedNumber ? '#' + meta.confirmedNumber : (meta.numberReadings && meta.numberReadings.length > 0 ? '#' + meta.numberReadings[meta.numberReadings.length - 1] + '?' : '--');
+            var nameStr = meta.name || (meta.confirmedNumber ? 'Unknown' : '...');
             var confStr = Math.round((tp.confidence || 0) * 100) + '%';
-            return '<div class="player-item ' + (tp.confirmedNumber ? 'confirmed' : '') + '">'
+            var trackLen = tp.trackletLen || 0;
+            return '<div class="player-item ' + (meta.confirmedNumber ? 'confirmed' : '') + '">'
                 + '<div class="pi-dot" style="background:' + color + '"></div>'
                 + '<span class="pi-number">' + numStr + '</span>'
                 + '<span class="pi-name">' + nameStr + '</span>'
-                + '<span class="pi-conf">' + confStr + '</span>'
+                + '<span class="pi-conf">T' + tp.id + ' ' + confStr + '</span>'
                 + '</div>';
         }).join('');
     }
@@ -867,12 +893,23 @@ document.addEventListener('DOMContentLoaded', async function() {
         totalConfidence = 0;
         identifiedCount = 0;
         trackedPlayers = [];
-        nextTrackId = 1;
+        trackMeta = {};
+
+        // (Re)create ByteTrack tracker with current config
+        var btHigh = parseInt(document.getElementById('btHighThresh').value) / 100;
+        var btMatch = parseInt(document.getElementById('btMatchThresh').value) / 100;
+        var btBuf = parseInt(document.getElementById('btBuffer').value);
+        byteTracker = new ByteTrackTracker({
+            trackHighThresh: btHigh,
+            matchThresh: btMatch,
+            trackBuffer: btBuf
+        });
+        showTrajectories = document.getElementById('btShowTrajectories').checked;
 
         startBtn.classList.add('hidden');
         stopBtn.classList.remove('hidden');
         durationInterval = setInterval(updateSessionStats, 1000);
-        window.reasoningConsole.logInfo('Started analysis (' + engine + ' engine)');
+        window.reasoningConsole.logInfo('Started analysis (' + engine + ' engine, ByteTrack: high=' + btHigh + ' match=' + btMatch + ' buffer=' + btBuf + ')');
         analyzeFrame();
     }
 
@@ -974,6 +1011,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     uploadArea.addEventListener('dragleave', function() { uploadArea.classList.remove('dragover'); });
     uploadArea.addEventListener('drop', function(e) { e.preventDefault(); uploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files); });
     confidenceSlider.addEventListener('input', function() { confidenceValue.textContent = confidenceSlider.value + '%'; });
+
+    // ByteTrack config sliders
+    document.getElementById('btHighThresh').addEventListener('input', function() {
+        document.getElementById('btHighVal').textContent = (parseInt(this.value) / 100).toFixed(2);
+    });
+    document.getElementById('btMatchThresh').addEventListener('input', function() {
+        document.getElementById('btMatchVal').textContent = (parseInt(this.value) / 100).toFixed(2);
+    });
+    document.getElementById('btBuffer').addEventListener('input', function() {
+        document.getElementById('btBufferVal').textContent = this.value;
+    });
+    document.getElementById('btShowTrajectories').addEventListener('change', function() {
+        showTrajectories = this.checked;
+    });
     startBtn.addEventListener('click', startAnalysis);
     stopBtn.addEventListener('click', stopAnalysis);
     snapBtn.addEventListener('click', snapAnalysis);

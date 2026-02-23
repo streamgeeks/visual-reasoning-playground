@@ -270,6 +270,31 @@
                     <input type="number" id="confirmCount" min="1" max="10" value="3">
                 </div>
 
+                <!-- ByteTrack tracker settings -->
+                <details style="margin-bottom:12px;">
+                    <summary style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;font-weight:600;">Tracker Settings (ByteTrack)</summary>
+                    <div style="padding:8px 0;">
+                        <div class="control-group" style="margin-bottom:6px;">
+                            <label style="font-size:0.75rem;">High threshold: <span id="btHighVal">0.50</span></label>
+                            <input type="range" id="btHighThresh" min="20" max="90" value="50" step="5" style="width:100%;">
+                        </div>
+                        <div class="control-group" style="margin-bottom:6px;">
+                            <label style="font-size:0.75rem;">Match IoU threshold: <span id="btMatchVal">0.80</span></label>
+                            <input type="range" id="btMatchThresh" min="30" max="95" value="80" step="5" style="width:100%;">
+                        </div>
+                        <div class="control-group" style="margin-bottom:6px;">
+                            <label style="font-size:0.75rem;">Track buffer (frames): <span id="btBufferVal">30</span></label>
+                            <input type="range" id="btBuffer" min="5" max="90" value="30" step="5" style="width:100%;">
+                        </div>
+                        <div class="control-group" style="margin-bottom:6px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;">
+                                <input type="checkbox" id="btShowTrajectories" checked>
+                                Show trajectories
+                            </label>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- Live detection card -->
                 <div class="detection-card">
                     <div class="det-header">
@@ -359,6 +384,7 @@
         </div>
     </div>
 
+    <script src="bytetrack.js"></script>
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
     <script src="../shared/reasoning-console.js"></script>
