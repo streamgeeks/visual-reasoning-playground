@@ -242,6 +242,14 @@
         }
         .edit-mode-badge.visible { display: block; }
 
+        /* ── Calibration mode indicator ── */
+        .calib-mode-badge {
+            display: none; position: absolute; bottom: 215px; right: 8px;
+            background: rgba(0, 200, 100, 0.9); color: #fff; padding: 3px 8px;
+            border-radius: 4px; font-size: 0.68rem; font-weight: 600; z-index: 5;
+        }
+        .calib-mode-badge.visible { display: block; }
+
         /* ── FPS badge ── */
         .fps-badge {
             display: inline-block; background: var(--surface); border: 1px solid var(--surface-light);
@@ -267,6 +275,9 @@
                     <video id="video" autoplay muted playsinline></video>
                     <canvas id="overlayCanvas"></canvas>
                     <div class="edit-mode-badge" id="editModeBadge">EDIT MODE - Click a player to select</div>
+                    <!-- Court minimap overlay (semi-transparent PIP) -->
+                    <canvas id="courtCanvas" width="376" height="200" style="position:absolute;bottom:8px;right:8px;border-radius:6px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
+                    <div class="calib-mode-badge" id="calibBadge">CALIBRATING - Click video then court</div>
                 </div>
 
                 <div id="uploadArea" class="upload-area">
@@ -373,28 +384,14 @@
                     </div>
                 </div>
 
-                <!-- Engine selector (3-way) -->
+                <!-- Engine selector -->
                 <div class="engine-toggle">
-                    <button id="engineLocalBtn" class="active" data-engine="roboflow-local">
-                        Local<span class="engine-sub">In-browser &middot; Fast</span>
-                    </button>
-                    <button id="engineCloudBtn" data-engine="roboflow-cloud">
-                        Cloud<span class="engine-sub">Roboflow API</span>
+                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow-cloud">
+                        Roboflow<span class="engine-sub">RF-DETR v13 &middot; Cloud API</span>
                     </button>
                     <button id="engineMoondreamBtn" data-engine="moondream">
-                        Moondream<span class="engine-sub">VLM</span>
+                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
                     </button>
-                </div>
-
-                <!-- Model download progress (local inference) -->
-                <div id="modelProgress" style="display:none;background:var(--background);border-radius:6px;padding:10px 12px;margin-bottom:12px;">
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;">
-                        <span id="modelProgressLabel">Loading model...</span>
-                        <span id="modelProgressPct"></span>
-                    </div>
-                    <div style="height:6px;background:var(--surface-light);border-radius:3px;overflow:hidden;">
-                        <div id="modelProgressBar" style="height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary));border-radius:3px;transition:width 0.3s;width:0%;"></div>
-                    </div>
                 </div>
 
                 <!-- Roboflow model info -->
@@ -406,13 +403,11 @@
                 <div class="control-group">
                     <label for="intervalSelect">Analysis Rate</label>
                     <select id="intervalSelect">
-                        <option value="0">Max FPS (Local)</option>
-                        <option value="100">~10 FPS</option>
-                        <option value="200" selected>~5 FPS</option>
                         <option value="500">~2 FPS</option>
-                        <option value="1000">~1 FPS</option>
+                        <option value="1000" selected>~1 FPS</option>
                         <option value="2000">Every 2s</option>
                         <option value="5000">Every 5s</option>
+                        <option value="10000">Every 10s</option>
                     </select>
                 </div>
 
@@ -446,6 +441,30 @@
                             <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;">
                                 <input type="checkbox" id="btShowTrajectories" checked>
                                 Show trajectories
+                            </label>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Court Map Calibration -->
+                <details style="margin-bottom:12px;">
+                    <summary style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;font-weight:600;">Court Map Calibration</summary>
+                    <div style="padding:8px 0;">
+                        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
+                            Map the video to the court diagram by clicking 4+ corresponding points.
+                            <strong>Step 1:</strong> Click a point on the video. <strong>Step 2:</strong> Click the matching point on the court minimap. Repeat 4+ times.
+                        </div>
+                        <div id="calibStatus" style="font-size:0.75rem;margin-bottom:6px;color:var(--text-muted);">Not calibrated</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="calibStartBtn" style="padding:4px 10px;font-size:0.72rem;">Start Calibration</button>
+                            <button class="btn btn-success" id="calibApplyBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Apply (4+ pts)</button>
+                            <button class="btn btn-secondary" id="calibCancelBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Cancel</button>
+                            <button class="btn btn-secondary" id="calibResetBtn" style="padding:4px 10px;font-size:0.72rem;">Reset</button>
+                        </div>
+                        <div class="control-group" style="margin-top:8px;margin-bottom:0;">
+                            <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;">
+                                <input type="checkbox" id="courtMapToggle" checked>
+                                Show court minimap
                             </label>
                         </div>
                     </div>
@@ -540,8 +559,8 @@
         </div>
     </div>
 
-    <!-- Roboflow inferencejs — local in-browser inference via TensorFlow.js (UMD bundle from jsDelivr) -->
-    <script src="https://cdn.jsdelivr.net/npm/inferencejs@1.2.2/dist/inference.js"></script>
+    <script src="homography.js"></script>
+    <script src="court-map.js"></script>
     <script src="bytetrack.js"></script>
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
