@@ -153,10 +153,15 @@ The Resolve Python modules are located at:
 
 ## Phase Status
 
-- [x] **Phase 1** — DaVinci Resolve Python API foundation
-- [ ] **Phase 2** — MCP Server build
-- [ ] **Phase 3** — AI Edit Decision Loop
-- [ ] **Phase 4** — PTZOptics Camera Integration
+- [x] **Phase 1** — DaVinci Resolve Python API foundation (55 tests)
+- [x] **Phase 2** — MCP Server build — 16 tools (74 tests cumulative)
+- [x] **Phase 3** — AI Edit Decision Loop — end-to-end + refinement (114 tests cumulative)
+- [x] **Phase 4** — PTZOptics Camera Integration — file watcher, sessions, multi-cam (114 tests)
+- [ ] **Integration Testing** — live Resolve + Moondream + Claude Desktop validation
+
+> **Current status:** All code is written and unit-tested with mocks. No live
+> integration tests have been run. See `TESTING_HANDOFF.md` for the step-by-step
+> testing checklist to pick this up.
 
 ## Privacy
 
