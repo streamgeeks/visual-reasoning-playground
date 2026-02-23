@@ -516,6 +516,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     async function analyzeFrame() {
         if (!running) return;
 
+        // Skip analysis when frozen (edit mode)
+        if (frozen) {
+            if (running) {
+                var interval = parseInt(intervalSelect.value) || 1000;
+                analysisTimeout = setTimeout(analyzeFrame, interval);
+            }
+            return;
+        }
+
         var imageBase64;
         if (mode === 'upload' && uploadedImages.length > 0) {
             imageBase64 = uploadedImages[uploadIndex % uploadedImages.length];
@@ -567,9 +576,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             detResult.players.forEach(function(p) { totalConfidence += p.confidence; });
 
             // Step 7: Draw overlays
+            lastDetResult = detResult;
             drawOverlays(detResult);
             updateDetectionCard();
             updateSessionStats();
+            renderDetList();
             updateStatus('Analyzing (' + engine + ') — ' + detResult.players.length + ' players');
 
         } catch (e) {
@@ -604,8 +615,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Draw tracked players
         trackedPlayers.forEach(function(tp) {
+            if (hiddenTracks.has(tp.id)) return; // skip hidden tracks
             var color = tp.team === 'A' ? teamColors.A : teamColors.B;
             var meta = trackMeta[tp.id] || {};
+            var isSelected = tp.id === selectedTrackId;
             var x = tp.bbox.x * scaleX, y = tp.bbox.y * scaleY;
             var w = tp.bbox.w * scaleX, h = tp.bbox.h * scaleY;
 
@@ -632,9 +645,22 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             // Bounding box
-            ctx.strokeStyle = color;
-            ctx.lineWidth = (meta.confirmedNumber) ? 3 : 2;
+            ctx.strokeStyle = isSelected ? '#00BFFF' : color;
+            ctx.lineWidth = isSelected ? 4 : (meta.confirmedNumber) ? 3 : 2;
+            if (isSelected) ctx.setLineDash([6, 3]);
             ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+
+            // Selection highlight + resize handle (edit mode)
+            if (isSelected && editMode) {
+                // Corner handles
+                var hs = 6;
+                ctx.fillStyle = '#00BFFF';
+                ctx.fillRect(x - hs / 2, y - hs / 2, hs, hs);                 // top-left
+                ctx.fillRect(x + w - hs / 2, y - hs / 2, hs, hs);             // top-right
+                ctx.fillRect(x - hs / 2, y + h - hs / 2, hs, hs);             // bottom-left
+                ctx.fillRect(x + w - hs / 2, y + h - hs / 2, hs + 2, hs + 2); // bottom-right (resize)
+            }
 
             // Track ID badge (top-right corner)
             var idBadge = 'T' + tp.id;
@@ -994,6 +1020,293 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }, 500);
     }
+
+    // ══════════════════════════════════════════════════
+    //  DETECTION EDITOR
+    // ══════════════════════════════════════════════════
+    var editMode = false;
+    var selectedTrackId = null;
+    var frozen = false;
+    var hiddenTracks = new Set();
+    var dragState = null; // {trackId, handle, startX, startY, origBbox}
+
+    var editModeToggle = document.getElementById('editModeToggle');
+    var editModeBadge = document.getElementById('editModeBadge');
+    var freezeBtn = document.getElementById('freezeBtn');
+    var selectedEditor = document.getElementById('selectedEditor');
+    var seColorDot = document.getElementById('seColorDot');
+    var seTrackLabel = document.getElementById('seTrackLabel');
+    var seTeam = document.getElementById('seTeam');
+    var seNumber = document.getElementById('seNumber');
+    var seName = document.getElementById('seName');
+    var seClass = document.getElementById('seClass');
+    var seApplyBtn = document.getElementById('seApplyBtn');
+    var seDeselectBtn = document.getElementById('seDeselectBtn');
+    var seHideBtn = document.getElementById('seHideBtn');
+    var seDeleteBtn = document.getElementById('seDeleteBtn');
+    var detList = document.getElementById('detList');
+
+    function toggleEditMode(on) {
+        editMode = on;
+        editModeToggle.checked = on;
+        editModeBadge.classList.toggle('visible', on);
+        overlayCanvas.style.cursor = on ? 'crosshair' : 'default';
+        if (!on) {
+            deselectTrack();
+            dragState = null;
+        }
+    }
+
+    function selectTrack(trackId) {
+        selectedTrackId = trackId;
+        var meta = trackMeta[trackId] || {};
+        var tp = trackedPlayers.find(function(p) { return p.id === trackId; });
+
+        selectedEditor.classList.add('visible');
+        seTrackLabel.textContent = 'Track T' + trackId + (tp ? ' (' + Math.round(tp.confidence * 100) + '%)' : '');
+        var color = (meta.team === 'A') ? teamColors.A : teamColors.B;
+        seColorDot.style.background = color;
+        seTeam.value = meta.team || 'A';
+        seNumber.value = meta.confirmedNumber || '';
+        seName.value = meta.name || '';
+        seClass.value = meta.playerClass || 'player';
+
+        // Update team select options with actual names
+        seTeam.options[0].textContent = teamAName.value || 'Team A';
+        seTeam.options[1].textContent = teamBName.value || 'Team B';
+
+        renderDetList();
+        redrawOverlays();
+    }
+
+    function deselectTrack() {
+        selectedTrackId = null;
+        selectedEditor.classList.remove('visible');
+        renderDetList();
+        redrawOverlays();
+    }
+
+    function applyEdits() {
+        if (selectedTrackId === null) return;
+        var meta = trackMeta[selectedTrackId];
+        if (!meta) {
+            meta = { team: 'A', numberReadings: [], confirmedNumber: null, name: null, playerClass: 'player' };
+            trackMeta[selectedTrackId] = meta;
+        }
+
+        meta.team = seTeam.value;
+        meta.playerClass = seClass.value;
+
+        var num = seNumber.value.trim();
+        if (num) {
+            meta.confirmedNumber = num;
+            meta.numberReadings = [num, num, num]; // force confirmed
+        }
+
+        var name = seName.value.trim();
+        if (name) {
+            meta.name = name;
+        } else if (num) {
+            meta.name = lookupRoster(meta.team, num);
+        }
+
+        window.reasoningConsole.logAction('Edit applied', 'T' + selectedTrackId + ': team=' + meta.team + ' #' + (meta.confirmedNumber || '?') + ' ' + (meta.name || ''));
+        renderDetList();
+        updateDetectionCard();
+        redrawOverlays();
+    }
+
+    function hideTrack(trackId) {
+        if (hiddenTracks.has(trackId)) {
+            hiddenTracks.delete(trackId);
+        } else {
+            hiddenTracks.add(trackId);
+        }
+        if (selectedTrackId === trackId) deselectTrack();
+        renderDetList();
+        redrawOverlays();
+    }
+
+    function deleteTrack(trackId) {
+        // Remove from tracked arrays
+        trackedPlayers = trackedPlayers.filter(function(tp) { return tp.id !== trackId; });
+        delete trackMeta[trackId];
+        hiddenTracks.delete(trackId);
+        if (selectedTrackId === trackId) deselectTrack();
+        renderDetList();
+        updateDetectionCard();
+        redrawOverlays();
+        window.reasoningConsole.logAction('Track deleted', 'T' + trackId);
+    }
+
+    function renderDetList() {
+        if (trackedPlayers.length === 0) {
+            detList.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:0.78rem;padding:12px;">No detections yet</div>';
+            return;
+        }
+        detList.innerHTML = trackedPlayers.map(function(tp) {
+            var meta = trackMeta[tp.id] || {};
+            var color = (meta.team || tp.team) === 'A' ? teamColors.A : teamColors.B;
+            var isSelected = tp.id === selectedTrackId;
+            var isHidden = hiddenTracks.has(tp.id);
+            var label = meta.confirmedNumber ? '#' + meta.confirmedNumber : (meta.numberReadings && meta.numberReadings.length > 0 ? '#' + meta.numberReadings[meta.numberReadings.length - 1] + '?' : 'P' + tp.id);
+            var nameStr = meta.name || '';
+            var teamStr = (meta.team || tp.team) === 'A' ? (teamAName.value || 'A') : (teamBName.value || 'B');
+
+            return '<div class="det-row ' + (isSelected ? 'selected' : '') + (isHidden ? ' hidden-track' : '') + '" data-tid="' + tp.id + '">'
+                + '<div class="dr-dot" style="background:' + color + '"></div>'
+                + '<span class="dr-id">T' + tp.id + '</span>'
+                + '<span class="dr-label">' + label + (nameStr ? ' ' + nameStr : '') + '</span>'
+                + '<span class="dr-team">' + teamStr + '</span>'
+                + '<span class="dr-actions">'
+                + '<button class="dr-btn" data-action="hide" data-tid="' + tp.id + '" title="' + (isHidden ? 'Show' : 'Hide') + '">' + (isHidden ? '\u25C9' : '\u25CE') + '</button>'
+                + '<button class="dr-btn del" data-action="delete" data-tid="' + tp.id + '" title="Delete">\u2715</button>'
+                + '</span>'
+                + '</div>';
+        }).join('');
+
+        // Click handlers
+        detList.querySelectorAll('.det-row').forEach(function(row) {
+            row.addEventListener('click', function(e) {
+                if (e.target.closest('.dr-btn')) return;
+                selectTrack(parseInt(row.dataset.tid));
+            });
+        });
+        detList.querySelectorAll('.dr-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var tid = parseInt(btn.dataset.tid);
+                if (btn.dataset.action === 'hide') hideTrack(tid);
+                else if (btn.dataset.action === 'delete') deleteTrack(tid);
+            });
+        });
+    }
+
+    // Redraw overlays without running analysis (for edit mode)
+    function redrawOverlays() {
+        if (!lastDetResult) return;
+        drawOverlays(lastDetResult);
+    }
+
+    // Store last detection result for redraw
+    var lastDetResult = null;
+
+    // ── Canvas click-to-select ──
+    overlayCanvas.addEventListener('click', function(e) {
+        if (!editMode && !e.shiftKey) return;
+        var rect = overlayCanvas.getBoundingClientRect();
+        var clickX = (e.clientX - rect.left) * (overlayCanvas.width / rect.width);
+        var clickY = (e.clientY - rect.top) * (overlayCanvas.height / rect.height);
+
+        // Find which player bbox contains the click
+        var scaleX = lastDetResult ? overlayCanvas.width / (lastDetResult.imageWidth || overlayCanvas.width) : 1;
+        var scaleY = lastDetResult ? overlayCanvas.height / (lastDetResult.imageHeight || overlayCanvas.height) : 1;
+
+        var found = null;
+        trackedPlayers.forEach(function(tp) {
+            if (hiddenTracks.has(tp.id)) return;
+            var x = tp.bbox.x * scaleX, y = tp.bbox.y * scaleY;
+            var w = tp.bbox.w * scaleX, h = tp.bbox.h * scaleY;
+            if (clickX >= x && clickX <= x + w && clickY >= y && clickY <= y + h) {
+                found = tp.id;
+            }
+        });
+
+        if (found !== null) {
+            selectTrack(found);
+        } else {
+            deselectTrack();
+        }
+    });
+
+    // ── Canvas drag to move/resize bbox (edit mode only) ──
+    overlayCanvas.addEventListener('mousedown', function(e) {
+        if (!editMode || selectedTrackId === null) return;
+        var tp = trackedPlayers.find(function(p) { return p.id === selectedTrackId; });
+        if (!tp) return;
+
+        var rect = overlayCanvas.getBoundingClientRect();
+        var mx = (e.clientX - rect.left) * (overlayCanvas.width / rect.width);
+        var my = (e.clientY - rect.top) * (overlayCanvas.height / rect.height);
+        var scaleX = lastDetResult ? overlayCanvas.width / (lastDetResult.imageWidth || overlayCanvas.width) : 1;
+        var scaleY = lastDetResult ? overlayCanvas.height / (lastDetResult.imageHeight || overlayCanvas.height) : 1;
+
+        var bx = tp.bbox.x * scaleX, by = tp.bbox.y * scaleY;
+        var bw = tp.bbox.w * scaleX, bh = tp.bbox.h * scaleY;
+
+        // Check if near bottom-right corner (resize handle)
+        var cornerDist = Math.sqrt(Math.pow(mx - (bx + bw), 2) + Math.pow(my - (by + bh), 2));
+        var handle = cornerDist < 15 ? 'resize' : 'move';
+
+        dragState = {
+            trackId: selectedTrackId,
+            handle: handle,
+            startX: mx,
+            startY: my,
+            origBbox: { x: tp.bbox.x, y: tp.bbox.y, w: tp.bbox.w, h: tp.bbox.h },
+            scaleX: scaleX,
+            scaleY: scaleY
+        };
+        e.preventDefault();
+    });
+
+    overlayCanvas.addEventListener('mousemove', function(e) {
+        if (!dragState) return;
+        var rect = overlayCanvas.getBoundingClientRect();
+        var mx = (e.clientX - rect.left) * (overlayCanvas.width / rect.width);
+        var my = (e.clientY - rect.top) * (overlayCanvas.height / rect.height);
+        var dx = (mx - dragState.startX) / dragState.scaleX;
+        var dy = (my - dragState.startY) / dragState.scaleY;
+
+        var tp = trackedPlayers.find(function(p) { return p.id === dragState.trackId; });
+        if (!tp) { dragState = null; return; }
+
+        if (dragState.handle === 'move') {
+            tp.bbox.x = dragState.origBbox.x + dx;
+            tp.bbox.y = dragState.origBbox.y + dy;
+        } else if (dragState.handle === 'resize') {
+            tp.bbox.w = Math.max(10, dragState.origBbox.w + dx);
+            tp.bbox.h = Math.max(10, dragState.origBbox.h + dy);
+        }
+        redrawOverlays();
+    });
+
+    window.addEventListener('mouseup', function() {
+        if (dragState) {
+            window.reasoningConsole.logInfo('Bbox edited for T' + dragState.trackId + ' (' + dragState.handle + ')');
+            dragState = null;
+        }
+    });
+
+    // ── Freeze frame (pause analysis but keep overlays) ──
+    freezeBtn.addEventListener('click', function() {
+        frozen = !frozen;
+        freezeBtn.textContent = frozen ? 'Unfreeze' : 'Freeze Frame';
+        freezeBtn.classList.toggle('btn-primary', frozen);
+        freezeBtn.classList.toggle('btn-secondary', !frozen);
+        if (frozen) {
+            window.reasoningConsole.logInfo('Frame frozen for editing');
+        } else {
+            window.reasoningConsole.logInfo('Frame unfrozen, analysis resumed');
+        }
+    });
+
+    // ── Edit mode toggle ──
+    editModeToggle.addEventListener('change', function() {
+        toggleEditMode(editModeToggle.checked);
+    });
+
+    // ── Selected editor buttons ──
+    seApplyBtn.addEventListener('click', applyEdits);
+    seDeselectBtn.addEventListener('click', deselectTrack);
+    seHideBtn.addEventListener('click', function() {
+        if (selectedTrackId !== null) hideTrack(selectedTrackId);
+    });
+    seDeleteBtn.addEventListener('click', function() {
+        if (selectedTrackId !== null && confirm('Delete track T' + selectedTrackId + '?')) {
+            deleteTrack(selectedTrackId);
+        }
+    });
 
     // ══════════════════════════════════════════════════
     //  EVENT LISTENERS

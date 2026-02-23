@@ -168,6 +168,79 @@
 
         /* Override results-panel */
         .results-panel { padding: 0; background: transparent; }
+
+        /* ── Detection Editor ── */
+        .edit-panel {
+            background: var(--surface); border-radius: 10px; padding: 14px;
+            border: 1px solid var(--surface-light); margin-top: 12px;
+        }
+        .edit-panel-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px;
+        }
+        .edit-panel-header h3 { margin: 0; font-size: 0.9rem; }
+        .edit-hint { font-size: 0.72rem; color: var(--text-muted); }
+
+        /* Selected player editor */
+        .selected-editor {
+            background: var(--background); border-radius: 8px; padding: 12px;
+            border: 2px solid var(--primary); margin-bottom: 10px; display: none;
+        }
+        .selected-editor.visible { display: block; }
+        .selected-editor .se-title {
+            font-weight: 700; font-size: 0.85rem; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .selected-editor .se-title .se-dot {
+            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+        }
+        .se-fields {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+        }
+        .se-field { display: flex; flex-direction: column; gap: 2px; }
+        .se-field label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+        .se-field input, .se-field select {
+            background: var(--surface); border: 1px solid var(--surface-light);
+            color: var(--text); padding: 5px 8px; border-radius: 4px; font-size: 0.8rem;
+        }
+        .se-actions {
+            display: flex; gap: 6px; margin-top: 8px;
+        }
+        .se-actions button { padding: 4px 10px; font-size: 0.72rem; }
+
+        /* Detection list (all tracks) */
+        .det-list { max-height: 200px; overflow-y: auto; }
+        .det-list::-webkit-scrollbar { width: 3px; }
+        .det-list::-webkit-scrollbar-thumb { background: var(--surface-light); border-radius: 2px; }
+        .det-row {
+            display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+            border-radius: 5px; margin-bottom: 3px; background: var(--background);
+            cursor: pointer; transition: all 0.15s; font-size: 0.78rem;
+        }
+        .det-row:hover { background: var(--surface-light); }
+        .det-row.selected { border: 2px solid var(--primary); background: rgba(48,102,190,0.08); }
+        .det-row.hidden-track { opacity: 0.4; }
+        .det-row .dr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .det-row .dr-id { font-weight: 700; min-width: 28px; font-family: Consolas, Monaco, monospace; font-size: 0.72rem; }
+        .det-row .dr-label { flex: 1; }
+        .det-row .dr-team { font-size: 0.68rem; color: var(--text-muted); min-width: 36px; }
+        .det-row .dr-actions { display: flex; gap: 3px; }
+        .det-row .dr-btn {
+            width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--surface-light);
+            background: transparent; color: var(--text-muted); cursor: pointer;
+            font-size: 0.6rem; display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .det-row .dr-btn:hover { background: var(--surface-light); color: var(--text); }
+        .det-row .dr-btn.del:hover { background: var(--error); color: #fff; border-color: var(--error); }
+
+        /* Canvas edit mode indicator */
+        .edit-mode-badge {
+            display: none; position: absolute; top: 8px; left: 8px;
+            background: rgba(48,102,190,0.9); color: #fff; padding: 4px 10px;
+            border-radius: 4px; font-size: 0.72rem; font-weight: 600; z-index: 5;
+        }
+        .edit-mode-badge.visible { display: block; }
     </style>
 </head>
 <body>
@@ -183,9 +256,10 @@
     <div class="container">
         <div class="main-content">
             <div class="video-section">
-                <div class="video-container" id="videoContainer">
+                <div class="video-container" id="videoContainer" style="position:relative;">
                     <video id="video" autoplay muted playsinline></video>
                     <canvas id="overlayCanvas"></canvas>
+                    <div class="edit-mode-badge" id="editModeBadge">EDIT MODE - Click a player to select</div>
                 </div>
 
                 <div id="uploadArea" class="upload-area">
@@ -197,6 +271,65 @@
                 <video id="sampleVideo" style="display:none;width:100%;border-radius:8px;" controls muted playsinline loop>
                     <source src="sample-basketball-game.mp4" type="video/mp4">
                 </video>
+
+                <!-- Detection Editor Panel -->
+                <div class="edit-panel" id="editPanel">
+                    <div class="edit-panel-header">
+                        <h3>Detection Editor</h3>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <label style="font-size:0.72rem;display:flex;align-items:center;gap:4px;color:var(--text-muted);cursor:pointer;">
+                                <input type="checkbox" id="editModeToggle"> Edit mode
+                            </label>
+                            <button class="btn btn-secondary" id="freezeBtn" style="padding:3px 8px;font-size:0.7rem;">Freeze Frame</button>
+                        </div>
+                    </div>
+                    <div class="edit-hint">Click a player on the video or in the list below to edit. Toggle edit mode to drag/resize boxes.</div>
+
+                    <!-- Selected player inline editor -->
+                    <div class="selected-editor" id="selectedEditor">
+                        <div class="se-title">
+                            <div class="se-dot" id="seColorDot"></div>
+                            <span id="seTrackLabel">Track T1</span>
+                        </div>
+                        <div class="se-fields">
+                            <div class="se-field">
+                                <label>Team</label>
+                                <select id="seTeam">
+                                    <option value="A">Team A</option>
+                                    <option value="B">Team B</option>
+                                </select>
+                            </div>
+                            <div class="se-field">
+                                <label>Jersey #</label>
+                                <input type="text" id="seNumber" placeholder="e.g. 23">
+                            </div>
+                            <div class="se-field">
+                                <label>Player Name</label>
+                                <input type="text" id="seName" placeholder="e.g. LeBron James">
+                            </div>
+                            <div class="se-field">
+                                <label>Class</label>
+                                <select id="seClass">
+                                    <option value="player">Player</option>
+                                    <option value="player-in-possession">In Possession</option>
+                                    <option value="player-jump-shot">Jump Shot</option>
+                                    <option value="player-layup-dunk">Layup/Dunk</option>
+                                    <option value="player-shot-block">Shot Block</option>
+                                    <option value="referee">Referee</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="se-actions">
+                            <button class="btn btn-primary" id="seApplyBtn" style="padding:4px 12px;font-size:0.72rem;">Apply</button>
+                            <button class="btn btn-secondary" id="seDeselectBtn" style="padding:4px 10px;font-size:0.72rem;">Deselect</button>
+                            <button class="btn btn-secondary" id="seHideBtn" style="padding:4px 10px;font-size:0.72rem;">Hide</button>
+                            <button class="btn btn-secondary se-del-btn" id="seDeleteBtn" style="padding:4px 10px;font-size:0.72rem;color:var(--error);border-color:var(--error);">Delete</button>
+                        </div>
+                    </div>
+
+                    <!-- All detections list -->
+                    <div class="det-list" id="detList"></div>
+                </div>
 
                 <div class="results-panel">
                     <div class="history-section">
