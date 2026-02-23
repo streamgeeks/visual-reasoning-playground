@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  STATE
     // ══════════════════════════════════════════════════
-    let engine = 'roboflow-local'; // 'roboflow-local' | 'roboflow-cloud' | 'moondream'
+    let engine = 'roboflow-local'; // 'roboflow-local' (try first) | 'roboflow-cloud' (fallback) | 'moondream'
     let mode = 'camera';
     let moondreamClient = null;
     let currentStream = null;
@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     let uploadedImages = [];
     let uploadIndex = 0;
 
-    // Roboflow publishable key (safe for client-side, only grants inference access)
-    var ROBOFLOW_PUBLISHABLE_KEY = 'rf_vhoE8yzALoBhrI8UfbY4';
+    // Roboflow API key — used for both cloud and local inference
+    var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
 
     // Local inference state (inferencejs)
     let inferEngine = null;   // InferenceEngine instance
@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     async function roboflowCloudDetect(imageBase64) {
         var apiKey = window.apiKeyManager.hasRoboflowKey()
             ? window.apiKeyManager.getRoboflowKey()
-            : ROBOFLOW_PUBLISHABLE_KEY;
+            : ROBOFLOW_DEFAULT_KEY;
 
         var confidence = parseInt(confidenceSlider.value) / 100;
         var url = 'https://detect.roboflow.com/' + ROBOFLOW_MODEL + '/' + ROBOFLOW_VERSION
@@ -349,9 +349,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Loading Roboflow local model via inferencejs...');
 
         try {
-            var publishableKey = window.apiKeyManager.hasRoboflowKey()
+            var rfKey = window.apiKeyManager.hasRoboflowKey()
                 ? window.apiKeyManager.getRoboflowKey()
-                : ROBOFLOW_PUBLISHABLE_KEY;
+                : ROBOFLOW_DEFAULT_KEY;
 
             // Create InferenceEngine from the inferencejs UMD global
             if (!inferEngine) {
@@ -373,7 +373,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             inferWorkerId = await inferEngine.startWorker(
                 ROBOFLOW_MODEL,
                 parseInt(ROBOFLOW_VERSION),
-                publishableKey
+                rfKey
             );
 
             clearInterval(progressInterval);
@@ -1089,11 +1089,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateStatus('Loading local model...');
             var wid = await loadLocalModel();
             if (wid === null) {
-                updateStatus('Local model failed to load. Try Cloud engine.', true);
-                return;
+                window.reasoningConsole.logInfo('Local model failed, auto-falling back to Cloud engine');
+                engine = 'roboflow-cloud';
+                switchEngine('roboflow-cloud');
+                updateStatus('Local unavailable — using Cloud engine');
             }
         } else if (engine === 'roboflow-cloud') {
-            if (!window.apiKeyManager.hasRoboflowKey() && !ROBOFLOW_PUBLISHABLE_KEY) {
+            if (!window.apiKeyManager.hasRoboflowKey() && !ROBOFLOW_DEFAULT_KEY) {
                 window.apiKeyManager.showModal();
                 return;
             }
