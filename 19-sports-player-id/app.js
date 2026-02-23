@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const snapBtn = document.getElementById('snapBtn');
+    const modeSampleBtn = document.getElementById('modeSampleBtn');
+    const sampleVideo = document.getElementById('sampleVideo');
     const statusBar = document.getElementById('status');
     const historyLog = document.getElementById('historyLog');
     const exportJsonBtn = document.getElementById('exportJsonBtn');
@@ -67,11 +69,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Tracked players across frames
     let trackedPlayers = []; // [{id, bbox, team, numberReadings[], confirmedNumber, name, lastSeen}]
     let nextTrackId = 1;
-    let teamColors = { A: '#E63946', B: '#2A9D8F' };
+    let teamColors = { A: '#E8E8E8', B: '#1A5276' };
     let identifiedCount = 0;
 
     // Roster: { A: [{number, name}], B: [{number, name}] }
     let roster = { A: [], B: [] };
+
+    // Default sample roster (basketball demo)
+    var DEFAULT_ROSTER = {
+        A: [
+            { number: '30', name: 'Player A' },
+            { number: '20', name: 'Player B' },
+            { number: '1',  name: 'Player C' },
+            { number: '10', name: 'Player D' },
+            { number: '2',  name: 'Player E' },
+        ],
+        B: [
+            { number: '8',  name: 'Player A' },
+            { number: '2',  name: 'Player B' },
+            { number: '4',  name: 'Player C' },
+            { number: '5',  name: 'Player D' },
+            { number: '11', name: 'Player E' },
+        ]
+    };
+    var DEFAULT_TEAM_A_NAME = 'White Team';
+    var DEFAULT_TEAM_B_NAME = 'Blue Team';
+    var DEFAULT_TEAM_A_COLOR = '#E8E8E8';
+    var DEFAULT_TEAM_B_COLOR = '#1A5276';
 
     // History log
     let historyEntries = [];
@@ -148,10 +172,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function captureFrame() {
+        var source = (mode === 'sample') ? sampleVideo : video;
         var c = document.createElement('canvas');
-        c.width = video.videoWidth || 640;
-        c.height = video.videoHeight || 480;
-        c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+        c.width = source.videoWidth || 640;
+        c.height = source.videoHeight || 480;
+        c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
         return c.toDataURL('image/jpeg', 0.85);
     }
 
@@ -725,13 +750,49 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function saveRoster() {
-        try { localStorage.setItem('vrp_spi_roster', JSON.stringify(roster)); } catch (e) {}
+        try {
+            localStorage.setItem('vrp_spi_roster', JSON.stringify(roster));
+            localStorage.setItem('vrp_spi_team_names', JSON.stringify({
+                A: teamAName.value, B: teamBName.value
+            }));
+            localStorage.setItem('vrp_spi_team_colors', JSON.stringify(teamColors));
+        } catch (e) {}
     }
     function loadRoster() {
         try {
             var saved = localStorage.getItem('vrp_spi_roster');
             if (saved) roster = JSON.parse(saved);
+            var names = localStorage.getItem('vrp_spi_team_names');
+            if (names) {
+                var n = JSON.parse(names);
+                if (n.A) teamAName.value = n.A;
+                if (n.B) teamBName.value = n.B;
+            }
+            var colors = localStorage.getItem('vrp_spi_team_colors');
+            if (colors) {
+                var c = JSON.parse(colors);
+                if (c.A) { teamColors.A = c.A; teamAColor.value = c.A; teamABlock.style.borderLeftColor = c.A; document.getElementById('rosterTeamA').style.borderLeftColor = c.A; }
+                if (c.B) { teamColors.B = c.B; teamBColor.value = c.B; teamBBlock.style.borderLeftColor = c.B; document.getElementById('rosterTeamB').style.borderLeftColor = c.B; }
+            }
         } catch (e) {}
+    }
+    function loadSampleRoster() {
+        roster.A = DEFAULT_ROSTER.A.map(function(e) { return { number: e.number, name: e.name }; });
+        roster.B = DEFAULT_ROSTER.B.map(function(e) { return { number: e.number, name: e.name }; });
+        teamAName.value = DEFAULT_TEAM_A_NAME;
+        teamBName.value = DEFAULT_TEAM_B_NAME;
+        teamColors.A = DEFAULT_TEAM_A_COLOR;
+        teamColors.B = DEFAULT_TEAM_B_COLOR;
+        teamAColor.value = DEFAULT_TEAM_A_COLOR;
+        teamBColor.value = DEFAULT_TEAM_B_COLOR;
+        teamABlock.style.borderLeftColor = DEFAULT_TEAM_A_COLOR;
+        teamBBlock.style.borderLeftColor = DEFAULT_TEAM_B_COLOR;
+        document.getElementById('rosterTeamA').style.borderLeftColor = DEFAULT_TEAM_A_COLOR;
+        document.getElementById('rosterTeamB').style.borderLeftColor = DEFAULT_TEAM_B_COLOR;
+        saveRoster();
+        renderRoster('A');
+        renderRoster('B');
+        window.reasoningConsole.logInfo('Loaded sample roster: White Team (5) vs Blue Team (5)');
     }
 
     // ══════════════════════════════════════════════════
@@ -843,10 +904,28 @@ document.addEventListener('DOMContentLoaded', async function() {
     function switchMode(newMode) {
         mode = newMode;
         modeCameraBtn.classList.toggle('active', mode === 'camera');
+        modeSampleBtn.classList.toggle('active', mode === 'sample');
         modeUploadBtn.classList.toggle('active', mode === 'upload');
         cameraGroup.style.display = mode === 'camera' ? '' : 'none';
         uploadArea.classList.toggle('visible', mode === 'upload');
-        video.style.display = mode === 'camera' ? '' : 'none';
+        video.style.display = (mode === 'camera') ? '' : 'none';
+        sampleVideo.style.display = (mode === 'sample') ? '' : 'none';
+
+        if (mode === 'sample') {
+            sampleVideo.play().catch(function() {});
+            // Set overlay canvas to match sample video
+            sampleVideo.onloadedmetadata = function() {
+                overlayCanvas.width = sampleVideo.videoWidth;
+                overlayCanvas.height = sampleVideo.videoHeight;
+            };
+            if (sampleVideo.videoWidth) {
+                overlayCanvas.width = sampleVideo.videoWidth;
+                overlayCanvas.height = sampleVideo.videoHeight;
+            }
+            window.reasoningConsole.logInfo('Switched to sample basketball video');
+        } else {
+            sampleVideo.pause();
+        }
     }
 
     function switchEngine(eng) {
@@ -883,6 +962,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  EVENT LISTENERS
     // ══════════════════════════════════════════════════
     modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
+    modeSampleBtn.addEventListener('click', function() { switchMode('sample'); });
     modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
     engineRoboflowBtn.addEventListener('click', function() { switchEngine('roboflow'); });
     engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
@@ -899,6 +979,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     snapBtn.addEventListener('click', snapAnalysis);
     addPlayerA.addEventListener('click', function() { addRosterEntry('A'); });
     addPlayerB.addEventListener('click', function() { addRosterEntry('B'); });
+    document.getElementById('loadSampleRosterBtn').addEventListener('click', function() {
+        loadSampleRoster();
+    });
+    document.getElementById('clearRosterBtn').addEventListener('click', function() {
+        if (confirm('Clear both team rosters?')) {
+            roster = { A: [], B: [] };
+            teamAName.value = 'Team A';
+            teamBName.value = 'Team B';
+            saveRoster();
+            renderRoster('A');
+            renderRoster('B');
+        }
+    });
     exportJsonBtn.addEventListener('click', exportJSON);
     exportCsvBtn.addEventListener('click', exportCSV);
     clearHistoryBtn.addEventListener('click', function() { historyEntries = []; renderHistory(); });
@@ -918,6 +1011,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  INIT
     // ══════════════════════════════════════════════════
     loadRoster();
+
+    // If no saved roster, load sample defaults
+    if (roster.A.length === 0 && roster.B.length === 0) {
+        loadSampleRoster();
+    }
+
     renderRoster('A');
     renderRoster('B');
     renderHistory();

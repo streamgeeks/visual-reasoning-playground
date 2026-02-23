@@ -193,6 +193,11 @@
                     <div class="upload-label">Drop images or video here, or click to upload</div>
                 </div>
 
+                <!-- Sample video player (hidden until loaded) -->
+                <video id="sampleVideo" style="display:none;width:100%;border-radius:8px;" controls muted playsinline loop>
+                    <source src="sample-basketball-game.mp4" type="video/mp4">
+                </video>
+
                 <div class="results-panel">
                     <div class="history-section">
                         <div class="history-header">
@@ -216,6 +221,7 @@
                 <!-- Mode toggle -->
                 <div class="mode-toggle">
                     <button id="modeCameraBtn" class="active">Camera</button>
+                    <button id="modeSampleBtn">Sample Video</button>
                     <button id="modeUploadBtn">Upload</button>
                 </div>
 
@@ -271,12 +277,12 @@
                         <div class="det-count" id="detPlayerCount">0</div>
                     </div>
                     <div class="team-split">
-                        <div class="team-block" id="teamABlock" style="border-left-color:#E63946;">
-                            <div class="team-label" id="teamALabel">Team A</div>
+                        <div class="team-block" id="teamABlock" style="border-left-color:#E8E8E8;">
+                            <div class="team-label" id="teamALabel">White Team</div>
                             <div class="team-count" id="teamACount">0</div>
                         </div>
-                        <div class="team-block" id="teamBBlock" style="border-left-color:#2A9D8F;">
-                            <div class="team-label" id="teamBLabel">Team B</div>
+                        <div class="team-block" id="teamBBlock" style="border-left-color:#1A5276;">
+                            <div class="team-label" id="teamBLabel">Blue Team</div>
                             <div class="team-count" id="teamBCount">0</div>
                         </div>
                     </div>
@@ -286,19 +292,23 @@
                 <!-- Roster editor -->
                 <details class="roster-section" open>
                     <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;">Roster Editor</summary>
-                    <div style="margin-top:10px;">
-                        <div class="roster-team" id="rosterTeamA" style="border-left-color:#E63946;">
+                    <div style="margin-top:8px;margin-bottom:10px;display:flex;gap:6px;">
+                        <button class="btn btn-secondary" id="loadSampleRosterBtn" style="padding:5px 10px;font-size:0.75rem;flex:1;">Load Sample Roster</button>
+                        <button class="btn btn-secondary" id="clearRosterBtn" style="padding:5px 10px;font-size:0.75rem;">Clear All</button>
+                    </div>
+                    <div>
+                        <div class="roster-team" id="rosterTeamA" style="border-left-color:#E8E8E8;">
                             <div class="roster-team-header">
-                                <input type="text" id="teamAName" value="Team A" placeholder="Team name">
-                                <input type="color" id="teamAColor" value="#E63946" class="color-swatch" title="Team color">
+                                <input type="text" id="teamAName" value="White Team" placeholder="Team name">
+                                <input type="color" id="teamAColor" value="#E8E8E8" class="color-swatch" title="Team color">
                             </div>
                             <div id="rosterEntriesA"></div>
                             <button class="roster-add-btn" id="addPlayerA">+ Add Player</button>
                         </div>
-                        <div class="roster-team" id="rosterTeamB" style="border-left-color:#2A9D8F;">
+                        <div class="roster-team" id="rosterTeamB" style="border-left-color:#1A5276;">
                             <div class="roster-team-header">
-                                <input type="text" id="teamBName" value="Team B" placeholder="Team name">
-                                <input type="color" id="teamBColor" value="#2A9D8F" class="color-swatch" title="Team color">
+                                <input type="text" id="teamBName" value="Blue Team" placeholder="Team name">
+                                <input type="color" id="teamBColor" value="#1A5276" class="color-swatch" title="Team color">
                             </div>
                             <div id="rosterEntriesB"></div>
                             <button class="roster-add-btn" id="addPlayerB">+ Add Player</button>
