@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  STATE
     // ══════════════════════════════════════════════════
-    let engine = 'roboflow-cloud'; // 'roboflow-cloud' | 'moondream'
+    let engine = 'onnx-local'; // 'onnx-local' | 'roboflow-cloud' | 'moondream'
     let mode = 'camera';
     let moondreamClient = null;
     let currentStream = null;
@@ -65,10 +65,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     let uploadedImages = [];
     let uploadIndex = 0;
 
-    // Roboflow API key — used for both cloud and local inference
+    // Roboflow API key — used for cloud inference
     var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
 
-
+    // Local ONNX player detection model
+    var playerOnnxModel = null;
+    var playerModelLoaded = false;
+    var PLAYER_ONNX_PATH = 'model/rfdetr-player.onnx';
+    var PLAYER_CLASS_NAMES = {
+        0: 'ball', 1: 'ball-in-basket', 2: 'number', 3: 'player',
+        4: 'player-in-possession', 5: 'player-jump-shot', 6: 'player-layup-dunk',
+        7: 'player-shot-block', 8: 'referee', 9: 'rim', 10: 'background'
+    };
 
     // FPS tracking
     let fpsHistory = [];
@@ -325,6 +333,73 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // ══════════════════════════════════════════════════
+    //  LOCAL ONNX PLAYER DETECTION
+    // ══════════════════════════════════════════════════
+    async function loadPlayerModel() {
+        if (playerModelLoaded) return true;
+        updateStatus('Loading local ONNX model...');
+        window.reasoningConsole.logInfo('Loading player detection ONNX model...');
+
+        playerOnnxModel = new OnnxModelRunner(PLAYER_ONNX_PATH, {
+            inputWidth: 640,
+            inputHeight: 640,
+            task: 'detect',
+            classNames: PLAYER_CLASS_NAMES
+        });
+
+        var loaded = await playerOnnxModel.load(function(msg) {
+            updateStatus('ONNX: ' + msg);
+        });
+
+        playerModelLoaded = loaded;
+        if (loaded) {
+            window.reasoningConsole.logInfo('Player ONNX model loaded');
+            updateStatus('Local model ready');
+        } else {
+            window.reasoningConsole.logError('Player ONNX model failed to load');
+            updateStatus('Local model failed — try Cloud engine', true);
+        }
+        return loaded;
+    }
+
+    async function onnxLocalDetect() {
+        if (!playerModelLoaded) {
+            var ok = await loadPlayerModel();
+            if (!ok) throw new Error('Local ONNX model not available');
+        }
+
+        var source = (mode === 'sample') ? sampleVideo : video;
+        var confidence = parseInt(confidenceSlider.value) / 100;
+        var startTime = Date.now();
+
+        var result = await playerOnnxModel.infer(source, confidence);
+        var latency = Date.now() - startTime;
+
+        // Parse into standard format
+        var players = [];
+        var numbers = [];
+        var others = [];
+
+        (result.detections || []).forEach(function(det) {
+            if (ROBOFLOW_PLAYER_CLASSES.indexOf(det.class) !== -1) {
+                players.push(det);
+            } else if (det.class === ROBOFLOW_NUMBER_CLASS) {
+                numbers.push(det);
+            } else {
+                others.push(det);
+            }
+        });
+
+        var vw = source.videoWidth || 640;
+        var vh = source.videoHeight || 480;
+
+        if (framesAnalyzed % 20 === 0 || latency > 500) {
+            window.reasoningConsole.logInfo('ONNX Local: ' + players.length + ' players, ' + numbers.length + ' numbers (' + latency + 'ms)');
+        }
+        return { players: players, numbers: numbers, others: others, imageWidth: vw, imageHeight: vh };
+    }
+
+    // ══════════════════════════════════════════════════
     //  FPS TRACKING
     // ══════════════════════════════════════════════════
     function updateFPS() {
@@ -578,7 +653,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             // Step 1: Detect — dispatch to selected engine
             var detResult;
-            if (engine === 'roboflow-cloud') {
+            if (engine === 'onnx-local') {
+                detResult = await onnxLocalDetect();
+            } else if (engine === 'roboflow-cloud') {
                 detResult = await roboflowCloudDetect(imageBase64);
             } else {
                 detResult = await moondreamDetect(imageBase64);
@@ -588,7 +665,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateFPS();
 
             // Step 2: Team clustering via K-means on uniform colors
-
+            if (!imageBase64 || engine === 'onnx-local') {
+                imageBase64 = captureFrame();
+            }
             var colors = detResult.players.map(function(p) {
                 return sampleDominantColor(imageBase64, p);
             });
@@ -604,8 +683,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             updateTrackedPlayers(detResult.players, teamAssignments, numberPairs, imageBase64);
 
             // Step 5: OCR jersey numbers
-            if (engine === 'roboflow-cloud' && Object.keys(numberPairs).length > 0 && moondreamClient) {
-                ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+            if ((engine === 'roboflow-cloud' || engine === 'onnx-local') && Object.keys(numberPairs).length > 0 && moondreamClient) {
+                if (engine === 'roboflow-cloud' || framesAnalyzed % 15 === 0) {
+                    ocrNumberCrops(imageBase64, detResult.players, numberPairs);
+                }
             } else if (engine === 'moondream') {
                 var unconfirmed = trackedPlayers.filter(function(tp) { return !tp.confirmedNumber; }).slice(0, 3);
                 for (var i = 0; i < unconfirmed.length; i++) {
@@ -635,8 +716,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Schedule next frame
         if (running) {
-            var interval = parseInt(intervalSelect.value) || 500;
-            analysisTimeout = setTimeout(analyzeFrame, interval);
+            var interval = parseInt(intervalSelect.value);
+            if (interval === 0 && engine === 'onnx-local') {
+                requestAnimationFrame(function() { analyzeFrame(); });
+            } else {
+                analysisTimeout = setTimeout(analyzeFrame, interval || 200);
+            }
         }
     }
 
@@ -951,6 +1036,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     async function startAnalysis() {
         // Validate engine requirements
+        if (engine === 'onnx-local') {
+            var ok = await loadPlayerModel();
+            if (!ok) {
+                window.reasoningConsole.logInfo('Local ONNX failed, falling back to Cloud');
+                engine = 'roboflow-cloud';
+                switchEngine('roboflow-cloud');
+            }
+        }
         if (engine === 'roboflow-cloud') {
             if (!window.apiKeyManager.hasRoboflowKey() && !ROBOFLOW_DEFAULT_KEY) {
                 window.apiKeyManager.showModal();
@@ -1045,9 +1138,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function switchEngine(eng) {
         engine = eng;
-        document.getElementById('engineRoboflowBtn').classList.toggle('active', engine === 'roboflow-cloud');
+        document.getElementById('engineLocalBtn').classList.toggle('active', engine === 'onnx-local');
+        document.getElementById('engineCloudBtn').classList.toggle('active', engine === 'roboflow-cloud');
         engineMoondreamBtn.classList.toggle('active', engine === 'moondream');
-        roboflowInfo.style.display = engine === 'roboflow-cloud' ? '' : 'none';
+        roboflowInfo.style.display = (engine === 'roboflow-cloud' || engine === 'onnx-local') ? '' : 'none';
         window.reasoningConsole.logInfo('Switched to ' + engine + ' engine');
     }
 
@@ -1604,7 +1698,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
     modeSampleBtn.addEventListener('click', function() { switchMode('sample'); });
     modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
-    document.getElementById('engineRoboflowBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
+    document.getElementById('engineLocalBtn').addEventListener('click', function() { switchEngine('onnx-local'); });
+    document.getElementById('engineCloudBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
     engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
     cameraSelect.addEventListener('change', function() { if (cameraSelect.value) startCamera(cameraSelect.value); });
     refreshCamerasBtn.addEventListener('click', enumerateCameras);

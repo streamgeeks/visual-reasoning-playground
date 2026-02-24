@@ -384,13 +384,16 @@
                     </div>
                 </div>
 
-                <!-- Engine selector -->
+                <!-- Engine selector (3-way) -->
                 <div class="engine-toggle">
-                    <button id="engineRoboflowBtn" class="active" data-engine="roboflow-cloud">
-                        Roboflow<span class="engine-sub">RF-DETR v13 &middot; Cloud API</span>
+                    <button id="engineLocalBtn" class="active" data-engine="onnx-local">
+                        Local ONNX<span class="engine-sub">In-browser &middot; Fast</span>
+                    </button>
+                    <button id="engineCloudBtn" data-engine="roboflow-cloud">
+                        Cloud<span class="engine-sub">Roboflow API</span>
                     </button>
                     <button id="engineMoondreamBtn" data-engine="moondream">
-                        Moondream<span class="engine-sub">VLM &middot; Flexible</span>
+                        Moondream<span class="engine-sub">VLM</span>
                     </button>
                 </div>
 
@@ -403,11 +406,13 @@
                 <div class="control-group">
                     <label for="intervalSelect">Analysis Rate</label>
                     <select id="intervalSelect">
+                        <option value="0">Max FPS (Local ONNX)</option>
+                        <option value="100">~10 FPS</option>
+                        <option value="200" selected>~5 FPS</option>
                         <option value="500">~2 FPS</option>
-                        <option value="1000" selected>~1 FPS</option>
+                        <option value="1000">~1 FPS</option>
                         <option value="2000">Every 2s</option>
                         <option value="5000">Every 5s</option>
-                        <option value="10000">Every 10s</option>
                     </select>
                 </div>
 
