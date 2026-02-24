@@ -277,9 +277,9 @@
                     </video>
                     <canvas id="overlayCanvas"></canvas>
                     <div class="edit-mode-badge" id="editModeBadge">EDIT MODE - Click a player to select</div>
-                    <!-- Court minimap overlay (semi-transparent PIP) -->
-                    <canvas id="courtCanvas" width="376" height="200" style="position:absolute;bottom:48px;right:8px;border-radius:6px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
-                    <div class="calib-mode-badge" id="calibBadge">CALIBRATING - Click video then court</div>
+                    <!-- Court minimap overlay (semi-transparent PIP, top center, smaller) -->
+                    <canvas id="courtCanvas" width="260" height="138" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);border-radius:5px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
+                    <div class="calib-mode-badge" id="calibBadge" style="top:150px;left:50%;transform:translateX(-50%);bottom:auto;right:auto;">CALIBRATING - Click video then court</div>
                 </div>
 
                 <!-- Detection Editor Panel -->

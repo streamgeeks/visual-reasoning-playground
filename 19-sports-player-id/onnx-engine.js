@@ -55,12 +55,16 @@
 
             if (onProgress) onProgress('Downloading model (' + (this.modelPath) + ')...');
             console.log('[ONNX] Creating inference session (WASM backend)...');
+            console.log('[ONNX] Model path:', this.modelPath);
+            console.log('[ONNX] Note: models over ~50MB may fail to load in browser WASM');
 
             // Use WASM only — WebGL does not support GridSample op used by RF-DETR
-            this.session = await ort.InferenceSession.create(this.modelPath, {
+            var sessionOpts = {
                 executionProviders: ['wasm'],
                 graphOptimizationLevel: 'all',
-            });
+            };
+
+            this.session = await ort.InferenceSession.create(this.modelPath, sessionOpts);
 
             console.log('[ONNX] Model loaded successfully');
             console.log('[ONNX] Inputs:', this.session.inputNames);
