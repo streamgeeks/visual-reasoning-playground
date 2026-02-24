@@ -1,2 +1,5 @@
 *.pt
 *.pyc
+# Player detection model (124MB, exceeds GitHub 100MB limit)
+# Export from players.pt using export_to_onnx.py in Google Colab
+model/rfdetr-player.onnx

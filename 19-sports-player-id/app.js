@@ -72,10 +72,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     var playerOnnxModel = null;
     var playerModelLoaded = false;
     var PLAYER_ONNX_PATH = 'model/rfdetr-player.onnx';
+    // 12 output classes: 11 object classes + 1 background (index may vary)
+    // The class mapping depends on training — check Roboflow project for exact order
     var PLAYER_CLASS_NAMES = {
         0: 'ball', 1: 'ball-in-basket', 2: 'number', 3: 'player',
         4: 'player-in-possession', 5: 'player-jump-shot', 6: 'player-layup-dunk',
-        7: 'player-shot-block', 8: 'referee', 9: 'rim', 10: 'background'
+        7: 'player-shot-block', 8: 'referee', 9: 'rim', 10: 'background', 11: 'background'
     };
 
     // FPS tracking

@@ -130,62 +130,108 @@
         feeds[inputName] = inputTensor;
 
         var results = await this.session.run(feeds);
-        var outputName = this.session.outputNames[0] || 'output0';
-        var output = results[outputName];
 
         // Parse output based on task
         if (this.task === 'pose') {
-            return this._parsePoseOutput(output, srcW, srcH, confidenceThreshold);
+            var outputName = this.session.outputNames[0] || 'output0';
+            return this._parsePoseOutput(results[outputName], srcW, srcH, confidenceThreshold);
         } else {
-            return this._parseDetectOutput(output, srcW, srcH, confidenceThreshold);
+            return this._parseDetectOutput(results, srcW, srcH, confidenceThreshold);
         }
     };
 
     /**
-     * Parse detection output: [1, N, 4+numClasses] or [1, N, 6] (end2end with NMS)
+     * Parse detection output.
+     * Supports two formats:
+     *   Format A (two outputs): 'dets' [B, N, 4] + 'labels' [B, N, numClasses]
+     *   Format B (single output): [1, N, 4+numClasses]
      */
-    OnnxModelRunner.prototype._parseDetectOutput = function(output, srcW, srcH, confThresh) {
-        var data = output.data;
-        var dims = output.dims; // [1, N, cols]
-        var numDets = dims[1];
-        var cols = dims[2];
-        var numClasses = cols - 4; // first 4 are bbox, rest are class scores
+    OnnxModelRunner.prototype._parseDetectOutput = function(results, srcW, srcH, confThresh) {
         var scaleX = srcW / this.inputWidth;
         var scaleY = srcH / this.inputHeight;
-
         var detections = [];
-        for (var i = 0; i < numDets; i++) {
-            var offset = i * cols;
 
-            // Find best class
-            var bestClass = 0;
-            var bestScore = 0;
-            for (var c = 0; c < numClasses; c++) {
-                var score = data[offset + 4 + c];
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestClass = c;
+        // Detect format: two-output (dets + labels) or single-output
+        var hasDets = results['dets'] !== undefined;
+        var hasLabels = results['labels'] !== undefined;
+
+        if (hasDets && hasLabels) {
+            // Format A: separate dets [B, N, 4] and labels [B, N, numClasses]
+            var detsData = results['dets'].data;
+            var detsDims = results['dets'].dims;
+            var labelsData = results['labels'].data;
+            var labelsDims = results['labels'].dims;
+            var numDets = detsDims[1];
+            var numClasses = labelsDims[2];
+
+            for (var i = 0; i < numDets; i++) {
+                // Find best class via sigmoid/softmax scores
+                var bestClass = 0;
+                var bestScore = 0;
+                for (var c = 0; c < numClasses; c++) {
+                    // Apply sigmoid to convert logits to probabilities
+                    var logit = labelsData[i * numClasses + c];
+                    var score = 1 / (1 + Math.exp(-logit));
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestClass = c;
+                    }
                 }
+
+                if (bestScore < confThresh) continue;
+
+                // Bbox: [cx, cy, w, h] normalized 0-1 from RF-DETR
+                var cx = detsData[i * 4 + 0];
+                var cy = detsData[i * 4 + 1];
+                var w = detsData[i * 4 + 2];
+                var h = detsData[i * 4 + 3];
+
+                // RF-DETR outputs normalized coords (0-1), scale to source image
+                detections.push({
+                    x: (cx - w / 2) * srcW,
+                    y: (cy - h / 2) * srcH,
+                    w: w * srcW,
+                    h: h * srcH,
+                    confidence: bestScore,
+                    class: this.classNames[bestClass] || ('class_' + bestClass),
+                    classId: bestClass
+                });
             }
+        } else {
+            // Format B: single output [1, N, 4+numClasses]
+            var outputName = this.session.outputNames[0] || 'output0';
+            var output = results[outputName];
+            var data = output.data;
+            var dims = output.dims;
+            var numDets2 = dims[1];
+            var cols = dims[2];
+            var numClasses2 = cols - 4;
 
-            if (bestScore < confThresh) continue;
+            for (var j = 0; j < numDets2; j++) {
+                var offset = j * cols;
+                var bestClass2 = 0;
+                var bestScore2 = 0;
+                for (var c2 = 0; c2 < numClasses2; c2++) {
+                    var s = data[offset + 4 + c2];
+                    if (s > bestScore2) { bestScore2 = s; bestClass2 = c2; }
+                }
+                if (bestScore2 < confThresh) continue;
 
-            // Bbox: [cx, cy, w, h] in model input coords
-            var cx = data[offset + 0];
-            var cy = data[offset + 1];
-            var w = data[offset + 2];
-            var h = data[offset + 3];
+                var cx2 = data[offset + 0];
+                var cy2 = data[offset + 1];
+                var w2 = data[offset + 2];
+                var h2 = data[offset + 3];
 
-            // Scale to source image coords
-            detections.push({
-                x: (cx - w / 2) * scaleX,
-                y: (cy - h / 2) * scaleY,
-                w: w * scaleX,
-                h: h * scaleY,
-                confidence: bestScore,
-                class: this.classNames[bestClass] || ('class_' + bestClass),
-                classId: bestClass
-            });
+                detections.push({
+                    x: (cx2 - w2 / 2) * scaleX,
+                    y: (cy2 - h2 / 2) * scaleY,
+                    w: w2 * scaleX,
+                    h: h2 * scaleY,
+                    confidence: bestScore2,
+                    class: this.classNames[bestClass2] || ('class_' + bestClass2),
+                    classId: bestClass2
+                });
+            }
         }
 
         return { detections: detections };
