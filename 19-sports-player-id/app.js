@@ -57,7 +57,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Local ONNX player detection model (YOLO11n, 320x320 input, 10 classes)
     var playerOnnxModel = null;
     var playerModelLoaded = false;
-    var PLAYER_ONNX_PATH = 'model/yolo11n-player.onnx';
+    // CDN-hosted for fast loading from GitHub Pages
+    var PLAYER_ONNX_PATH = 'https://cdn.jsdelivr.net/gh/streamgeeks/visual-reasoning-playground@master/19-sports-player-id/model/yolo11n-player.onnx';
     var PLAYER_INPUT_SIZE = 320;
     var PLAYER_CLASS_NAMES = {
         0: 'ball', 1: 'ball-in-basket', 2: 'number', 3: 'player',
