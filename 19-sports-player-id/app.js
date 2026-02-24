@@ -54,16 +54,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Roboflow API key — used for cloud inference
     var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
 
-    // Local ONNX player detection model
+    // Local ONNX player detection model (YOLO11n, 320x320 input, 10 classes)
     var playerOnnxModel = null;
     var playerModelLoaded = false;
-    var PLAYER_ONNX_PATH = 'model/rfdetr-player.onnx';
-    // 12 output classes: 11 object classes + 1 background (index may vary)
-    // The class mapping depends on training — check Roboflow project for exact order
+    var PLAYER_ONNX_PATH = 'model/yolo11n-player.onnx';
+    var PLAYER_INPUT_SIZE = 320;
     var PLAYER_CLASS_NAMES = {
         0: 'ball', 1: 'ball-in-basket', 2: 'number', 3: 'player',
         4: 'player-in-possession', 5: 'player-jump-shot', 6: 'player-layup-dunk',
-        7: 'player-shot-block', 8: 'referee', 9: 'rim', 10: 'background', 11: 'background'
+        7: 'player-shot-block', 8: 'referee', 9: 'rim'
     };
 
     // FPS tracking
@@ -292,8 +291,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Loading player detection ONNX model...');
 
         playerOnnxModel = new OnnxModelRunner(PLAYER_ONNX_PATH, {
-            inputWidth: 640,
-            inputHeight: 640,
+            inputWidth: PLAYER_INPUT_SIZE,
+            inputHeight: PLAYER_INPUT_SIZE,
             task: 'detect',
             classNames: PLAYER_CLASS_NAMES
         });

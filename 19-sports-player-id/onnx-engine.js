@@ -160,21 +160,23 @@
 
     /**
      * Parse detection output.
-     * Supports two formats:
-     *   Format A (two outputs): 'dets' [B, N, 4] + 'labels' [B, N, numClasses]
-     *   Format B (single output): [1, N, 4+numClasses]
+     * Supports three formats:
+     *   Format A (two outputs): 'dets' [B, N, 4] + 'labels' [B, N, numClasses] (RF-DETR)
+     *   Format B (YOLO transposed): [1, 4+numClasses, N] — channels first (YOLO11/YOLOv8)
+     *   Format C (YOLO standard): [1, N, 4+numClasses] — detections first
      */
     OnnxModelRunner.prototype._parseDetectOutput = function(results, srcW, srcH, confThresh) {
         var scaleX = srcW / this.inputWidth;
         var scaleY = srcH / this.inputHeight;
         var detections = [];
 
-        // Detect format: two-output (dets + labels) or single-output
-        var hasDets = results['dets'] !== undefined;
-        var hasLabels = results['labels'] !== undefined;
+        // Get the single output tensor
+        var outputName = this.session.outputNames[0] || 'output0';
+        var output = results[outputName];
 
-        if (hasDets && hasLabels) {
-            // Format A: separate dets [B, N, 4] and labels [B, N, numClasses]
+        // Check for two-output format (RF-DETR: dets + labels)
+        if (results['dets'] !== undefined && results['labels'] !== undefined) {
+            output = null; // handled below
             var detsData = results['dets'].data;
             var detsDims = results['dets'].dims;
             var labelsData = results['labels'].data;
@@ -183,73 +185,96 @@
             var numClasses = labelsDims[2];
 
             for (var i = 0; i < numDets; i++) {
-                // Find best class via sigmoid/softmax scores
                 var bestClass = 0;
                 var bestScore = 0;
                 for (var c = 0; c < numClasses; c++) {
-                    // Apply sigmoid to convert logits to probabilities
                     var logit = labelsData[i * numClasses + c];
                     var score = 1 / (1 + Math.exp(-logit));
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestClass = c;
-                    }
+                    if (score > bestScore) { bestScore = score; bestClass = c; }
                 }
-
                 if (bestScore < confThresh) continue;
-
-                // Bbox: [cx, cy, w, h] normalized 0-1 from RF-DETR
                 var cx = detsData[i * 4 + 0];
                 var cy = detsData[i * 4 + 1];
                 var w = detsData[i * 4 + 2];
                 var h = detsData[i * 4 + 3];
-
-                // RF-DETR outputs normalized coords (0-1), scale to source image
                 detections.push({
-                    x: (cx - w / 2) * srcW,
-                    y: (cy - h / 2) * srcH,
-                    w: w * srcW,
-                    h: h * srcH,
+                    x: (cx - w / 2) * srcW, y: (cy - h / 2) * srcH,
+                    w: w * srcW, h: h * srcH,
                     confidence: bestScore,
                     class: this.classNames[bestClass] || ('class_' + bestClass),
                     classId: bestClass
                 });
             }
-        } else {
-            // Format B: single output [1, N, 4+numClasses]
-            var outputName = this.session.outputNames[0] || 'output0';
-            var output = results[outputName];
-            var data = output.data;
-            var dims = output.dims;
-            var numDets2 = dims[1];
-            var cols = dims[2];
-            var numClasses2 = cols - 4;
+            return { detections: detections };
+        }
 
-            for (var j = 0; j < numDets2; j++) {
-                var offset = j * cols;
-                var bestClass2 = 0;
-                var bestScore2 = 0;
+        if (!output) return { detections: [] };
+
+        var data = output.data;
+        var dims = output.dims; // [1, A, B]
+        var dimA = dims[1];
+        var dimB = dims[2];
+
+        // Detect format: if dimA < dimB, it's transposed YOLO [1, channels, numDets]
+        // If dimA > dimB, it's standard [1, numDets, channels]
+        var numDets2, numChannels, transposed;
+        if (dimA < dimB) {
+            // Format B: YOLO transposed [1, 4+numClasses, N]
+            numChannels = dimA;
+            numDets2 = dimB;
+            transposed = true;
+        } else {
+            // Format C: standard [1, N, 4+numClasses]
+            numDets2 = dimA;
+            numChannels = dimB;
+            transposed = false;
+        }
+        var numClasses2 = numChannels - 4;
+
+        console.log('[ONNX] Output format:', transposed ? 'YOLO transposed' : 'standard',
+            'dims=' + dims.join('x'), 'dets=' + numDets2, 'classes=' + numClasses2);
+
+        for (var j = 0; j < numDets2; j++) {
+            // Read bbox and class scores based on layout
+            var cx2, cy2, w2, h2;
+            var bestClass2 = 0;
+            var bestScore2 = 0;
+
+            if (transposed) {
+                // Transposed: data[channel * numDets + detIdx]
+                cx2 = data[0 * numDets2 + j];
+                cy2 = data[1 * numDets2 + j];
+                w2 =  data[2 * numDets2 + j];
+                h2 =  data[3 * numDets2 + j];
                 for (var c2 = 0; c2 < numClasses2; c2++) {
-                    var s = data[offset + 4 + c2];
+                    var s = data[(4 + c2) * numDets2 + j];
                     if (s > bestScore2) { bestScore2 = s; bestClass2 = c2; }
                 }
-                if (bestScore2 < confThresh) continue;
-
-                var cx2 = data[offset + 0];
-                var cy2 = data[offset + 1];
-                var w2 = data[offset + 2];
-                var h2 = data[offset + 3];
-
-                detections.push({
-                    x: (cx2 - w2 / 2) * scaleX,
-                    y: (cy2 - h2 / 2) * scaleY,
-                    w: w2 * scaleX,
-                    h: h2 * scaleY,
-                    confidence: bestScore2,
-                    class: this.classNames[bestClass2] || ('class_' + bestClass2),
-                    classId: bestClass2
-                });
+            } else {
+                // Standard: data[detIdx * numChannels + channel]
+                var offset = j * numChannels;
+                cx2 = data[offset + 0];
+                cy2 = data[offset + 1];
+                w2 =  data[offset + 2];
+                h2 =  data[offset + 3];
+                for (var c3 = 0; c3 < numClasses2; c3++) {
+                    var s2 = data[offset + 4 + c3];
+                    if (s2 > bestScore2) { bestScore2 = s2; bestClass2 = c3; }
+                }
             }
+
+            if (bestScore2 < confThresh) continue;
+
+            // YOLO outputs pixel coords in model input space, scale to source image
+            detections.push({
+                x: (cx2 - w2 / 2) * scaleX,
+                y: (cy2 - h2 / 2) * scaleY,
+                w: w2 * scaleX,
+                h: h2 * scaleY,
+                confidence: bestScore2,
+                class: this.classNames[bestClass2] || ('class_' + bestClass2),
+                classId: bestClass2
+            });
         }
 
         return { detections: detections };
