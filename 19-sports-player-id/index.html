@@ -242,19 +242,23 @@
         }
         .edit-mode-badge.visible { display: block; }
 
-        /* ── Calibration mode indicator ── */
-        .calib-mode-badge {
-            display: none; position: absolute; bottom: 215px; right: 8px;
-            background: rgba(0, 200, 100, 0.9); color: #fff; padding: 3px 8px;
-            border-radius: 4px; font-size: 0.68rem; font-weight: 600; z-index: 5;
-        }
-        .calib-mode-badge.visible { display: block; }
-
         /* ── FPS badge ── */
         .fps-badge {
             display: inline-block; background: var(--surface); border: 1px solid var(--surface-light);
             border-radius: 4px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700;
             font-family: Consolas, Monaco, monospace; color: var(--primary-light); margin-left: 6px;
+        }
+
+        /* ── Court minimap override (shared CSS forces all canvases to 100%) ── */
+        #courtCanvas {
+            width: 200px !important;
+            height: 106px !important;
+            top: 8px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            pointer-events: auto !important;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
         }
     </style>
 </head>
@@ -277,9 +281,8 @@
                     </video>
                     <canvas id="overlayCanvas"></canvas>
                     <div class="edit-mode-badge" id="editModeBadge">EDIT MODE - Click a player to select</div>
-                    <!-- Court minimap overlay (semi-transparent PIP, top center, smaller) -->
-                    <canvas id="courtCanvas" width="260" height="138" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);border-radius:5px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
-                    <div class="calib-mode-badge" id="calibBadge" style="top:150px;left:50%;transform:translateX(-50%);bottom:auto;right:auto;">CALIBRATING - Click video then court</div>
+                    <!-- Court minimap overlay (semi-transparent PIP, top center) -->
+                    <canvas id="courtCanvas" width="200" height="106" style="position:absolute;border-radius:5px;z-index:4;"></canvas>
                 </div>
 
                 <!-- Detection Editor Panel -->
@@ -428,30 +431,13 @@
                     </div>
                 </details>
 
-                <!-- Court Map Calibration -->
-                <details style="margin-bottom:12px;">
-                    <summary style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;font-weight:600;">Court Map Calibration</summary>
-                    <div style="padding:8px 0;">
-                        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
-                            Map the video to the court diagram by clicking 4+ corresponding points.
-                            <strong>Step 1:</strong> Click a point on the video. <strong>Step 2:</strong> Click the matching point on the court minimap. Repeat 4+ times.
-                        </div>
-                        <div id="calibStatus" style="font-size:0.75rem;margin-bottom:6px;color:var(--text-muted);">Not calibrated</div>
-                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn btn-primary" id="calibAutoBtn" style="padding:4px 10px;font-size:0.72rem;">Auto-Calibrate (ONNX)</button>
-                            <button class="btn btn-secondary" id="calibStartBtn" style="padding:4px 10px;font-size:0.72rem;">Manual</button>
-                            <button class="btn btn-success" id="calibApplyBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Apply (4+ pts)</button>
-                            <button class="btn btn-secondary" id="calibCancelBtn" style="padding:4px 10px;font-size:0.72rem;display:none;">Cancel</button>
-                            <button class="btn btn-secondary" id="calibResetBtn" style="padding:4px 10px;font-size:0.72rem;">Reset</button>
-                        </div>
-                        <div class="control-group" style="margin-top:8px;margin-bottom:0;">
-                            <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;">
-                                <input type="checkbox" id="courtMapToggle" checked>
-                                Show court minimap
-                            </label>
-                        </div>
-                    </div>
-                </details>
+                <!-- Court minimap toggle -->
+                <div class="control-group" style="margin-bottom:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;">
+                        <input type="checkbox" id="courtMapToggle" checked>
+                        Show court minimap
+                    </label>
+                </div>
 
                 <!-- Live detection card -->
                 <div class="detection-card">
