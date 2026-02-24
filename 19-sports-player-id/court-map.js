@@ -295,14 +295,11 @@
      * @param {number} imageHeight - detection image height
      */
     CourtMap.prototype.updatePlayers = function(trackedPlayers, trackMeta, teamColors, imageWidth, imageHeight) {
-        if (!this.calibrated || !this.homography) {
-            this.drawCourt();
-            this._drawUncalibratedMessage();
-            return;
-        }
-
-        // Project player bottom-center positions from video coords to court coords
+        // Project player positions onto the court
         this.players = [];
+        var iw = imageWidth || 640;
+        var ih = imageHeight || 480;
+
         for (var i = 0; i < trackedPlayers.length; i++) {
             var tp = trackedPlayers[i];
             var meta = trackMeta[tp.id] || {};
@@ -310,28 +307,37 @@
             var videoX = tp.bbox.x + tp.bbox.w / 2;
             var videoY = tp.bbox.y + tp.bbox.h;
 
-            var projected = transformPoints([[videoX, videoY]], this.homography);
-            if (projected.length > 0) {
-                var cx = projected[0][0];
-                var cy = projected[0][1];
-                // Clamp to court bounds
-                cx = Math.max(0, Math.min(COURT.width, cx));
-                cy = Math.max(0, Math.min(COURT.height, cy));
-
-                this.players.push({
-                    x: cx,
-                    y: cy,
-                    team: meta.team || tp.team || 'A',
-                    number: meta.confirmedNumber || null,
-                    name: meta.name || null,
-                    trackId: tp.id
-                });
-
-                // Trail history
-                if (!this.trails[tp.id]) this.trails[tp.id] = [];
-                this.trails[tp.id].push({ x: cx, y: cy });
-                if (this.trails[tp.id].length > 60) this.trails[tp.id].shift();
+            var cx, cy;
+            if (this.calibrated && this.homography) {
+                // Use homography for precise projection
+                var projected = transformPoints([[videoX, videoY]], this.homography);
+                cx = projected[0][0];
+                cy = projected[0][1];
+            } else {
+                // Proportional mapping: video coords -> court coords
+                // X in video maps to court length (0-94 ft)
+                // Y in video maps to court width (0-50 ft)
+                cx = (videoX / iw) * COURT.width;
+                cy = COURT.height - (videoY / ih) * COURT.height;
             }
+
+            // Clamp to court bounds
+            cx = Math.max(0, Math.min(COURT.width, cx));
+            cy = Math.max(0, Math.min(COURT.height, cy));
+
+            this.players.push({
+                x: cx,
+                y: cy,
+                team: meta.team || tp.team || 'A',
+                number: meta.confirmedNumber || null,
+                name: meta.name || null,
+                trackId: tp.id
+            });
+
+            // Trail history
+            if (!this.trails[tp.id]) this.trails[tp.id] = [];
+            this.trails[tp.id].push({ x: cx, y: cy });
+            if (this.trails[tp.id].length > 60) this.trails[tp.id].shift();
         }
 
         // Redraw
@@ -347,21 +353,22 @@
             var pos = this.toCanvas(p.x, p.y);
             var color = p.team === 'A' ? (teamColors.A || '#E8E8E8') : (teamColors.B || '#1A5276');
 
-            // Dot
+            // Dot with team color
             ctx.beginPath();
-            ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+            ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // Jersey number label
-            var label = p.number ? '#' + p.number : 'T' + p.trackId;
-            ctx.font = 'bold 7px sans-serif';
+            // Jersey number inside the dot
+            var label = p.number ? p.number : '' + p.trackId;
+            ctx.font = 'bold 6px sans-serif';
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
-            ctx.fillText(label, pos.x, pos.y - 8);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, pos.x, pos.y);
         }
         ctx.textAlign = 'left';
     };
@@ -389,12 +396,7 @@
     };
 
     CourtMap.prototype._drawUncalibratedMessage = function() {
-        var ctx = this.ctx;
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.textAlign = 'center';
-        ctx.fillText('Click "Calibrate" to map video to court', this.canvas.width / 2, this.canvas.height - 10);
-        ctx.textAlign = 'left';
+        // No longer needed — proportional mapping works without calibration
     };
 
     /**
