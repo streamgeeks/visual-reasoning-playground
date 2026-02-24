@@ -5,13 +5,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const video = document.getElementById('video');
     const overlayCanvas = document.getElementById('overlayCanvas');
     const ctx = overlayCanvas.getContext('2d');
-    const cameraSelect = document.getElementById('cameraSelect');
-    const refreshCamerasBtn = document.getElementById('refreshCamerasBtn');
-    const cameraGroup = document.getElementById('cameraGroup');
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const modeCameraBtn = document.getElementById('modeCameraBtn');
-    const modeUploadBtn = document.getElementById('modeUploadBtn');
     const engineMoondreamBtn = document.getElementById('engineMoondreamBtn');
     const roboflowInfo = document.getElementById('roboflowInfo');
     const intervalSelect = document.getElementById('intervalSelect');
@@ -37,12 +30,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const statDuration = document.getElementById('statDuration');
     const statFrames = document.getElementById('statFrames');
     const statIdentified = document.getElementById('statIdentified');
-    // statFps is updated by updateFPS() directly
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
-    const snapBtn = document.getElementById('snapBtn');
-    const modeSampleBtn = document.getElementById('modeSampleBtn');
-    const sampleVideo = document.getElementById('sampleVideo');
     const statusBar = document.getElementById('status');
     const historyLog = document.getElementById('historyLog');
     const exportJsonBtn = document.getElementById('exportJsonBtn');
@@ -53,17 +42,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  STATE
     // ══════════════════════════════════════════════════
     let engine = 'onnx-local'; // 'onnx-local' | 'roboflow-cloud' | 'moondream'
-    let mode = 'camera';
     let moondreamClient = null;
-    let currentStream = null;
     let running = false;
     let analysisTimeout = null;
     let durationInterval = null;
     let sessionStart = null;
     let framesAnalyzed = 0;
     let totalConfidence = 0;
-    let uploadedImages = [];
-    let uploadIndex = 0;
+
 
     // Roboflow API key — used for cloud inference
     var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
@@ -158,49 +144,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.reasoningConsole.logInfo('Sports Player Identifier initialized');
 
     // ══════════════════════════════════════════════════
-    //  CAMERA
+    //  VIDEO FRAME CAPTURE
     // ══════════════════════════════════════════════════
-    async function enumerateCameras() {
-        try {
-            var devices = await navigator.mediaDevices.enumerateDevices();
-            var videoDevices = devices.filter(function(d) { return d.kind === 'videoinput'; });
-            cameraSelect.innerHTML = '';
-            videoDevices.forEach(function(device, i) {
-                var option = document.createElement('option');
-                option.value = device.deviceId;
-                option.textContent = device.label || 'Camera ' + (i + 1);
-                cameraSelect.appendChild(option);
-            });
-        } catch (e) { window.reasoningConsole.logError('Camera enumeration failed: ' + e.message); }
-    }
-
-    async function startCamera(deviceId) {
-        try {
-            if (currentStream) currentStream.getTracks().forEach(function(t) { t.stop(); });
-            var constraints = {
-                video: deviceId ? { deviceId: { exact: deviceId }, width: 1280, height: 720 } : { width: 1280, height: 720 },
-                audio: false
-            };
-            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = currentStream;
-            video.onloadedmetadata = function() {
-                overlayCanvas.width = video.videoWidth;
-                overlayCanvas.height = video.videoHeight;
-            };
-            await enumerateCameras();
-            if (deviceId) cameraSelect.value = deviceId;
-            updateStatus('Camera ready');
-        } catch (e) {
-            updateStatus('Camera error: ' + e.message, true);
-        }
-    }
-
     function captureFrame() {
-        var source = (mode === 'sample') ? sampleVideo : video;
         var c = document.createElement('canvas');
-        c.width = source.videoWidth || 640;
-        c.height = source.videoHeight || 480;
-        c.getContext('2d').drawImage(source, 0, 0, c.width, c.height);
+        c.width = video.videoWidth || 640;
+        c.height = video.videoHeight || 480;
+        c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
         return c.toDataURL('image/jpeg', 0.85);
     }
 
@@ -208,8 +158,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  ROBOFLOW DETECTION ENGINE
     // ══════════════════════════════════════════════════
     function captureResizedFrame(maxWidth) {
-        // Capture a frame at reduced resolution for faster cloud uploads
-        var source = (mode === 'sample') ? sampleVideo : video;
+        var source = video;
         var sw = source.videoWidth || 640;
         var sh = source.videoHeight || 480;
         var scale = Math.min(1, maxWidth / sw);
@@ -370,11 +319,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!ok) throw new Error('Local ONNX model not available');
         }
 
-        var source = (mode === 'sample') ? sampleVideo : video;
         var confidence = parseInt(confidenceSlider.value) / 100;
         var startTime = Date.now();
 
-        var result = await playerOnnxModel.infer(source, confidence);
+        var result = await playerOnnxModel.infer(video, confidence);
         var latency = Date.now() - startTime;
 
         // Parse into standard format
@@ -392,8 +340,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
 
-        var vw = source.videoWidth || 640;
-        var vh = source.videoHeight || 480;
+        var vw = video.videoWidth || 640;
+        var vh = video.videoHeight || 480;
 
         if (framesAnalyzed % 20 === 0 || latency > 500) {
             window.reasoningConsole.logInfo('ONNX Local: ' + players.length + ' players, ' + numbers.length + ' numbers (' + latency + 'ms)');
@@ -644,13 +592,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
 
-        var imageBase64;
-        if (mode === 'upload' && uploadedImages.length > 0) {
-            imageBase64 = uploadedImages[uploadIndex % uploadedImages.length];
-            uploadIndex++;
-        } else {
-            imageBase64 = captureFrame();
-        }
+        var imageBase64 = captureFrame();
 
         try {
             // Step 1: Detect — dispatch to selected engine
@@ -1097,47 +1039,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Stopped. ' + framesAnalyzed + ' frames, ' + identifiedCount + ' IDs confirmed, avg ' + avgFps + ' FPS.');
     }
 
-    async function snapAnalysis() {
-        var wasRunning = running;
-        if (!running) {
-            // Single frame analysis
-            running = true;
-            await analyzeFrame();
-            running = wasRunning;
-            clearTimeout(analysisTimeout);
-        }
-    }
-
     // ══════════════════════════════════════════════════
-    //  MODE / ENGINE SWITCHING
+    //  ENGINE SWITCHING
     // ══════════════════════════════════════════════════
-    function switchMode(newMode) {
-        mode = newMode;
-        modeCameraBtn.classList.toggle('active', mode === 'camera');
-        modeSampleBtn.classList.toggle('active', mode === 'sample');
-        modeUploadBtn.classList.toggle('active', mode === 'upload');
-        cameraGroup.style.display = mode === 'camera' ? '' : 'none';
-        uploadArea.classList.toggle('visible', mode === 'upload');
-        video.style.display = (mode === 'camera') ? '' : 'none';
-        sampleVideo.style.display = (mode === 'sample') ? '' : 'none';
-
-        if (mode === 'sample') {
-            sampleVideo.play().catch(function() {});
-            // Set overlay canvas to match sample video
-            sampleVideo.onloadedmetadata = function() {
-                overlayCanvas.width = sampleVideo.videoWidth;
-                overlayCanvas.height = sampleVideo.videoHeight;
-            };
-            if (sampleVideo.videoWidth) {
-                overlayCanvas.width = sampleVideo.videoWidth;
-                overlayCanvas.height = sampleVideo.videoHeight;
-            }
-            window.reasoningConsole.logInfo('Switched to sample basketball video');
-        } else {
-            sampleVideo.pause();
-        }
-    }
-
     function switchEngine(eng) {
         engine = eng;
         document.getElementById('engineLocalBtn').classList.toggle('active', engine === 'onnx-local');
@@ -1147,27 +1051,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logInfo('Switched to ' + engine + ' engine');
     }
 
-    function handleFiles(files) {
-        uploadedImages = [];
-        uploadIndex = 0;
-        Array.from(files).forEach(function(file) {
-            var reader = new FileReader();
-            reader.onload = function(e) { uploadedImages.push(e.target.result); };
-            reader.readAsDataURL(file);
-        });
-        setTimeout(function() {
-            updateStatus(uploadedImages.length + ' image(s) loaded');
-            if (uploadedImages.length > 0) {
-                var img = new Image();
-                img.onload = function() {
-                    overlayCanvas.width = img.width;
-                    overlayCanvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                };
-                img.src = uploadedImages[0];
-            }
-        }, 500);
-    }
+
 
     // ══════════════════════════════════════════════════
     //  DETECTION EDITOR
@@ -1499,8 +1383,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             courtModelLoaded = true;
         }
 
-        var source = (mode === 'sample') ? sampleVideo : video;
-        var result = await courtKeypointModel.infer(source, 0.3);
+        var result = await courtKeypointModel.infer(video, 0.3);
 
         if (!result.keypoints || result.keypoints.length < 4) {
             window.reasoningConsole.logInfo('Auto-calibration: not enough keypoints detected (' + (result.keypoints ? result.keypoints.length : 0) + ')');
@@ -1697,19 +1580,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ══════════════════════════════════════════════════
     //  EVENT LISTENERS
     // ══════════════════════════════════════════════════
-    modeCameraBtn.addEventListener('click', function() { switchMode('camera'); });
-    modeSampleBtn.addEventListener('click', function() { switchMode('sample'); });
-    modeUploadBtn.addEventListener('click', function() { switchMode('upload'); });
     document.getElementById('engineLocalBtn').addEventListener('click', function() { switchEngine('onnx-local'); });
     document.getElementById('engineCloudBtn').addEventListener('click', function() { switchEngine('roboflow-cloud'); });
     engineMoondreamBtn.addEventListener('click', function() { switchEngine('moondream'); });
-    cameraSelect.addEventListener('change', function() { if (cameraSelect.value) startCamera(cameraSelect.value); });
-    refreshCamerasBtn.addEventListener('click', enumerateCameras);
-    uploadArea.addEventListener('click', function() { fileInput.click(); });
-    fileInput.addEventListener('change', function(e) { if (e.target.files.length > 0) handleFiles(e.target.files); });
-    uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); uploadArea.classList.add('dragover'); });
-    uploadArea.addEventListener('dragleave', function() { uploadArea.classList.remove('dragover'); });
-    uploadArea.addEventListener('drop', function(e) { e.preventDefault(); uploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files); });
     confidenceSlider.addEventListener('input', function() { confidenceValue.textContent = confidenceSlider.value + '%'; });
 
     // ByteTrack config sliders
@@ -1727,7 +1600,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
     startBtn.addEventListener('click', startAnalysis);
     stopBtn.addEventListener('click', stopAnalysis);
-    snapBtn.addEventListener('click', snapAnalysis);
     addPlayerA.addEventListener('click', function() { addRosterEntry('A'); });
     addPlayerB.addEventListener('click', function() { addRosterEntry('B'); });
     document.getElementById('loadSampleRosterBtn').addEventListener('click', function() {
@@ -1772,17 +1644,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     renderRoster('B');
     renderHistory();
 
-    if (window.VideoSourceAdapter) {
-        VideoSourceAdapter.init({
-            videoElement: video, toolId: 'sports-player-id', insertInto: '.video-container',
-            onSourceChange: function(source) {
-                cameraSelect.disabled = source === 'sample';
-                refreshCamerasBtn.disabled = source === 'sample';
-                if (source === 'camera') enumerateCameras();
-            }
-        });
-        VideoSourceAdapter.switchToCamera().catch(function() { VideoSourceAdapter.switchToSample(); });
-    } else {
-        await startCamera();
-    }
+    // Set up video element — auto-play the sample video
+    video.onloadedmetadata = function() {
+        overlayCanvas.width = video.videoWidth;
+        overlayCanvas.height = video.videoHeight;
+        window.reasoningConsole.logInfo('Video loaded: ' + video.videoWidth + 'x' + video.videoHeight);
+        updateStatus('Video ready — click Start Detection');
+    };
+    video.play().catch(function() {
+        updateStatus('Click the video to start playback, then click Start Detection');
+    });
 });

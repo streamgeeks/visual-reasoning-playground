@@ -42,17 +42,29 @@
         this.loading = true;
 
         try {
-            if (onProgress) onProgress('Loading ONNX model...');
+            if (onProgress) onProgress('Configuring ONNX Runtime...');
+            console.log('[ONNX] Loading model:', this.modelPath);
 
-            // Configure ONNX Runtime
+            // Configure ONNX Runtime WASM backend
             if (typeof ort !== 'undefined') {
-                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';
+                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+                // Single-threaded for compatibility (multi-threading requires CORS headers)
+                ort.env.wasm.numThreads = 1;
+                ort.env.wasm.simd = true;
             }
 
+            if (onProgress) onProgress('Downloading model (' + (this.modelPath) + ')...');
+            console.log('[ONNX] Creating inference session (WASM backend)...');
+
+            // Use WASM only — WebGL does not support GridSample op used by RF-DETR
             this.session = await ort.InferenceSession.create(this.modelPath, {
-                executionProviders: ['webgl', 'wasm'],
+                executionProviders: ['wasm'],
                 graphOptimizationLevel: 'all',
             });
+
+            console.log('[ONNX] Model loaded successfully');
+            console.log('[ONNX] Inputs:', this.session.inputNames);
+            console.log('[ONNX] Outputs:', this.session.outputNames);
 
             this.loaded = true;
             this.loading = false;
@@ -60,7 +72,9 @@
             return true;
         } catch (e) {
             this.loading = false;
-            console.error('ONNX model load failed:', e);
+            console.error('[ONNX] Model load FAILED:', e);
+            console.error('[ONNX] Error name:', e.name);
+            console.error('[ONNX] Error message:', e.message);
             if (onProgress) onProgress('Load failed: ' + e.message);
             return false;
         }

@@ -272,23 +272,15 @@
         <div class="main-content">
             <div class="video-section">
                 <div class="video-container" id="videoContainer" style="position:relative;">
-                    <video id="video" autoplay muted playsinline></video>
+                    <video id="video" autoplay muted playsinline loop controls style="width:100%;border-radius:8px;">
+                        <source src="sample-basketball-game.mp4" type="video/mp4">
+                    </video>
                     <canvas id="overlayCanvas"></canvas>
                     <div class="edit-mode-badge" id="editModeBadge">EDIT MODE - Click a player to select</div>
                     <!-- Court minimap overlay (semi-transparent PIP) -->
-                    <canvas id="courtCanvas" width="376" height="200" style="position:absolute;bottom:8px;right:8px;border-radius:6px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
+                    <canvas id="courtCanvas" width="376" height="200" style="position:absolute;bottom:48px;right:8px;border-radius:6px;pointer-events:auto;cursor:crosshair;z-index:4;"></canvas>
                     <div class="calib-mode-badge" id="calibBadge">CALIBRATING - Click video then court</div>
                 </div>
-
-                <div id="uploadArea" class="upload-area">
-                    <input type="file" id="fileInput" accept="image/*,video/*" multiple>
-                    <div class="upload-label">Drop images or video here, or click to upload</div>
-                </div>
-
-                <!-- Sample video player (loaded via VideoSourceAdapter or manual fallback) -->
-                <video id="sampleVideo" style="display:none;width:100%;border-radius:8px;" controls muted playsinline loop>
-                    <source src="../assets/sample-videos/basketball-game-demo.mp4" type="video/mp4">
-                </video>
 
                 <!-- Detection Editor Panel -->
                 <div class="edit-panel" id="editPanel">
@@ -368,21 +360,6 @@
 
             <div class="control-panel">
                 <h2>Settings</h2>
-
-                <!-- Mode toggle -->
-                <div class="mode-toggle">
-                    <button id="modeCameraBtn" class="active">Camera</button>
-                    <button id="modeSampleBtn">Sample Video</button>
-                    <button id="modeUploadBtn">Upload</button>
-                </div>
-
-                <div class="control-group" id="cameraGroup">
-                    <label for="cameraSelect">Camera</label>
-                    <div style="display:flex;gap:8px;">
-                        <select id="cameraSelect" style="flex:1;"></select>
-                        <button id="refreshCamerasBtn" class="btn btn-secondary" style="padding:8px 12px;">&#8635;</button>
-                    </div>
-                </div>
 
                 <!-- Engine selector (3-way) -->
                 <div class="engine-toggle">
@@ -543,12 +520,11 @@
                 </div>
 
                 <div class="btn-group">
-                    <button id="startBtn" class="btn btn-success">Start</button>
+                    <button id="startBtn" class="btn btn-success">Start Detection</button>
                     <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
-                    <button id="snapBtn" class="btn btn-secondary">Snap</button>
                 </div>
 
-                <div id="status" class="status-bar">Ready - Configure engine and start detection</div>
+                <div id="status" class="status-bar">Loading sample video...</div>
 
                 <!-- Attribution -->
                 <div class="attribution">
@@ -566,7 +542,7 @@
     </div>
 
     <!-- ONNX Runtime Web for local in-browser model inference -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
     <script src="onnx-engine.js"></script>
     <script src="homography.js"></script>
     <script src="court-map.js"></script>
@@ -574,7 +550,6 @@
     <script src="../shared/moondream-client.js"></script>
     <script src="../shared/api-key-manager.js"></script>
     <script src="../shared/reasoning-console.js"></script>
-    <script src="../shared/video-source-adapter.js"></script>
     <script src="app.js"></script>
     <script src="../shared/ux-utils.js"></script>
     <script src="../shared/playground-header.js"></script>
