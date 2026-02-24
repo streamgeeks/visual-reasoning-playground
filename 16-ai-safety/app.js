@@ -353,6 +353,281 @@ Rating scale:
         }
     }
 
+    // ── Construction PPE Detection (person-level safe/unsafe) ──
+    const PPE_PROMPT = `Look at this person carefully. Are they wearing construction safety PPE?
+Check for: 1) Hard hat on their head  2) Safety vest / hi-vis vest on their body.
+Respond with ONLY valid JSON (no markdown, no backticks):
+{"safe": true or false, "wearing": ["items they have"], "missing": ["items they lack"]}
+If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
+
+    async function analyzeConstructionSafety(imageDataUrl) {
+        if (!client) return null;
+
+        const startTime = Date.now();
+        updateStatus('Detecting people...');
+        window.reasoningConsole.logApiCall('/detect', 0);
+
+        // Step 1: Detect all people in the frame
+        let detections;
+        try {
+            const detectResult = await client.detect(imageDataUrl, 'person');
+            detections = detectResult.objects || [];
+            const detectLatency = Date.now() - startTime;
+            window.reasoningConsole.logApiCall('/detect', detectLatency);
+            window.reasoningConsole.logInfo(`Detected ${detections.length} person(s) [${detectLatency}ms]`);
+        } catch (e) {
+            window.reasoningConsole.logError('Person detection failed: ' + e.message);
+            return null;
+        }
+
+        if (detections.length === 0) {
+            // No people — scene is safe
+            drawPersonOverlays([], imageDataUrl);
+            return {
+                safetyRating: 5,
+                status: 'all_clear',
+                primaryConcern: 'No personnel detected',
+                recommendedAction: 'Continue monitoring',
+                detectedHazards: [],
+                people: []
+            };
+        }
+
+        // Step 2: For each person, crop and classify PPE
+        updateStatus(`Checking PPE on ${detections.length} person(s)...`);
+        const people = [];
+
+        for (let i = 0; i < detections.length; i++) {
+            const det = detections[i];
+            const bbox = {
+                x: det.x_min || 0,
+                y: det.y_min || 0,
+                w: (det.x_max || 1) - (det.x_min || 0),
+                h: (det.y_max || 1) - (det.y_min || 0)
+            };
+
+            try {
+                // Crop the person region
+                const crop = cropPersonFromFrame(imageDataUrl, bbox);
+                window.reasoningConsole.logApiCall('/query (PPE)', 0);
+                const ppeStart = Date.now();
+                const result = await client.ask(crop, PPE_PROMPT);
+                const ppeLatency = Date.now() - ppeStart;
+                window.reasoningConsole.logApiCall('/query (PPE)', ppeLatency);
+
+                const parsed = parsePPEResponse(result.answer);
+                people.push({
+                    bbox: bbox,
+                    safe: parsed.safe,
+                    wearing: parsed.wearing,
+                    missing: parsed.missing,
+                    personIndex: i + 1
+                });
+
+                window.reasoningConsole.logDecision(
+                    `Person ${i + 1}: ${parsed.safe ? 'SAFE' : 'UNSAFE'}`,
+                    `Wearing: ${parsed.wearing.join(', ') || 'nothing detected'} | Missing: ${parsed.missing.join(', ') || 'none'} [${ppeLatency}ms]`
+                );
+            } catch (e) {
+                window.reasoningConsole.logError(`PPE check failed for person ${i + 1}: ${e.message}`);
+                // Default to unsafe if we can't classify
+                people.push({
+                    bbox: bbox,
+                    safe: false,
+                    wearing: [],
+                    missing: ['unknown (classification failed)'],
+                    personIndex: i + 1
+                });
+            }
+        }
+
+        // Step 3: Draw visual overlays
+        drawPersonOverlays(people, imageDataUrl);
+
+        // Step 4: Derive overall safety rating
+        const unsafeCount = people.filter(p => !p.safe).length;
+        const totalPeople = people.length;
+        const totalLatency = Date.now() - startTime;
+
+        let rating, status, concern, action;
+        if (unsafeCount === 0) {
+            rating = 5;
+            status = 'all_clear';
+            concern = `All ${totalPeople} person(s) wearing proper PPE`;
+            action = 'Continue monitoring';
+        } else if (unsafeCount === 1 && totalPeople > 1) {
+            rating = 2;
+            status = 'hazard';
+            concern = `${unsafeCount} of ${totalPeople} person(s) missing PPE`;
+            action = 'Ensure all personnel have hard hats and safety vests';
+        } else if (unsafeCount >= totalPeople) {
+            rating = 1;
+            status = 'danger';
+            concern = `${unsafeCount} person(s) without proper PPE`;
+            action = 'STOP WORK - All personnel must wear hard hats and safety vests';
+        } else {
+            rating = 2;
+            status = 'hazard';
+            concern = `${unsafeCount} of ${totalPeople} person(s) missing PPE`;
+            action = 'Ensure all personnel have hard hats and safety vests';
+        }
+
+        const hazards = people.filter(p => !p.safe).map(p =>
+            `Person ${p.personIndex}: Missing ${p.missing.join(', ')}`
+        );
+
+        window.reasoningConsole.logDecision(
+            `Overall: ${rating}/5 (${RATING_META[rating]?.label})`,
+            `${concern} [${totalLatency}ms total]`
+        );
+
+        return {
+            safetyRating: rating,
+            status: status,
+            primaryConcern: concern,
+            recommendedAction: action,
+            detectedHazards: hazards,
+            people: people
+        };
+    }
+
+    function cropPersonFromFrame(imageDataUrl, bbox) {
+        // bbox coords are normalized 0-1 from Moondream detect
+        const img = new Image();
+        img.src = imageDataUrl;
+        const iw = img.width || video.videoWidth || 640;
+        const ih = img.height || video.videoHeight || 480;
+
+        const px = Math.round(bbox.x * iw);
+        const py = Math.round(bbox.y * ih);
+        const pw = Math.max(10, Math.round(bbox.w * iw));
+        const ph = Math.max(10, Math.round(bbox.h * ih));
+
+        const c = document.createElement('canvas');
+        c.width = pw;
+        c.height = ph;
+        c.getContext('2d').drawImage(img, px, py, pw, ph, 0, 0, pw, ph);
+        return c.toDataURL('image/jpeg', 0.85);
+    }
+
+    function parsePPEResponse(text) {
+        try {
+            let jsonStr = text;
+            const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (fenceMatch) jsonStr = fenceMatch[1];
+            const braceStart = jsonStr.indexOf('{');
+            const braceEnd = jsonStr.lastIndexOf('}');
+            if (braceStart !== -1 && braceEnd !== -1) {
+                jsonStr = jsonStr.substring(braceStart, braceEnd + 1);
+            }
+            const parsed = JSON.parse(jsonStr);
+            return {
+                safe: !!parsed.safe,
+                wearing: Array.isArray(parsed.wearing) ? parsed.wearing : [],
+                missing: Array.isArray(parsed.missing) ? parsed.missing : []
+            };
+        } catch (e) {
+            window.reasoningConsole.logError('Failed to parse PPE response: ' + e.message);
+            // Default to unsafe if parse fails
+            return { safe: false, wearing: [], missing: ['unknown'] };
+        }
+    }
+
+    function drawPersonOverlays(people, imageDataUrl) {
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+        if (people.length === 0) return;
+
+        // Get image dimensions for coordinate scaling
+        const img = new Image();
+        img.src = imageDataUrl;
+        const iw = img.width || video.videoWidth || 640;
+        const ih = img.height || video.videoHeight || 480;
+        const scaleX = overlayCanvas.width / iw;
+        const scaleY = overlayCanvas.height / ih;
+
+        people.forEach(function(person) {
+            const x = person.bbox.x * iw * scaleX;
+            const y = person.bbox.y * ih * scaleY;
+            const w = person.bbox.w * iw * scaleX;
+            const h = person.bbox.h * ih * scaleY;
+
+            const color = person.safe ? '#2A9D8F' : '#E63946';
+            const bgAlpha = person.safe ? 'rgba(42, 157, 143, 0.15)' : 'rgba(230, 57, 70, 0.15)';
+
+            // Semi-transparent fill
+            overlayCtx.fillStyle = bgAlpha;
+            overlayCtx.fillRect(x, y, w, h);
+
+            // Bounding box
+            overlayCtx.strokeStyle = color;
+            overlayCtx.lineWidth = person.safe ? 3 : 4;
+            if (!person.safe) {
+                // Pulsing dashed border for unsafe
+                overlayCtx.setLineDash([8, 4]);
+            }
+            overlayCtx.strokeRect(x, y, w, h);
+            overlayCtx.setLineDash([]);
+
+            // Label background
+            const icon = person.safe ? '\u2713' : '\u2717';
+            const labelText = person.safe
+                ? `${icon} SAFE - PPE OK`
+                : `${icon} UNSAFE - Missing: ${person.missing.join(', ')}`;
+
+            overlayCtx.font = 'bold 14px sans-serif';
+            const textMetrics = overlayCtx.measureText(labelText);
+            const labelW = textMetrics.width + 12;
+            const labelH = 22;
+            const labelX = x;
+            const labelY = y - labelH - 2;
+
+            // Label background
+            overlayCtx.fillStyle = color;
+            overlayCtx.beginPath();
+            overlayCtx.roundRect(labelX, labelY, labelW, labelH, 4);
+            overlayCtx.fill();
+
+            // Label text
+            overlayCtx.fillStyle = '#fff';
+            overlayCtx.font = 'bold 13px sans-serif';
+            overlayCtx.fillText(labelText, labelX + 6, labelY + 16);
+
+            // PPE item icons below the label
+            const itemY = labelY + labelH + 4;
+            let itemX = x + 4;
+            const items = [
+                { name: 'Hard Hat', has: person.wearing.some(w => w.toLowerCase().includes('hat') || w.toLowerCase().includes('helmet')) },
+                { name: 'Vest', has: person.wearing.some(w => w.toLowerCase().includes('vest') || w.toLowerCase().includes('hi-vis')) }
+            ];
+            items.forEach(function(item) {
+                const itemIcon = item.has ? '\u2705' : '\u274C';
+                overlayCtx.font = '11px sans-serif';
+                overlayCtx.fillStyle = item.has ? '#2A9D8F' : '#E63946';
+                // Small background pill
+                const pillW = overlayCtx.measureText(itemIcon + ' ' + item.name).width + 8;
+                overlayCtx.fillStyle = 'rgba(0,0,0,0.7)';
+                overlayCtx.beginPath();
+                overlayCtx.roundRect(itemX, y + 4, pillW, 18, 3);
+                overlayCtx.fill();
+                overlayCtx.fillStyle = item.has ? '#2A9D8F' : '#E63946';
+                overlayCtx.fillText(itemIcon + ' ' + item.name, itemX + 4, y + 17);
+                itemX += pillW + 4;
+            });
+        });
+
+        // Overall border based on safety
+        const unsafeCount = people.filter(p => !p.safe).length;
+        if (unsafeCount > 0) {
+            const borderColor = unsafeCount >= people.length ? '#E63946' : '#E76F51';
+            const thickness = unsafeCount >= people.length ? 6 : 4;
+            overlayCtx.strokeStyle = borderColor;
+            overlayCtx.lineWidth = thickness;
+            overlayCtx.strokeRect(thickness / 2, thickness / 2,
+                overlayCanvas.width - thickness, overlayCanvas.height - thickness);
+        }
+    }
+
     // ── UI Update functions ──
     function updateStatus(message, isError = false) {
         statusBar.textContent = message;
@@ -748,7 +1023,14 @@ Rating scale:
         }
 
         const thumbnail = mode === 'upload' ? imageDataUrl : captureThumbnail();
-        const assessment = await analyzeSafety(imageDataUrl);
+
+        // Use person-level PPE detection for construction preset
+        let assessment;
+        if (presetSelect.value === 'construction') {
+            assessment = await analyzeConstructionSafety(imageDataUrl);
+        } else {
+            assessment = await analyzeSafety(imageDataUrl);
+        }
 
         if (assessment) {
             framesAnalyzed++;
@@ -796,7 +1078,13 @@ Rating scale:
         }
 
         const thumbnail = mode === 'upload' ? imageDataUrl : captureThumbnail();
-        const assessment = await analyzeSafety(imageDataUrl);
+
+        let assessment;
+        if (presetSelect.value === 'construction') {
+            assessment = await analyzeConstructionSafety(imageDataUrl);
+        } else {
+            assessment = await analyzeSafety(imageDataUrl);
+        }
 
         if (assessment) {
             framesAnalyzed++;
@@ -895,6 +1183,11 @@ Rating scale:
     presetSelect.addEventListener('change', () => {
         updatePresetInfo();
         saveSettings();
+        // Show/hide PPE legend for construction mode
+        const ppeLegend = document.getElementById('ppeLegend');
+        if (ppeLegend) ppeLegend.style.display = presetSelect.value === 'construction' ? '' : 'none';
+        // Clear overlays when switching presets
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         window.reasoningConsole.logInfo(`Preset changed to: ${PRESETS[presetSelect.value].name}`);
     });
 

@@ -388,6 +388,11 @@
                 <div class="video-container" id="videoContainer">
                     <video id="video" autoplay muted playsinline></video>
                     <canvas id="overlayCanvas"></canvas>
+                    <!-- PPE detection legend (shown in construction mode) -->
+                    <div id="ppeLegend" style="display:none;position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.7);border-radius:6px;padding:6px 10px;font-size:0.72rem;color:#fff;z-index:5;">
+                        <span style="color:#2A9D8F;">&#9632; SAFE</span> &mdash; Hard hat + vest &nbsp;
+                        <span style="color:#E63946;">&#9632; UNSAFE</span> &mdash; Missing PPE
+                    </div>
                 </div>
 
                 <!-- Image upload area (shown in upload mode) -->
