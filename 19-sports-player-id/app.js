@@ -54,7 +54,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Roboflow API key — used for cloud inference
     var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
 
-    // Local ONNX player detection model (YOLO11n, 320x320 input, 10 classes)
+    // Local ONNX player detection model (smaller, better performing)
+    var playerOnnxModel = null;
+    var playerModelLoaded = false;
+    // Use local model file
+    var PLAYER_ONNX_PATH = 'NEW PLAYER WEIGHTS.onnx';
+    var PLAYER_INPUT_SIZE = 320;
     var playerOnnxModel = null;
     var playerModelLoaded = false;
     // CDN-hosted for fast loading from GitHub Pages
@@ -111,6 +116,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     let historyEntries = [];
 
     // Roboflow model config
+    var ROBOFLOW_MODEL = 'basketball-player-detection-3-ycjdo';
+    var ROBOFLOW_VERSION = '13';
+    var ROBOFLOW_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block'];
+    var ROBOFLOW_NUMBER_CLASS = 'number';
+    var ROBOFLOW_ALL_CLASSES = ['ball', 'ball-in-basket', 'number', 'player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block', 'referee', 'rim'];
+
+    // ONNX model player classes (NEW PLAYER WEIGHTS model)
+    var ONNX_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block', 'referee'];
+    var ONNX_NUMBER_CLASS = 'number';
     var ROBOFLOW_MODEL = 'basketball-player-detection-3-ycjdo';
     var ROBOFLOW_VERSION = '13';
     var ROBOFLOW_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block'];
@@ -331,6 +345,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         var others = [];
 
         (result.detections || []).forEach(function(det) {
+            if (ONNX_PLAYER_CLASSES.indexOf(det.class) !== -1) {
+                players.push(det);
+            } else if (det.class === ONNX_NUMBER_CLASS) {
+                numbers.push(det);
+            } else {
+                others.push(det);
+            }
             if (ROBOFLOW_PLAYER_CLASSES.indexOf(det.class) !== -1) {
                 players.push(det);
             } else if (det.class === ROBOFLOW_NUMBER_CLASS) {
