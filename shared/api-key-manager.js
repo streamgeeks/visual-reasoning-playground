@@ -160,6 +160,25 @@ class APIKeyManager {
                 background: #2555a3;
             }
 
+            .akm-get-key-link {
+                color: var(--primary);
+                font-size: 0.8rem;
+                font-weight: 500;
+                text-decoration: none;
+                padding: 4px 10px;
+                border-radius: 4px;
+                transition: background 0.2s;
+            }
+
+            .akm-get-key-link:hover {
+                background: var(--surface-light);
+                text-decoration: underline;
+            }
+
+            .akm-key-status u {
+                color: var(--primary);
+            }
+
             /* Modal Overlay */
             .akm-modal-overlay {
                 position: fixed;
@@ -477,15 +496,15 @@ class APIKeyManager {
         let statusHTML = `
             <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
                 <span class="akm-status-dot ${moondreamSet ? 'set' : 'missing'}"></span>
-                <span>Moondream: ${moondreamSet ? 'Ready' : 'Not Set'}</span>
+                <span>Moondream: ${moondreamSet ? 'Ready' : '<b>Not Set</b> — <u>click to configure</u>'}</span>
             </div>
         `;
 
-        if (this.options.requireOpenAI) {
+        if (this.options.requireOpenAI || this.options.showOpenAI) {
             statusHTML += `
                 <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
                     <span class="akm-status-dot ${openaiSet ? 'set' : 'missing'}"></span>
-                    <span>OpenAI: ${openaiSet ? 'Ready' : 'Not Set'}</span>
+                    <span>OpenAI: ${openaiSet ? 'Ready' : '<b>Not Set</b> — <u>click to configure</u>'}</span>
                 </div>
             `;
         }
@@ -494,15 +513,18 @@ class APIKeyManager {
             statusHTML += `
                 <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
                     <span class="akm-status-dot ${roboflowSet ? 'set' : 'missing'}"></span>
-                    <span>Roboflow: ${roboflowSet ? 'Ready' : 'Not Set'}</span>
+                    <span>Roboflow: ${roboflowSet ? 'Ready' : '<b>Not Set</b> — <u>click to configure</u>'}</span>
                 </div>
             `;
         }
 
         statusHTML += `
             <button class="akm-manage-btn" onclick="window.apiKeyManager.showModal()">
-                Manage API Keys
+                🔑 Manage API Keys
             </button>
+            <a href="https://console.moondream.ai" target="_blank" class="akm-get-key-link">
+                Get Free Moondream Key →
+            </a>
         `;
 
         this.statusElement.innerHTML = statusHTML;
@@ -517,14 +539,17 @@ class APIKeyManager {
         this.modalElement.innerHTML = `
             <div class="akm-modal">
                 <div class="akm-modal-header">
-                    <h2>API Key Manager</h2>
+                    <h2>🔑 API Key Setup</h2>
                     <button class="akm-close-btn" onclick="window.apiKeyManager.hideModal()">&times;</button>
                 </div>
                 <div class="akm-modal-body">
                     <div class="akm-info-box">
-                        <strong>Your keys are stored locally</strong> in your browser and never sent to our servers.
-                        They're only used to communicate directly with the Moondream and OpenAI APIs.
-                    </div>
+                        <strong>ℹ️ Quick Start:</strong> Get your <strong>free</strong> Moondream API key at
+                        <a href="https://console.moondream.ai" target="_blank" style="color: var(--primary); font-weight: 600;">console.moondream.ai</a>,
+                        paste it below, and click Save.
+                        <br><br>
+                        <span style="font-size: 0.8rem; opacity: 0.8;">Your keys are stored locally in your browser and never sent to our servers.
+                        They're only used to communicate directly with the APIs.</span>
 
                     <div class="akm-key-section">
                         <div class="akm-key-header">
@@ -548,8 +573,8 @@ class APIKeyManager {
                                 Test
                             </button>
                         </div>
-                        <a href="https://console.moondream.ai" target="_blank" class="akm-key-link">
-                            Get your free key at console.moondream.ai →
+                        <a href="https://console.moondream.ai" target="_blank" class="akm-key-link" style="display:inline-block; margin-top:8px; padding:6px 12px; background:var(--primary); color:#fff; border-radius:4px; text-decoration:none; font-weight:600; font-size:0.85rem;">
+                            🚀 Get your FREE key at console.moondream.ai
                         </a>
                         <div id="akm-moondream-validation" class="akm-validation-msg"></div>
                     </div>
