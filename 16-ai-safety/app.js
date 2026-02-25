@@ -381,24 +381,40 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
             return null;
         }
 
-        // Step 1b: Detect hard hats in the frame
+        // Step 1b: Detect hard hats / safety helmets in the frame
         let hardHatDetections = [];
         try {
-            updateStatus('Detecting hard hats...');
-            window.reasoningConsole.logApiCall('/detect (hard hat)', 0);
+            updateStatus('Detecting safety helmets...');
             const hatStart = Date.now();
-            const hatResult = await client.detect(imageDataUrl, 'hard hat');
-            hardHatDetections = (hatResult.objects || []).map(h => ({
-                x_min: h.x_min || 0,
-                y_min: h.y_min || 0,
-                x_max: h.x_max || 0,
-                y_max: h.y_max || 0
-            }));
-            const hatLatency = Date.now() - hatStart;
-            window.reasoningConsole.logApiCall('/detect (hard hat)', hatLatency);
-            window.reasoningConsole.logInfo(`Detected ${hardHatDetections.length} hard hat(s) [${hatLatency}ms]`);
+
+            // Try multiple terms — Moondream may respond better to different phrasings
+            const hatTerms = ['helmet', 'hard hat', 'safety helmet'];
+            for (const term of hatTerms) {
+                window.reasoningConsole.logApiCall('/detect (' + term + ')', 0);
+                const hatResult = await client.detect(imageDataUrl, term);
+                const found = (hatResult.objects || []);
+                const hatLatency = Date.now() - hatStart;
+
+                if (found.length > 0) {
+                    hardHatDetections = found.map(h => ({
+                        x_min: h.x_min || 0,
+                        y_min: h.y_min || 0,
+                        x_max: h.x_max || 0,
+                        y_max: h.y_max || 0
+                    }));
+                    window.reasoningConsole.logApiCall('/detect (' + term + ')', hatLatency);
+                    window.reasoningConsole.logInfo(`Detected ${hardHatDetections.length} helmet(s) using term '${term}' [${hatLatency}ms]`);
+                    break; // Found helmets, stop trying other terms
+                } else {
+                    window.reasoningConsole.logInfo(`No detections for '${term}', trying next...`);
+                }
+            }
+
+            if (hardHatDetections.length === 0) {
+                window.reasoningConsole.logInfo('No helmets detected with any search term');
+            }
         } catch (e) {
-            window.reasoningConsole.logError('Hard hat detection failed: ' + e.message);
+            window.reasoningConsole.logError('Helmet detection failed: ' + e.message);
         }
 
         if (detections.length === 0) {
