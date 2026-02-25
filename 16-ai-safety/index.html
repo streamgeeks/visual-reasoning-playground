@@ -475,7 +475,14 @@
                     <div class="hazard-tags" id="hazardTags"></div>
                 </div>
 
+                <div class="btn-group">
+                    <button id="startBtn" class="btn btn-success">Start Monitoring</button>
+                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
+                    <button id="snapBtn" class="btn btn-secondary">Snap</button>
                 </div>
+
+                <div id="status" class="status-bar">Ready - Configure preset and start monitoring</div>
+
 
                 <!-- VLM Engine selector -->
                 <div class="control-group">
@@ -515,7 +522,6 @@
                     <input type="hidden" id="presetSelect" value="general">
                     <div id="presetInfo" class="preset-info">All-purpose environment monitoring</div>
                 </div>
-HS|
 
                 <!-- Frame rate -->
                 <div class="control-group">
@@ -589,47 +595,3 @@ HS|
                     </div>
                 </div>
 
-                <div class="btn-group">
-                    <button id="startBtn" class="btn btn-success">Start Monitoring</button>
-                    <button id="stopBtn" class="btn btn-danger hidden">Stop</button>
-                    <button id="snapBtn" class="btn btn-secondary">Snap</button>
-                </div>
-
-                <div id="status" class="status-bar">Ready - Configure preset and start monitoring</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Alarm overlay -->
-    <div id="alarmOverlay" class="alarm-overlay">
-        <div class="alarm-modal">
-            <div class="alarm-icon">&#9888;</div>
-            <div class="alarm-title">SAFETY ALARM</div>
-            <div id="alarmConcern" class="alarm-concern"></div>
-            <div id="alarmAction" class="alarm-action"></div>
-            <img id="alarmThumb" class="alarm-thumb" src="" alt="Triggering frame">
-            <button id="alarmAckBtn" class="btn btn-danger" style="width: 100%; margin-top: 10px;">Acknowledge</button>
-        </div>
-    </div>
-
-    <!-- Detail overlay (click history item) -->
-    <div id="detailOverlay" class="detail-overlay">
-        <div class="detail-modal">
-            <button id="detailCloseBtn" class="detail-close">&times;</button>
-            <img id="detailImage" class="detail-image" src="" alt="Assessment frame">
-            <div id="detailRating" class="rating-card" style="margin-bottom: 0;"></div>
-        </div>
-    </div>
-
-    <script src="../shared/moondream-client.js"></script>
-    <script src="../shared/openai-client.js"></script>
-    <script src="../shared/vlm-toggle.js"></script>
-QH|
-    <script src="../shared/api-key-manager.js"></script>
-    <script src="../shared/reasoning-console.js"></script>
-    <script src="../shared/video-source-adapter.js"></script>
-    <script src="app.js"></script>
-    <script src="../shared/ux-utils.js"></script>
-    <script src="../shared/playground-header.js"></script>
-</body>
-</html>

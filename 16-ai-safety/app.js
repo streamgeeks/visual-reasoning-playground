@@ -1208,6 +1208,16 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         window.reasoningConsole.logInfo(`Preset changed to: ${PRESETS[presetSelect.value].name}`);
     });
 
+    // Click handlers for preset emoji buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            presetSelect.value = btn.dataset.preset;
+            presetSelect.dispatchEvent(new Event('change'));
+        });
+    });
+
     fpmSelect.addEventListener('change', saveSettings);
 
     thresholdSelect.addEventListener('change', () => {
