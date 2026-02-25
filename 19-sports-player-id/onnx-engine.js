@@ -281,9 +281,10 @@
     };
 
     /**
-     * Parse pose/keypoint output: [1, N, 4+1+1+numKpts*3]
-     * For court model: [1, 300, 24] = 4 bbox + 1 conf(?) + 1 class(?) + 6*3 keypoints
-     * Actually for end2end: [1, 300, 24] = 4 bbox + 2 (scores) + 6*3 keypoints
+     * Parse end-to-end pose output.
+     * Format: [1, N, cols] where each detection is:
+     *   [cx, cy, w, h, confidence, class_id, kp0_x, kp0_y, kp0_conf, ..., kpN_x, kpN_y, kpN_conf]
+     *   For YOLO26n-pose with 3 classes + 6 keypoints: cols = 4 + 1 + 1 + 6*3 = 24
      */
     OnnxModelRunner.prototype._parsePoseOutput = function(output, srcW, srcH, confThresh) {
         var data = output.data;
@@ -296,20 +297,25 @@
         var numKpts = this.kptShape ? this.kptShape[0] : Math.floor((cols - 6) / 3);
         var detections = [];
 
+        console.log('[ONNX] Pose output: dims=' + dims.join('x') + ' numKpts=' + numKpts);
+
         for (var i = 0; i < numDets; i++) {
             var offset = i * cols;
 
-            // Bbox
+            // Bbox (in model input pixel coordinates)
             var cx = data[offset + 0];
             var cy = data[offset + 1];
             var w = data[offset + 2];
             var h = data[offset + 3];
 
-            // Confidence — try different offsets depending on model format
+            // Confidence score
             var conf = data[offset + 4];
             if (conf < confThresh) continue;
 
-            // Keypoints: starting at offset 6
+            // Class ID (end2end models output class index directly)
+            var classId = Math.round(data[offset + 5]);
+
+            // Keypoints: starting at offset 6, groups of 3 (x, y, conf)
             var keypoints = [];
             for (var k = 0; k < numKpts; k++) {
                 var kpOffset = offset + 6 + k * 3;
@@ -326,8 +332,8 @@
                 w: w * scaleX,
                 h: h * scaleY,
                 confidence: conf,
-                class: this.classNames[0] || 'court',
-                classId: 0,
+                class: this.classNames[classId] || ('class_' + classId),
+                classId: classId,
                 keypoints: keypoints
             });
         }

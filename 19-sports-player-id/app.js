@@ -54,21 +54,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Roboflow API key — used for cloud inference
     var ROBOFLOW_DEFAULT_KEY = 'eMRExtPvBQ73dtzKu8Yu';
 
-    // Local ONNX player detection model (smaller, better performing)
+    // Local ONNX player detection model (YOLO26n-pose, 640x640 input, 3 classes + 6 keypoints)
     var playerOnnxModel = null;
     var playerModelLoaded = false;
-    // Use local model file
-    var PLAYER_ONNX_PATH = 'NEW PLAYER WEIGHTS.onnx';
-    var PLAYER_INPUT_SIZE = 320;
-    var playerOnnxModel = null;
-    var playerModelLoaded = false;
-    // CDN-hosted for fast loading from GitHub Pages
-    var PLAYER_ONNX_PATH = 'https://cdn.jsdelivr.net/gh/streamgeeks/visual-reasoning-playground@master/19-sports-player-id/model/yolo11n-player.onnx';
-    var PLAYER_INPUT_SIZE = 320;
+    // CDN-hosted via jsDelivr for fast loading
+    var PLAYER_ONNX_PATH = 'https://cdn.jsdelivr.net/gh/streamgeeks/visual-reasoning-playground@master/19-sports-player-id/yolo26n-pose-player.onnx';
+    var PLAYER_INPUT_SIZE = 640;
     var PLAYER_CLASS_NAMES = {
-        0: 'ball', 1: 'ball-in-basket', 2: 'number', 3: 'player',
-        4: 'player-in-possession', 5: 'player-jump-shot', 6: 'player-layup-dunk',
-        7: 'player-shot-block', 8: 'referee', 9: 'rim'
+        0: 'ball', 1: 'court', 2: 'player'
     };
 
     // FPS tracking
@@ -122,9 +115,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     var ROBOFLOW_NUMBER_CLASS = 'number';
     var ROBOFLOW_ALL_CLASSES = ['ball', 'ball-in-basket', 'number', 'player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block', 'referee', 'rim'];
 
-    // ONNX model player classes (NEW PLAYER WEIGHTS model)
-    var ONNX_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block', 'referee'];
-    var ONNX_NUMBER_CLASS = 'number';
+    // ONNX model classes (new YOLO26n-pose model: ball, court, player)
+    var ONNX_PLAYER_CLASSES = ['player'];
+    var ONNX_NUMBER_CLASS = null; // New model does not detect jersey numbers
     var ROBOFLOW_MODEL = 'basketball-player-detection-3-ycjdo';
     var ROBOFLOW_VERSION = '13';
     var ROBOFLOW_PLAYER_CLASSES = ['player', 'player-in-possession', 'player-jump-shot', 'player-layup-dunk', 'player-shot-block'];
@@ -308,8 +301,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         playerOnnxModel = new OnnxModelRunner(PLAYER_ONNX_PATH, {
             inputWidth: PLAYER_INPUT_SIZE,
             inputHeight: PLAYER_INPUT_SIZE,
-            task: 'detect',
-            classNames: PLAYER_CLASS_NAMES
+            task: 'pose',
+            classNames: PLAYER_CLASS_NAMES,
+            kptShape: [6, 3]
         });
 
         var loaded = await playerOnnxModel.load(function(msg) {
@@ -345,17 +339,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         var others = [];
 
         (result.detections || []).forEach(function(det) {
-            if (ONNX_PLAYER_CLASSES.indexOf(det.class) !== -1) {
+            if (det.class === 'player') {
                 players.push(det);
-            } else if (det.class === ONNX_NUMBER_CLASS) {
-                numbers.push(det);
-            } else {
-                others.push(det);
-            }
-            if (ROBOFLOW_PLAYER_CLASSES.indexOf(det.class) !== -1) {
-                players.push(det);
-            } else if (det.class === ROBOFLOW_NUMBER_CLASS) {
-                numbers.push(det);
             } else {
                 others.push(det);
             }
