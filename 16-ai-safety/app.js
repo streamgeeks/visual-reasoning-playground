@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     const fileInput = document.getElementById('fileInput');
     const modeCameraBtn = document.getElementById('modeCameraBtn');
     const modeUploadBtn = document.getElementById('modeUploadBtn');
+    const modeSampleBtn = document.getElementById('modeSampleBtn');
+    const ratingCard = document.getElementById('ratingCard');
+    const modeUploadBtn = document.getElementById('modeUploadBtn');
     const ratingCard = document.getElementById('ratingCard');
     const hazardTags = document.getElementById('hazardTags');
     const presetSelect = document.getElementById('presetSelect');
@@ -1371,6 +1374,50 @@ If you see ANY uncertainty about the presence of BOTH a hard hat AND a safety ve
         mode = newMode;
         modeCameraBtn.classList.toggle('active', mode === 'camera');
         modeUploadBtn.classList.toggle('active', mode === 'upload');
+        modeSampleBtn.classList.toggle('active', mode === 'sample');
+        cameraGroup.style.display = mode === 'camera' ? '' : 'none';
+        uploadArea.classList.toggle('visible', mode === 'upload');
+        video.style.display = (mode === 'camera' || mode === 'sample') ? '' : 'none';
+
+        if (mode === 'upload') {
+            window.reasoningConsole.logInfo('Switched to image upload mode');
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+        } else if (mode === 'sample') {
+            window.reasoningConsole.logInfo('Switched to sample video mode');
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            loadSampleVideo();
+        } else {
+            window.reasoningConsole.logInfo('Switched to live camera mode');
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            video.removeAttribute('src');
+            uploadedImages = [];
+            uploadIndex = 0;
+        }
+    }
+
+    // ── Sample Video ──
+    function loadSampleVideo() {
+        const samplePath = 'Ai-saftey-sample-video.mp4';
+        video.src = samplePath;
+        video.loop = true;
+        video.play().catch(err => {
+            window.reasoningConsole.logError('Failed to play sample video: ' + err.message);
+        });
+        window.reasoningConsole.logInfo('Loading sample video: ' + samplePath);
+    }
+    function switchMode(newMode) {
+        mode = newMode;
+        modeCameraBtn.classList.toggle('active', mode === 'camera');
+        modeUploadBtn.classList.toggle('active', mode === 'upload');
         cameraGroup.style.display = mode === 'camera' ? '' : 'none';
         uploadArea.classList.toggle('visible', mode === 'upload');
         video.style.display = mode === 'camera' ? '' : 'none';
@@ -1428,6 +1475,9 @@ If you see ANY uncertainty about the presence of BOTH a hard hat AND a safety ve
     }
 
     // ── Event listeners ──
+    modeCameraBtn.addEventListener('click', () => switchMode('camera'));
+    modeUploadBtn.addEventListener('click', () => switchMode('upload'));
+    modeSampleBtn.addEventListener('click', () => switchMode('sample'));
     modeCameraBtn.addEventListener('click', () => switchMode('camera'));
     modeUploadBtn.addEventListener('click', () => switchMode('upload'));
 
