@@ -57,8 +57,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Local ONNX player detection model (YOLO26n-pose, 640x640 input, 3 classes + 6 keypoints)
     var playerOnnxModel = null;
     var playerModelLoaded = false;
-    // CDN-hosted via jsDelivr for fast loading
-    var PLAYER_ONNX_PATH = 'https://cdn.jsdelivr.net/gh/streamgeeks/visual-reasoning-playground@master/19-sports-player-id/yolo26n-pose-player.onnx';
+    // Try local file first (when served from same origin), fall back to CDN
+    var PLAYER_ONNX_PATH = 'yolo26n-pose-player.onnx';
+    var PLAYER_ONNX_CDN = 'https://cdn.jsdelivr.net/gh/streamgeeks/visual-reasoning-playground@master/19-sports-player-id/yolo26n-pose-player.onnx';
     var PLAYER_INPUT_SIZE = 640;
     var PLAYER_CLASS_NAMES = {
         0: 'ball', 1: 'court', 2: 'player'
@@ -298,27 +299,37 @@ document.addEventListener('DOMContentLoaded', async function() {
         updateStatus('Loading local ONNX model...');
         window.reasoningConsole.logInfo('Loading player detection ONNX model...');
 
-        playerOnnxModel = new OnnxModelRunner(PLAYER_ONNX_PATH, {
-            inputWidth: PLAYER_INPUT_SIZE,
-            inputHeight: PLAYER_INPUT_SIZE,
-            task: 'pose',
-            classNames: PLAYER_CLASS_NAMES,
-            kptShape: [6, 3]
-        });
+        // Try local path first, then CDN fallback
+        var paths = [PLAYER_ONNX_PATH, PLAYER_ONNX_CDN];
+        for (var p = 0; p < paths.length; p++) {
+            var modelPath = paths[p];
+            window.reasoningConsole.logInfo('Trying model path: ' + modelPath);
 
-        var loaded = await playerOnnxModel.load(function(msg) {
-            updateStatus('ONNX: ' + msg);
-        });
+            playerOnnxModel = new OnnxModelRunner(modelPath, {
+                inputWidth: PLAYER_INPUT_SIZE,
+                inputHeight: PLAYER_INPUT_SIZE,
+                task: 'pose',
+                classNames: PLAYER_CLASS_NAMES,
+                kptShape: [6, 3]
+            });
 
-        playerModelLoaded = loaded;
-        if (loaded) {
-            window.reasoningConsole.logInfo('Player ONNX model loaded');
-            updateStatus('Local model ready');
-        } else {
-            window.reasoningConsole.logError('Player ONNX model failed to load');
-            updateStatus('Local model failed — try Cloud engine', true);
+            var loaded = await playerOnnxModel.load(function(msg) {
+                updateStatus('ONNX: ' + msg);
+            });
+
+            if (loaded) {
+                playerModelLoaded = true;
+                window.reasoningConsole.logInfo('Player ONNX model loaded from: ' + modelPath);
+                updateStatus('Local model ready');
+                return true;
+            } else {
+                window.reasoningConsole.logError('Failed to load from: ' + modelPath);
+            }
         }
-        return loaded;
+
+        window.reasoningConsole.logError('Player ONNX model failed to load from all sources');
+        updateStatus('Local model failed — try Cloud engine', true);
+        return false;
     }
 
     async function onnxLocalDetect() {

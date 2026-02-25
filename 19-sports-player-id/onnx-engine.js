@@ -47,7 +47,7 @@
 
             // Configure ONNX Runtime WASM backend
             if (typeof ort !== 'undefined') {
-                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
+                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.1/dist/';
                 // Single-threaded for compatibility (multi-threading requires CORS headers)
                 ort.env.wasm.numThreads = 1;
                 ort.env.wasm.simd = true;
