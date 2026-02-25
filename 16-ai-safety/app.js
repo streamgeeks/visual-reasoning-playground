@@ -380,173 +380,109 @@ Rating scale:
         }
     }
 
-    // ── Construction PPE Detection (person-level safe/unsafe) ──
-    const PPE_PROMPT = `You are a strict PPE compliance inspector. MOST people do NOT wear hard hats. Default assumption: NO PPE.
-
-Look at this cropped image of ONE person. Your job is to determine if they are wearing:
-1) A HARD HAT (rigid helmet, typically white/yellow/orange, worn on TOP of the head)
-2) A SAFETY VEST (bright yellow/orange hi-vis vest with reflective strips)
-
-IMPORTANT RULES:
-- A baseball cap, beanie, hood, or hair is NOT a hard hat
-- A regular jacket, shirt, or hoodie is NOT a safety vest
-- If you cannot clearly see a rigid hard hat on their head, they are NOT wearing one
-- If you cannot clearly see a bright hi-vis vest, they are NOT wearing one
-- When in doubt, answer safe=false
-
-Respond with ONLY valid JSON (no markdown, no backticks):
-{"safe": true/false, "wearing": ["items clearly visible"], "missing": ["items not seen"]}
-safe=true ONLY if BOTH a hard hat AND safety vest are clearly visible.`;
 
     async function analyzeConstructionSafety(imageDataUrl) {
         if (!getActiveClient()) return null;
 
         const startTime = Date.now();
-        updateStatus('Detecting people...');
-        window.reasoningConsole.logApiCall('/detect', 0);
+        const activeClient = getActiveClient();
+        const engineName = (window.vlmToggle && window.vlmToggle.currentEngine === 'openai') ? 'GPT-4o' : 'Moondream';
 
-        // Step 1: Detect all people in the frame
-        let detections;
+        // Step 1: Detect people
+        updateStatus('Detecting people...');
+        let personDetections = [];
         try {
-            const detectResult = await getActiveClient().detect(imageDataUrl, 'person');
-            detections = detectResult.objects || [];
-            const detectLatency = Date.now() - startTime;
-            window.reasoningConsole.logApiCall('/detect', detectLatency);
-            window.reasoningConsole.logInfo(`Detected ${detections.length} person(s) [${detectLatency}ms]`);
+            window.reasoningConsole.logApiCall('/detect (person)', 0);
+            const pResult = await activeClient.detect(imageDataUrl, 'person');
+            personDetections = pResult.objects || [];
+            window.reasoningConsole.logInfo(`[${engineName}] Detected ${personDetections.length} person(s)`);
         } catch (e) {
             window.reasoningConsole.logError('Person detection failed: ' + e.message);
             return null;
         }
 
-        // Step 1b: Detect hard hats / safety helmets in the frame
-        let hardHatDetections = [];
+        // Step 2: Detect helmets/hard hats
+        updateStatus('Detecting helmets...');
+        let helmetDetections = [];
         try {
-            updateStatus('Detecting safety helmets...');
-            const hatStart = Date.now();
-
-            // Try multiple terms — Moondream may respond better to different phrasings
             const hatTerms = ['helmet', 'hard hat', 'safety helmet'];
             for (const term of hatTerms) {
                 window.reasoningConsole.logApiCall('/detect (' + term + ')', 0);
-                const hatResult = await getActiveClient().detect(imageDataUrl, term);
-                const found = (hatResult.objects || []);
-                const hatLatency = Date.now() - hatStart;
-
+                const hResult = await activeClient.detect(imageDataUrl, term);
+                const found = hResult.objects || [];
                 if (found.length > 0) {
-                    hardHatDetections = found.map(h => ({
-                        x_min: h.x_min || 0,
-                        y_min: h.y_min || 0,
-                        x_max: h.x_max || 0,
-                        y_max: h.y_max || 0
-                    }));
-                    window.reasoningConsole.logApiCall('/detect (' + term + ')', hatLatency);
-                    window.reasoningConsole.logInfo(`Detected ${hardHatDetections.length} helmet(s) using term '${term}' [${hatLatency}ms]`);
-                    break; // Found helmets, stop trying other terms
-                } else {
-                    window.reasoningConsole.logInfo(`No detections for '${term}', trying next...`);
+                    helmetDetections = found;
+                    window.reasoningConsole.logInfo(`[${engineName}] Detected ${found.length} helmet(s) using '${term}'`);
+                    break;
                 }
             }
-
-            if (hardHatDetections.length === 0) {
-                window.reasoningConsole.logInfo('No helmets detected with any search term');
+            if (helmetDetections.length === 0) {
+                window.reasoningConsole.logInfo('No helmets detected');
             }
         } catch (e) {
             window.reasoningConsole.logError('Helmet detection failed: ' + e.message);
         }
 
-        if (detections.length === 0) {
-            // No people — scene is safe
-            drawPersonOverlays([], imageDataUrl, hardHatDetections);
-            return {
-                safetyRating: 5,
-                status: 'all_clear',
-                primaryConcern: 'No personnel detected',
-                recommendedAction: 'Continue monitoring',
-                detectedHazards: [],
-                people: [],
-                hardHats: hardHatDetections
-            };
-        }
-
-        // Step 2: For each person, crop and classify PPE
-        updateStatus(`Checking PPE on ${detections.length} person(s)...`);
-        const people = [];
-
-        for (let i = 0; i < detections.length; i++) {
-            const det = detections[i];
-            const bbox = {
+        // Step 3: Geometric matching — does each person have a helmet above their head?
+        const people = personDetections.map((det, i) => {
+            const personBox = {
                 x: det.x_min || 0,
                 y: det.y_min || 0,
                 w: (det.x_max || 1) - (det.x_min || 0),
                 h: (det.y_max || 1) - (det.y_min || 0)
             };
 
-            try {
-                // Crop the person region
-                const crop = cropPersonFromFrame(imageDataUrl, bbox);
-                window.reasoningConsole.logApiCall('/query (PPE)', 0);
-                const ppeStart = Date.now();
-                const result = await getActiveClient().ask(crop, PPE_PROMPT);
-                const ppeLatency = Date.now() - ppeStart;
-                window.reasoningConsole.logApiCall('/query (PPE)', ppeLatency);
+            // Check if any helmet overlaps with the top 40% of this person's bbox
+            const headRegionBottom = personBox.y + personBox.h * 0.4;
+            const hasHelmet = helmetDetections.some(hat => {
+                const hatCenterX = ((hat.x_min || 0) + (hat.x_max || 0)) / 2;
+                const hatCenterY = ((hat.y_min || 0) + (hat.y_max || 0)) / 2;
+                const withinX = hatCenterX >= personBox.x && hatCenterX <= personBox.x + personBox.w;
+                const withinY = hatCenterY >= personBox.y && hatCenterY <= headRegionBottom;
+                return withinX && withinY;
+            });
 
-                const parsed = parsePPEResponse(result.answer);
-                people.push({
-                    bbox: bbox,
-                    safe: parsed.safe,
-                    wearing: parsed.wearing,
-                    missing: parsed.missing,
-                    personIndex: i + 1
-                });
+            const safe = hasHelmet;
+            return {
+                bbox: personBox,
+                safe: safe,
+                wearing: hasHelmet ? ['hard hat'] : [],
+                missing: hasHelmet ? [] : ['hard hat'],
+                personIndex: i + 1
+            };
+        });
 
-                window.reasoningConsole.logDecision(
-                    `Person ${i + 1}: ${parsed.safe ? 'SAFE' : 'UNSAFE'}`,
-                    `Wearing: ${parsed.wearing.join(', ') || 'nothing detected'} | Missing: ${parsed.missing.join(', ') || 'none'} [${ppeLatency}ms]`
-                );
-            } catch (e) {
-                window.reasoningConsole.logError(`PPE check failed for person ${i + 1}: ${e.message}`);
-                // Default to unsafe if we can't classify
-                people.push({
-                    bbox: bbox,
-                    safe: false,
-                    wearing: [],
-                    missing: ['unknown (classification failed)'],
-                    personIndex: i + 1
-                });
-            }
-        }
-
-        // Step 3: Draw visual overlays + update summary
-        drawPersonOverlays(people, imageDataUrl, hardHatDetections);
+        // Step 4: Draw overlays
+        const hardHatBoxes = helmetDetections.map(h => ({
+            x_min: h.x_min || 0, y_min: h.y_min || 0,
+            x_max: h.x_max || 0, y_max: h.y_max || 0
+        }));
+        drawPersonOverlays(people, imageDataUrl, hardHatBoxes);
         drawCanvasSummaryBadge(people);
         updatePPESummary(people);
 
-        // Step 4: Derive overall safety rating
+        // Step 5: Derive overall safety rating
         const unsafeCount = people.filter(p => !p.safe).length;
         const totalPeople = people.length;
         const totalLatency = Date.now() - startTime;
 
         let rating, status, concern, action;
-        if (unsafeCount === 0) {
-            rating = 5;
-            status = 'all_clear';
-            concern = `All ${totalPeople} person(s) wearing proper PPE`;
+        if (totalPeople === 0) {
+            rating = 5; status = 'all_clear';
+            concern = 'No personnel detected';
             action = 'Continue monitoring';
-        } else if (unsafeCount === 1 && totalPeople > 1) {
-            rating = 2;
-            status = 'hazard';
-            concern = `${unsafeCount} of ${totalPeople} person(s) missing PPE`;
-            action = 'Ensure all personnel have hard hats and safety vests';
+        } else if (unsafeCount === 0) {
+            rating = 5; status = 'all_clear';
+            concern = `All ${totalPeople} person(s) wearing hard hats`;
+            action = 'Continue monitoring';
         } else if (unsafeCount >= totalPeople) {
-            rating = 1;
-            status = 'danger';
-            concern = `${unsafeCount} person(s) without proper PPE`;
-            action = 'STOP WORK - All personnel must wear hard hats and safety vests';
+            rating = 1; status = 'danger';
+            concern = `${unsafeCount} person(s) without hard hat`;
+            action = 'STOP WORK - All personnel must wear hard hats';
         } else {
-            rating = 2;
-            status = 'hazard';
-            concern = `${unsafeCount} of ${totalPeople} person(s) missing PPE`;
-            action = 'Ensure all personnel have hard hats and safety vests';
+            rating = 2; status = 'hazard';
+            concern = `${unsafeCount} of ${totalPeople} person(s) missing hard hat`;
+            action = 'Ensure all personnel have hard hats';
         }
 
         const hazards = people.filter(p => !p.safe).map(p =>
@@ -565,51 +501,11 @@ safe=true ONLY if BOTH a hard hat AND safety vest are clearly visible.`;
             recommendedAction: action,
             detectedHazards: hazards,
             people: people,
-            hardHats: hardHatDetections
+            hardHats: hardHatBoxes
         };
     }
 
-    function cropPersonFromFrame(imageDataUrl, bbox) {
-        // bbox coords are normalized 0-1 from Moondream detect
-        const img = new Image();
-        img.src = imageDataUrl;
-        const iw = img.width || video.videoWidth || 640;
-        const ih = img.height || video.videoHeight || 480;
 
-        const px = Math.round(bbox.x * iw);
-        const py = Math.round(bbox.y * ih);
-        const pw = Math.max(10, Math.round(bbox.w * iw));
-        const ph = Math.max(10, Math.round(bbox.h * ih));
-
-        const c = document.createElement('canvas');
-        c.width = pw;
-        c.height = ph;
-        c.getContext('2d').drawImage(img, px, py, pw, ph, 0, 0, pw, ph);
-        return c.toDataURL('image/jpeg', 0.85);
-    }
-
-    function parsePPEResponse(text) {
-        try {
-            let jsonStr = text;
-            const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (fenceMatch) jsonStr = fenceMatch[1];
-            const braceStart = jsonStr.indexOf('{');
-            const braceEnd = jsonStr.lastIndexOf('}');
-            if (braceStart !== -1 && braceEnd !== -1) {
-                jsonStr = jsonStr.substring(braceStart, braceEnd + 1);
-            }
-            const parsed = JSON.parse(jsonStr);
-            return {
-                safe: !!parsed.safe,
-                wearing: Array.isArray(parsed.wearing) ? parsed.wearing : [],
-                missing: Array.isArray(parsed.missing) ? parsed.missing : []
-            };
-        } catch (e) {
-            window.reasoningConsole.logError('Failed to parse PPE response: ' + e.message);
-            // Default to unsafe if parse fails
-            return { safe: false, wearing: [], missing: ['unknown'] };
-        }
-    }
 
     function drawPersonOverlays(people, imageDataUrl, hardHats) {
         overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
