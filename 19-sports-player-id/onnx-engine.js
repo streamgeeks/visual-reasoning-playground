@@ -302,11 +302,11 @@
         for (var i = 0; i < numDets; i++) {
             var offset = i * cols;
 
-            // Bbox (in model input pixel coordinates)
-            var cx = data[offset + 0];
-            var cy = data[offset + 1];
-            var w = data[offset + 2];
-            var h = data[offset + 3];
+            // Bbox values from end2end model
+            var v0 = data[offset + 0];
+            var v1 = data[offset + 1];
+            var v2 = data[offset + 2];
+            var v3 = data[offset + 3];
 
             // Confidence score
             var conf = data[offset + 4];
@@ -314,6 +314,24 @@
 
             // Class ID (end2end models output class index directly)
             var classId = Math.round(data[offset + 5]);
+
+            // Determine bbox format: end2end uses [x1, y1, x2, y2] (corner format)
+            // Regular YOLO uses [cx, cy, w, h] (center format)
+            // Heuristic: if v2 > inputWidth * 0.5 and v3 > inputHeight * 0.5, likely corner format
+            var bx, by, bw, bh;
+            if (v2 > v0 && v3 > v1 && v2 <= this.inputWidth + 1 && v3 <= this.inputHeight + 1) {
+                // Corner format: [x1, y1, x2, y2]
+                bx = v0 * scaleX;
+                by = v1 * scaleY;
+                bw = (v2 - v0) * scaleX;
+                bh = (v3 - v1) * scaleY;
+            } else {
+                // Center format: [cx, cy, w, h]
+                bx = (v0 - v2 / 2) * scaleX;
+                by = (v1 - v3 / 2) * scaleY;
+                bw = v2 * scaleX;
+                bh = v3 * scaleY;
+            }
 
             // Keypoints: starting at offset 6, groups of 3 (x, y, conf)
             var keypoints = [];
@@ -327,15 +345,22 @@
             }
 
             detections.push({
-                x: (cx - w / 2) * scaleX,
-                y: (cy - h / 2) * scaleY,
-                w: w * scaleX,
-                h: h * scaleY,
+                x: bx,
+                y: by,
+                w: bw,
+                h: bh,
                 confidence: conf,
                 class: this.classNames[classId] || ('class_' + classId),
                 classId: classId,
                 keypoints: keypoints
             });
+        }
+
+        if (detections.length > 0) {
+            console.log('[ONNX] Detected ' + detections.length + ' objects. First:', 
+                JSON.stringify({cls: detections[0].class, conf: detections[0].confidence.toFixed(2), x: Math.round(detections[0].x), y: Math.round(detections[0].y), w: Math.round(detections[0].w), h: Math.round(detections[0].h)}));
+        } else {
+            console.log('[ONNX] No detections above threshold');
         }
 
         return { detections: detections, keypoints: detections.length > 0 ? detections[0].keypoints : [] };
