@@ -1109,20 +1109,36 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         uploadArea.classList.toggle('visible', mode === 'upload');
         video.style.display = (mode === 'camera' || mode === 'sample') ? '' : 'none';
 
+        // Stop camera stream when leaving camera mode
+        if (mode !== 'camera' && currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+            video.srcObject = null;
+        }
+
         if (mode === 'upload') {
+            // Clear video src from sample mode
+            video.removeAttribute('src');
+            video.load();
             window.reasoningConsole.logInfo('Switched to image upload mode');
         } else if (mode === 'sample') {
             window.reasoningConsole.logInfo('Switched to sample video mode');
             loadSampleVideo();
         } else {
-            window.reasoningConsole.logInfo('Switched to live camera mode');
+            // Camera mode — clear sample video src and start camera
+            video.removeAttribute('src');
+            video.load();
             uploadedImages = [];
             uploadIndex = 0;
+            window.reasoningConsole.logInfo('Switched to live camera mode');
+            startCamera();
         }
     }
 
     // ── Sample Video ──
     function loadSampleVideo() {
+        // Clear any srcObject from camera
+        video.srcObject = null;
         video.src = 'Ai-saftey-sample-video.mp4';
         video.loop = true;
         video.muted = true;
@@ -1271,23 +1287,6 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
     updateThresholdDots();
     updatePresetInfo();
 
-    // Initialize VideoSourceAdapter or start camera directly
-    if (window.VideoSourceAdapter) {
-        VideoSourceAdapter.init({
-            videoElement: video,
-            toolId: 'ai-safety',
-            insertInto: '.video-container',
-            onSourceChange: (source) => {
-                cameraSelect.disabled = source === 'sample';
-                refreshCamerasBtn.disabled = source === 'sample';
-                if (source === 'camera') enumerateCameras();
-                window.reasoningConsole.logInfo(`Switched to ${source === 'camera' ? 'live camera' : 'sample video'}`);
-            }
-        });
-        VideoSourceAdapter.switchToCamera().catch(() => {
-            VideoSourceAdapter.switchToSample();
-        });
-    } else {
-        await startCamera();
-    }
+    // Default to sample video mode on load
+    switchMode('sample');
 });
