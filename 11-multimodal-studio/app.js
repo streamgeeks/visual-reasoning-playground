@@ -43,6 +43,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: true,
+        showOpenAI: true,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                moondreamClient = new MoondreamClient(keys.moondream);
+            }
+            if (keys.openai && audioProcessor) {
+                audioProcessor.setOpenAIKey(keys.openai);
+            }
+        }
+    });
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.control-panel h2',
+        toolId: 'multimodal-studio',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    
+    // Auto-setup global client for backward compatibility
+    window.vlmToggle.autoSetupGlobalClient();
+        requireMoondream: true,
+        requireOpenAI: true,
         onKeysChanged: (keys) => {
             if (keys.moondream) {
                 moondreamClient = new MoondreamClient(keys.moondream);

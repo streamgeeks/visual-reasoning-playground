@@ -51,8 +51,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     let durationInterval = null;
     let sessionStart = null;
     let mode = 'camera'; // 'camera' or 'upload'
-    let uploadedImages = [];
     let uploadIndex = 0;
+
+    // VLM Engine: 'moondream' or 'openai'
+    let vlmEngine = 'moondream';
 
     // Alarm state machine: clear | warning | alarming | acknowledged
     let alarmState = 'clear';
@@ -189,12 +191,17 @@ Rating scale:
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
-        onKeysChanged: (keys) => {
             if (keys.moondream) {
                 client = new MoondreamClient(keys.moondream);
                 window.reasoningConsole.logInfo('Moondream API key configured');
                 updateStatus('Ready - Start monitoring');
             }
+            if (keys.openai) {
+                window.reasoningConsole.logInfo('OpenAI API key configured');
+                updateStatus('Ready - Start monitoring');
+            }
+        }
+    });
         }
     });
 
@@ -270,11 +277,13 @@ Rating scale:
         return c.toDataURL('image/jpeg', 0.7);
     }
 
-    // ── Safety analysis via Moondream ──
-    async function analyzeSafety(imageDataUrl) {
-        if (!client) {
-            window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your Moondream API key', true);
+    }
+
+    // ── Safety analysis via OpenAI Vision ──
+    async function analyzeSafetyOpenAI(imageDataUrl) {
+        if (!window.apiKeyManager.hasOpenAIKey()) {
+            window.reasoningConsole.logError('No OpenAI API key configured');
+            updateStatus('Please configure your OpenAI API key', true);
             window.apiKeyManager.showModal();
             return null;
         }
@@ -283,15 +292,55 @@ Rating scale:
         const startTime = Date.now();
 
         try {
-            window.reasoningConsole.logApiCall('/query', 0);
-            updateStatus('Analyzing frame...');
+            window.reasoningConsole.logApiCall('/openai/vision', 0);
+            updateStatus('Analyzing frame with GPT-4o-mini...');
 
-            const result = await client.ask(imageDataUrl, preset.prompt);
+            // Remove the data URL prefix
+            const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + window.apiKeyManager.getOpenAIKey()
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: preset.prompt
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: `data:image/jpeg;base64,${base64Data}`,
+                                        detail: 'low'
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error('OpenAI API error: ' + response.status + ' - ' + err);
+            }
+
+            const data = await response.json();
             const latency = Date.now() - startTime;
-            window.reasoningConsole.logApiCall('/query', latency);
+            window.reasoningConsole.logApiCall('/openai/vision', latency);
+
+            const answer = data.choices[0]?.message?.content || '';
 
             // Parse the JSON response from the model
-            const assessment = parseSafetyResponse(result.answer);
+            const assessment = parseSafetyResponse(answer);
             if (assessment) {
                 window.reasoningConsole.logDecision(
                     `Safety: ${assessment.safetyRating}/5 (${RATING_META[assessment.safetyRating]?.label || 'Unknown'})`,
@@ -301,11 +350,164 @@ Rating scale:
             return assessment;
         } catch (error) {
             const latency = Date.now() - startTime;
-            window.reasoningConsole.logError(`Analysis failed (${latency}ms): ${error.message}`);
+            window.reasoningConsole.logError(`OpenAI analysis failed (${latency}ms): ${error.message}`);
             updateStatus('Analysis error: ' + error.message, true);
             return null;
         }
     }
+
+    // ── Construction PPE Detection via OpenAI (single-call approach) ──
+    async function analyzeConstructionSafetyOpenAI(imageDataUrl) {
+        if (!window.apiKeyManager.hasOpenAIKey()) {
+            window.reasoningConsole.logError('No OpenAI API key configured');
+            updateStatus('Please configure your OpenAI API key', true);
+            window.apiKeyManager.showModal();
+            return null;
+        }
+
+        const startTime = Date.now();
+        updateStatus('Analyzing PPE with GPT-4o-mini...');
+        window.reasoningConsole.logApiCall('/openai/vision', 0);
+
+        // Single-call approach: detect people AND classify PPE in one request
+        const ppePrompt = `Analyze this construction site image carefully. For each person visible, determine:
+1. Are they wearing a hard hat on their head? (yes/no)
+2. Are they wearing a safety vest/hi-vis vest? (yes/no)
+3. Overall safety status (safe if BOTH hard hat AND vest are visible)
+
+Respond with ONLY a valid JSON array (no markdown, no backticks):
+[{"person": 1, "hard_hat": true/false, "vest": true/false, "safe": true/false, "location": "brief description"}]
+
+If no people are visible, return: [{"person": 0, "hard_hat": false, "vest": false, "safe": true, "location": "no people detected"}]`;
+
+        try {
+            // Remove the data URL prefix
+            const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + window.apiKeyManager.getOpenAIKey()
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: ppePrompt },
+                                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}`, detail: 'low' } }
+                            ]
+                        }
+                    ],
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error('OpenAI API error: ' + response.status);
+            }
+
+            const data = await response.json();
+            const latency = Date.now() - startTime;
+            window.reasoningConsole.logApiCall('/openai/vision', latency);
+
+            const answer = data.choices[0]?.message?.content || '';
+            window.reasoningConsole.logInfo('OpenAI PPE response: ' + answer.substring(0, 200));
+
+            // Parse the PPE response
+            const people = parseOpenAIPPEResponse(answer);
+
+            // Draw overlays
+            drawPersonOverlays(people, imageDataUrl);
+
+            // Calculate overall safety rating
+            const unsafeCount = people.filter(p => !p.safe).length;
+            const totalPeople = people.length;
+
+            let rating, status, concern, action;
+            if (totalPeople === 0 || people[0]?.person === 0) {
+                rating = 5;
+                status = 'all_clear';
+                concern = 'No personnel detected';
+                action = 'Continue monitoring';
+            } else if (unsafeCount === 0) {
+                rating = 5;
+                status = 'all_clear';
+                concern = `All ${totalPeople} person(s) wearing proper PPE`;
+                action = 'Continue monitoring';
+            } else if (unsafeCount === 1 && totalPeople > 1) {
+                rating = 2;
+                status = 'hazard';
+                concern = `${unsafeCount} of ${totalPeople} person(s) missing PPE`;
+                action = 'Ensure all personnel have hard hats and safety vests';
+            } else {
+                rating = 1;
+                status = 'danger';
+                concern = `${unsafeCount} person(s) without proper PPE`;
+                action = 'STOP WORK - All personnel must wear hard hats and safety vests';
+            }
+
+            const hazards = people.filter(p => !p.safe).map(p =>
+                `Person ${p.person}: Missing ${!p.hard_hat ? 'hard hat' : ''} ${!p.hard_hat && !p.vest ? '+' : ''} ${!p.vest ? 'vest' : ''}`
+            ).filter(h => h.includes('Missing'));
+
+            window.reasoningConsole.logDecision(
+                `Overall: ${rating}/5 (${RATING_META[rating]?.label})`,
+                `${concern} [${latency}ms total]`
+            );
+
+            return {
+                safetyRating: rating,
+                status: status,
+                primaryConcern: concern,
+                recommendedAction: action,
+                detectedHazards: hazards,
+                people: people
+            };
+        } catch (error) {
+            window.reasoningConsole.logError('OpenAI PPE analysis failed: ' + error.message);
+            return null;
+        }
+    }
+
+    function parseOpenAIPPEResponse(text) {
+        try {
+            // Try to extract JSON array from response
+            let jsonStr = text;
+            const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (fenceMatch) jsonStr = fenceMatch[1];
+
+            const braceStart = jsonStr.indexOf('[');
+            const braceEnd = jsonStr.lastIndexOf(']');
+            if (braceStart !== -1 && braceEnd !== -1) {
+                jsonStr = jsonStr.substring(braceStart, braceEnd + 1);
+            }
+
+            const parsed = JSON.parse(jsonStr);
+            if (!Array.isArray(parsed)) return [];
+
+            return parsed.map(p => ({
+                bbox: { x: 0.1, y: 0.1, w: 0.2, h: 0.3 }, // Approximate - OpenAI doesn't provide exact bboxes
+                safe: !!p.safe,
+                wearing: [
+                    ...(p.hard_hat ? ['hard hat'] : []),
+                    ...(p.vest ? ['safety vest'] : [])
+                ],
+                missing: [
+                    ...(!p.hard_hat ? ['hard hat'] : []),
+                    ...(!p.vest ? ['safety vest'] : [])
+                ],
+                personIndex: p.person || 1
+            }));
+        } catch (e) {
+            window.reasoningConsole.logError('Failed to parse OpenAI PPE response: ' + e.message);
+            return [];
+        }
+    }
+JS|
 
     function parseSafetyResponse(text) {
         try {
@@ -354,11 +556,19 @@ Rating scale:
     }
 
     // ── Construction PPE Detection (person-level safe/unsafe) ──
-    const PPE_PROMPT = `Look at this person carefully. Are they wearing construction safety PPE?
-Check for: 1) Hard hat on their head  2) Safety vest / hi-vis vest on their body.
-Respond with ONLY valid JSON (no markdown, no backticks):
-{"safe": true or false, "wearing": ["items they have"], "missing": ["items they lack"]}
-If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
+    // PROMPT FIXED: Made more adversarial to prevent false 'safe' responses from small VLMs
+    const PPE_PROMPT = `You are a SAFETY CRITICAL PPE inspector. Your job is to detect missing safety equipment.
+
+CRITICAL RULES:
+1. ONLY say safe=true if you can CLEARLY SEE both a hard hat AND a safety vest on this person
+2. If you cannot clearly see both items, you MUST say safe=false
+3. When in doubt, ALWAYS choose unsafe - false positives are dangerous
+4. Do not be fooled by similar-looking items (baseball caps are NOT hard hats)
+
+Look carefully at this person and respond with ONLY valid JSON (no markdown, no backticks):
+{"safe": true or false, "wearing": ["items clearly visible on this person"], "missing": ["items not clearly visible"]}
+
+If you see ANY uncertainty about the presence of BOTH a hard hat AND a safety vest, safe MUST be false.`;
 
     async function analyzeConstructionSafety(imageDataUrl) {
         if (!client) return null;
@@ -818,7 +1028,8 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
                 threshold: thresholdSelect.value,
                 consecutive: consecutiveInput.value,
                 audio: audioToggle.checked,
-                notif: notifToggle.checked
+                notif: notifToggle.checked,
+                vlmEngine: vlmEngine
             }));
         } catch (e) { /* ignore */ }
     }
@@ -834,8 +1045,24 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
                 if (s.consecutive) consecutiveInput.value = s.consecutive;
                 if (s.audio !== undefined) audioToggle.checked = s.audio;
                 if (s.notif !== undefined) notifToggle.checked = s.notif;
-                updatePresetInfo();
                 updateThresholdDots();
+
+                // Load VLM engine preference
+                if (s.vlmEngine) {
+                    vlmEngine = s.vlmEngine;
+                    document.getElementById('vlmMoondreamBtn').classList.toggle('active', vlmEngine === 'moondream');
+                    document.getElementById('vlmOpenAIBtn').classList.toggle('active', vlmEngine === 'openai');
+                    document.getElementById('vlmInfo').textContent = vlmEngine === 'openai'
+                        ? 'Using GPT-4o-mini (better accuracy, paid)'
+                        : 'Using Moondream API (free tier)';
+                }
+
+                // Sync preset buttons with loaded value
+                document.querySelectorAll('.preset-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.preset === presetSelect.value);
+                });
+            }
+        } catch (e) { /* ignore */ }
             }
         } catch (e) { /* ignore */ }
     }
@@ -985,10 +1212,20 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
     // ── Monitoring loop ──
     async function startMonitoring() {
-        if (!client) {
-            updateStatus('Please configure API key', true);
-            window.apiKeyManager.showModal();
-            return;
+        // Check for appropriate API key based on selected VLM engine
+        if (vlmEngine === 'moondream') {
+            if (!client) {
+                updateStatus('Please configure Moondream API key', true);
+                window.apiKeyManager.showModal();
+                return;
+            }
+        } else {
+            // OpenAI
+            if (!window.apiKeyManager.hasOpenAIKey()) {
+                updateStatus('Please configure OpenAI API key', true);
+                window.apiKeyManager.showModal();
+                return;
+            }
         }
 
         monitoring = true;
@@ -1024,12 +1261,22 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
         const thumbnail = mode === 'upload' ? imageDataUrl : captureThumbnail();
 
-        // Use person-level PPE detection for construction preset
+        // Dispatch to selected VLM engine
         let assessment;
+        const useOpenAI = vlmEngine === 'openai';
+
         if (presetSelect.value === 'construction') {
-            assessment = await analyzeConstructionSafety(imageDataUrl);
+            if (useOpenAI) {
+                assessment = await analyzeConstructionSafetyOpenAI(imageDataUrl);
+            } else {
+                assessment = await analyzeConstructionSafety(imageDataUrl);
+            }
         } else {
-            assessment = await analyzeSafety(imageDataUrl);
+            if (useOpenAI) {
+                assessment = await analyzeSafetyOpenAI(imageDataUrl);
+            } else {
+                assessment = await analyzeSafety(imageDataUrl);
+            }
         }
 
         if (assessment) {
@@ -1061,10 +1308,20 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
     // Snap: single frame analysis
     async function snapAnalysis() {
-        if (!client) {
-            updateStatus('Please configure API key', true);
-            window.apiKeyManager.showModal();
-            return;
+        // Check for appropriate API key based on selected VLM engine
+        if (vlmEngine === 'moondream') {
+            if (!client) {
+                updateStatus('Please configure Moondream API key', true);
+                window.apiKeyManager.showModal();
+                return;
+            }
+        } else {
+            // OpenAI
+            if (!window.apiKeyManager.hasOpenAIKey()) {
+                updateStatus('Please configure OpenAI API key', true);
+                window.apiKeyManager.showModal();
+                return;
+            }
         }
 
         snapBtn.disabled = true;
@@ -1079,11 +1336,22 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
         const thumbnail = mode === 'upload' ? imageDataUrl : captureThumbnail();
 
+        // Dispatch to selected VLM engine
         let assessment;
+        const useOpenAI = vlmEngine === 'openai';
+
         if (presetSelect.value === 'construction') {
-            assessment = await analyzeConstructionSafety(imageDataUrl);
+            if (useOpenAI) {
+                assessment = await analyzeConstructionSafetyOpenAI(imageDataUrl);
+            } else {
+                assessment = await analyzeConstructionSafety(imageDataUrl);
+            }
         } else {
-            assessment = await analyzeSafety(imageDataUrl);
+            if (useOpenAI) {
+                assessment = await analyzeSafetyOpenAI(imageDataUrl);
+            } else {
+                assessment = await analyzeSafety(imageDataUrl);
+            }
         }
 
         if (assessment) {
@@ -1150,8 +1418,13 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
     // ── Preset info update ──
     function updatePresetInfo() {
-        const preset = PRESETS[presetSelect.value];
         presetInfo.textContent = preset.description;
+
+        // Show/hide PPE legend for construction mode
+        const ppeLegend = document.getElementById('ppeLegend');
+        if (ppeLegend) {
+            ppeLegend.style.display = presetSelect.value === 'construction' ? '' : 'none';
+        }
     }
 
     // ── Event listeners ──
@@ -1180,16 +1453,61 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
     });
 
-    presetSelect.addEventListener('change', () => {
-        updatePresetInfo();
-        saveSettings();
-        // Show/hide PPE legend for construction mode
-        const ppeLegend = document.getElementById('ppeLegend');
-        if (ppeLegend) ppeLegend.style.display = presetSelect.value === 'construction' ? '' : 'none';
-        // Clear overlays when switching presets
-        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-        window.reasoningConsole.logInfo(`Preset changed to: ${PRESETS[presetSelect.value].name}`);
     });
+
+    // Preset button click handlers
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Update active state
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update hidden select value
+            presetSelect.value = btn.dataset.preset;
+
+            updatePresetInfo();
+            saveSettings();
+
+            // Show/hide PPE legend for construction mode
+            const ppeLegend = document.getElementById('ppeLegend');
+            if (ppeLegend) ppeLegend.style.display = presetSelect.value === 'construction' ? '' : 'none';
+
+            // Clear overlays when switching presets
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            window.reasoningConsole.logInfo(`Preset changed to: ${PRESETS[presetSelect.value].name}`);
+        });
+    });
+
+    // VLM engine toggle handlers
+    document.getElementById('vlmMoondreamBtn').addEventListener('click', () => {
+        vlmEngine = 'moondream';
+        document.getElementById('vlmMoondreamBtn').classList.add('active');
+        document.getElementById('vlmOpenAIBtn').classList.remove('active');
+        document.getElementById('vlmInfo').textContent = 'Using Moondream API (free tier)';
+
+        // Check if Moondream key exists, if not prompt for it
+        if (!window.apiKeyManager.hasMoondreamKey()) {
+            window.apiKeyManager.showModal();
+        }
+        saveSettings();
+        window.reasoningConsole.logInfo('Switched to Moondream VLM');
+    });
+
+    document.getElementById('vlmOpenAIBtn').addEventListener('click', () => {
+        vlmEngine = 'openai';
+        document.getElementById('vlmOpenAIBtn').classList.add('active');
+        document.getElementById('vlmMoondreamBtn').classList.remove('active');
+        document.getElementById('vlmInfo').textContent = 'Using GPT-4o-mini (better accuracy, paid)';
+
+        // Check if OpenAI key exists, if not prompt for it
+        if (!window.apiKeyManager.hasOpenAIKey()) {
+            window.apiKeyManager.showModal();
+        }
+        saveSettings();
+        window.reasoningConsole.logInfo('Switched to OpenAI GPT-4o-mini VLM');
+    });
+
+NK|
 
     fpmSelect.addEventListener('change', saveSettings);
 

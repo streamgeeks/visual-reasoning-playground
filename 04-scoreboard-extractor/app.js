@@ -36,6 +36,29 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
+        showOpenAI: true,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+                updateStatus('Ready to extract');
+            }
+        }
+    });
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.side-panel h3',
+        toolId: 'scoreboard-extractor',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    
+    // Auto-setup global client for backward compatibility
+    window.vlmToggle.autoSetupGlobalClient();
+        requireMoondream: true,
+        requireOpenAI: false,
         onKeysChanged: (keys) => {
             if (keys.moondream) {
                 client = new MoondreamClient(keys.moondream);

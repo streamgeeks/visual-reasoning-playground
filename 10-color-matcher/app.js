@@ -39,6 +39,29 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
+        showOpenAI: true,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                client = new MoondreamClient(keys.moondream);
+                window.reasoningConsole.logInfo('Moondream API key configured');
+                checkReadyState();
+            }
+        }
+    });
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.control-panel h2',
+        toolId: 'color-matcher',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    
+    // Auto-setup global client for backward compatibility
+    window.vlmToggle.autoSetupGlobalClient();
+        requireMoondream: true,
+        requireOpenAI: false,
         onKeysChanged: (keys) => {
             if (keys.moondream) {
                 client = new MoondreamClient(keys.moondream);

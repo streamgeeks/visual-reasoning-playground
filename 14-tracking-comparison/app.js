@@ -63,6 +63,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
+        showOpenAI: true,
+        onKeysChanged: (keys) => {
+            if (keys.moondream) {
+                moondreamClient = new MoondreamClient(keys.moondream);
+                if (window.reasoningConsole) {
+                    window.reasoningConsole.logInfo('Moondream API key configured');
+                }
+            }
+        }
+    });
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.control-panel h2',
+        toolId: 'tracking-comparison',
+        onChange: (engine) => {
+            if (window.reasoningConsole) {
+                window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+            }
+        }
+    });
+    
+    // Auto-setup global client for backward compatibility
+    window.vlmToggle.autoSetupGlobalClient();
+    window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
+        requireOpenAI: false,
         onKeysChanged: (keys) => {
             if (keys.moondream) {
                 moondreamClient = new MoondreamClient(keys.moondream);
