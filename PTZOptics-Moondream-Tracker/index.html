@@ -125,19 +125,31 @@
                 <h3 class="section-heading">Centering Precision</h3>
                 <div class="settings-row">
                     <div class="control-group half">
-                        <label for="deadzoneX">Horizontal Deadzone: <span id="deadzoneXValue">5</span>%</label>
-                        <input type="range" id="deadzoneX" class="slider settings-input" min="1" max="50" step="1" value="5" />
-                        <small>Smaller = tighter centering</small>
+                        <label for="deadzoneX">Inner Deadzone H: <span id="deadzoneXValue">10</span>%</label>
+                        <input type="range" id="deadzoneX" class="slider settings-input" min="1" max="50" step="1" value="10" />
+                        <small>Camera STOPS inside this zone</small>
                     </div>
                     <div class="control-group half">
-                        <label for="deadzoneY">Vertical Deadzone: <span id="deadzoneYValue">5</span>%</label>
-                        <input type="range" id="deadzoneY" class="slider settings-input" min="1" max="50" step="1" value="5" />
-                        <small>Smaller = tighter centering</small>
+                        <label for="deadzoneY">Inner Deadzone V: <span id="deadzoneYValue">10</span>%</label>
+                        <input type="range" id="deadzoneY" class="slider settings-input" min="1" max="50" step="1" value="10" />
+                        <small>Camera STOPS inside this zone</small>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="outerDeadzoneX">Outer Deadzone H: <span id="outerDeadzoneXValue">25</span>%</label>
+                        <input type="range" id="outerDeadzoneX" class="slider settings-input" min="5" max="80" step="1" value="25" />
+                        <small>90% speed reduction in this band</small>
+                    </div>
+                    <div class="control-group half">
+                        <label for="outerDeadzoneY">Outer Deadzone V: <span id="outerDeadzoneYValue">25</span>%</label>
+                        <input type="range" id="outerDeadzoneY" class="slider settings-input" min="5" max="80" step="1" value="25" />
+                        <small>90% speed reduction in this band</small>
                     </div>
                 </div>
                 <small class="help-text">
-                    <strong>Tip:</strong> Set center target to where you want the object (50% = true center). 
-                    Use smaller deadzone (1-5%) for precise centering, larger (15-30%) for smoother tracking.
+                    <strong>Dual Deadzone:</strong> Inner zone (green) = camera stops. Between inner &amp; outer (amber) = 10% speed.
+                    Beyond outer = 50% speed. This prevents overshooting the target.
                 </small>
                 
                 <h3 class="section-heading">Auto-Zoom (Headroom Control)</h3>

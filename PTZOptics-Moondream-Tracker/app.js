@@ -15,8 +15,10 @@ $(function () {
             detectionRate: 0.5,
             panSpeed: 3,
             tiltSpeed: 3,
-            deadzoneX: 12,
-            deadzoneY: 12
+            deadzoneX: 15,
+            deadzoneY: 15,
+            outerDeadzoneX: 35,
+            outerDeadzoneY: 35
         },
         precise: {
             name: 'Precise Centering',
@@ -24,8 +26,10 @@ $(function () {
             detectionRate: 1.5,
             panSpeed: 6,
             tiltSpeed: 6,
-            deadzoneX: 2,
-            deadzoneY: 2
+            deadzoneX: 4,
+            deadzoneY: 4,
+            outerDeadzoneX: 12,
+            outerDeadzoneY: 12
         },
         balanced: {
             name: 'Balanced',
@@ -33,8 +37,10 @@ $(function () {
             detectionRate: 1.0,
             panSpeed: 5,
             tiltSpeed: 5,
-            deadzoneX: 5,
-            deadzoneY: 5
+            deadzoneX: 10,
+            deadzoneY: 10,
+            outerDeadzoneX: 25,
+            outerDeadzoneY: 25
         },
         fast: {
             name: 'Fast Response',
@@ -43,7 +49,9 @@ $(function () {
             panSpeed: 8,
             tiltSpeed: 8,
             deadzoneX: 8,
-            deadzoneY: 8
+            deadzoneY: 8,
+            outerDeadzoneX: 20,
+            outerDeadzoneY: 20
         },
         minimal: {
             name: 'Minimal Movement',
@@ -51,11 +59,12 @@ $(function () {
             detectionRate: 0.3,
             panSpeed: 4,
             tiltSpeed: 4,
-            deadzoneX: 15,
-            deadzoneY: 15
+            deadzoneX: 20,
+            deadzoneY: 20,
+            outerDeadzoneX: 40,
+            outerDeadzoneY: 40
         }
     };
-
     let settings = {
         moondreamApiKey: localStorage.getItem('moondreamApiKey') || '',
         cameraIP: localStorage.getItem('cameraIP') || '192.168.1.19',
@@ -69,8 +78,10 @@ $(function () {
         tiltSpeed: parseInt(localStorage.getItem('tiltSpeed')) || 5,
         centerOffsetX: parseFloat(localStorage.getItem('centerOffsetX')) || 50,
         centerOffsetY: parseFloat(localStorage.getItem('centerOffsetY')) || 50,
-        deadzoneX: parseFloat(localStorage.getItem('deadzoneX')) || 5,
-        deadzoneY: parseFloat(localStorage.getItem('deadzoneY')) || 5,
+        deadzoneX: parseFloat(localStorage.getItem('deadzoneX')) || 10,
+        deadzoneY: parseFloat(localStorage.getItem('deadzoneY')) || 10,
+        outerDeadzoneX: parseFloat(localStorage.getItem('outerDeadzoneX')) || 25,
+        outerDeadzoneY: parseFloat(localStorage.getItem('outerDeadzoneY')) || 25,
         autoZoomEnabled: localStorage.getItem('autoZoomEnabled') === 'true',
         minHeadroom: parseFloat(localStorage.getItem('minHeadroom')) || 10,
         maxHeadroom: parseFloat(localStorage.getItem('maxHeadroom')) || 30,
@@ -164,6 +175,10 @@ $(function () {
         $('#deadzoneXValue').text(settings.deadzoneX);
         $('#deadzoneY').val(settings.deadzoneY);
         $('#deadzoneYValue').text(settings.deadzoneY);
+        $('#outerDeadzoneX').val(settings.outerDeadzoneX);
+        $('#outerDeadzoneXValue').text(settings.outerDeadzoneX);
+        $('#outerDeadzoneY').val(settings.outerDeadzoneY);
+        $('#outerDeadzoneYValue').text(settings.outerDeadzoneY);
         
         $('#autoZoomEnabled').prop('checked', settings.autoZoomEnabled);
         $('#minHeadroom').val(settings.minHeadroom);
@@ -191,6 +206,10 @@ $(function () {
         ptzController.setDeadzone({
             horizontal: settings.deadzoneX,
             vertical: settings.deadzoneY
+        });
+        ptzController.setOuterDeadzone({
+            horizontal: settings.outerDeadzoneX,
+            vertical: settings.outerDeadzoneY
         });
         
         setupEventListeners();
@@ -331,6 +350,26 @@ $(function () {
             switchToCustomMode();
             renderDeadzone();
         });
+
+        $('#outerDeadzoneX').on('input', function() {
+            const val = parseFloat($(this).val());
+            settings.outerDeadzoneX = val;
+            $('#outerDeadzoneXValue').text(val);
+            localStorage.setItem('outerDeadzoneX', val.toString());
+            ptzController.setOuterDeadzone({ horizontal: val });
+            switchToCustomMode();
+            renderDeadzone();
+        });
+
+        $('#outerDeadzoneY').on('input', function() {
+            const val = parseFloat($(this).val());
+            settings.outerDeadzoneY = val;
+            $('#outerDeadzoneYValue').text(val);
+            localStorage.setItem('outerDeadzoneY', val.toString());
+            ptzController.setOuterDeadzone({ vertical: val });
+            switchToCustomMode();
+            renderDeadzone();
+        });
         
         $('#autoZoomEnabled').on('change', function() {
             settings.autoZoomEnabled = $(this).is(':checked');
@@ -436,6 +475,18 @@ $(function () {
         $('#deadzoneYValue').text(preset.deadzoneY);
         localStorage.setItem('deadzoneY', preset.deadzoneY.toString());
         ptzController.setDeadzone({ vertical: preset.deadzoneY });
+
+        settings.outerDeadzoneX = preset.outerDeadzoneX;
+        $('#outerDeadzoneX').val(preset.outerDeadzoneX);
+        $('#outerDeadzoneXValue').text(preset.outerDeadzoneX);
+        localStorage.setItem('outerDeadzoneX', preset.outerDeadzoneX.toString());
+        ptzController.setOuterDeadzone({ horizontal: preset.outerDeadzoneX });
+
+        settings.outerDeadzoneY = preset.outerDeadzoneY;
+        $('#outerDeadzoneY').val(preset.outerDeadzoneY);
+        $('#outerDeadzoneYValue').text(preset.outerDeadzoneY);
+        localStorage.setItem('outerDeadzoneY', preset.outerDeadzoneY.toString());
+        ptzController.setOuterDeadzone({ vertical: preset.outerDeadzoneY });
         
         if (isTracking) {
             clearInterval(detectionInterval);
@@ -641,28 +692,58 @@ $(function () {
         
         const centerX = (settings.centerOffsetX / 100) * video.videoWidth;
         const centerY = (settings.centerOffsetY / 100) * video.videoHeight;
-        const halfDeadzoneW = (settings.deadzoneX / 100) * video.videoWidth / 2;
-        const halfDeadzoneH = (settings.deadzoneY / 100) * video.videoHeight / 2;
-        
-        ctx.strokeStyle = 'rgba(42, 157, 143, 0.6)';
+
+        // Outer deadzone (larger zone — 50% speed reduction beyond this)
+        const halfOuterW = (settings.outerDeadzoneX / 100) * video.videoWidth / 2;
+        const halfOuterH = (settings.outerDeadzoneY / 100) * video.videoHeight / 2;
+
+        // Draw outer deadzone — amber/yellow dashed
+        ctx.strokeStyle = 'rgba(230, 176, 50, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([12, 6]);
+        ctx.strokeRect(
+            centerX - halfOuterW,
+            centerY - halfOuterH,
+            halfOuterW * 2,
+            halfOuterH * 2
+        );
+        ctx.setLineDash([]);
+
+        // Fill outer zone (between inner and outer) — faint amber
+        ctx.fillStyle = 'rgba(230, 176, 50, 0.05)';
+        ctx.fillRect(
+            centerX - halfOuterW,
+            centerY - halfOuterH,
+            halfOuterW * 2,
+            halfOuterH * 2
+        );
+
+        // Inner deadzone (smaller zone — camera STOPS here)
+        const halfInnerW = (settings.deadzoneX / 100) * video.videoWidth / 2;
+        const halfInnerH = (settings.deadzoneY / 100) * video.videoHeight / 2;
+
+        // Draw inner deadzone — green solid
+        ctx.strokeStyle = 'rgba(42, 157, 143, 0.7)';
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]);
         ctx.strokeRect(
-            centerX - halfDeadzoneW,
-            centerY - halfDeadzoneH,
-            halfDeadzoneW * 2,
-            halfDeadzoneH * 2
+            centerX - halfInnerW,
+            centerY - halfInnerH,
+            halfInnerW * 2,
+            halfInnerH * 2
         );
         ctx.setLineDash([]);
-        
+
+        // Fill inner deadzone — faint green
         ctx.fillStyle = 'rgba(42, 157, 143, 0.1)';
         ctx.fillRect(
-            centerX - halfDeadzoneW,
-            centerY - halfDeadzoneH,
-            halfDeadzoneW * 2,
-            halfDeadzoneH * 2
+            centerX - halfInnerW,
+            centerY - halfInnerH,
+            halfInnerW * 2,
+            halfInnerH * 2
         );
-        
+
+        // Center crosshair
         ctx.strokeStyle = 'rgba(147, 204, 234, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -672,11 +753,15 @@ $(function () {
         ctx.lineTo(centerX, centerY + 20);
         ctx.stroke();
         
-        ctx.fillStyle = 'rgba(147, 204, 234, 0.7)';
-        ctx.font = '12px sans-serif';
+        // Labels
+        ctx.fillStyle = 'rgba(42, 157, 143, 0.8)';
+        ctx.font = '11px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText('Deadzone', centerX - halfDeadzoneW + 4, centerY - halfDeadzoneH + 4);
+        ctx.fillText('Inner (stop)', centerX - halfInnerW + 4, centerY - halfInnerH + 4);
+
+        ctx.fillStyle = 'rgba(230, 176, 50, 0.8)';
+        ctx.fillText('Outer (slow)', centerX - halfOuterW + 4, centerY - halfOuterH + 4);
     }
 
     function renderDetection(detection) {

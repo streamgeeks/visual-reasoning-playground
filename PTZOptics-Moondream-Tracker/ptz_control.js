@@ -20,12 +20,23 @@ class PTZController {
             vertical: 50     // Vertical center (50 = true center)
         };
         
-        // Deadzone tolerance - how far from center before camera moves (in percentage of frame)
-        // Smaller values = tighter centering, larger values = wider deadzone
+        // Inner deadzone - object must be outside this to trigger any movement
+        // When inside inner deadzone, camera is STOPPED
         this.deadzone = {
-            horizontal: 5,  // 5% deadzone horizontally (±2.5% from center)
-            vertical: 5     // 5% deadzone vertically (±2.5% from center)
+            horizontal: 10,  // 10% inner deadzone horizontally (±5% from center)
+            vertical: 10     // 10% inner deadzone vertically (±5% from center)
         };
+
+        // Outer deadzone - between inner and outer, camera moves at reduced speed
+        // Beyond outer deadzone, camera moves at full speed
+        this.outerDeadzone = {
+            horizontal: 25,  // 25% outer deadzone
+            vertical: 25     // 25% outer deadzone
+        };
+
+        // Speed reduction factors
+        this.innerSpeedFactor = 0.1;  // 90% reduction in inner-to-outer zone
+        this.outerSpeedFactor = 0.5;  // 50% reduction beyond outer zone
         
         // Legacy threshold support (for backward compatibility)
         this.thresholds = {
@@ -68,10 +79,27 @@ class PTZController {
     }
 
     /**
-     * Update deadzone tolerance
+     * Update inner deadzone tolerance (camera stops inside this zone)
      */
     setDeadzone(deadzone) {
         this.deadzone = { ...this.deadzone, ...deadzone };
+    }
+
+    /**
+     * Update outer deadzone (speed reduction zone between inner and outer)
+     */
+    setOuterDeadzone(deadzone) {
+        this.outerDeadzone = { ...this.outerDeadzone, ...deadzone };
+    }
+
+    /**
+     * Update speed reduction factors
+     * @param {number} innerFactor - Speed multiplier in inner zone (e.g. 0.1 = 10% speed)
+     * @param {number} outerFactor - Speed multiplier in outer zone (e.g. 0.5 = 50% speed)
+     */
+    setSpeedFactors(innerFactor, outerFactor) {
+        if (innerFactor !== undefined) this.innerSpeedFactor = innerFactor;
+        if (outerFactor !== undefined) this.outerSpeedFactor = outerFactor;
     }
 
     /**
@@ -124,38 +152,46 @@ class PTZController {
 
     /**
      * Pan camera right
+     * @param {number} [speedOverride] - Optional speed override (1-24)
      */
-    async panRight() {
-        console.log('PANNING RIGHT');
+    async panRight(speedOverride) {
+        const spd = speedOverride || this.speed.pan;
+        console.log('PANNING RIGHT speed=' + spd);
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&right&${this.speed.pan}&${this.speed.pan}`);
+        return this.sendCommand(`ptzcmd&right&${spd}&${spd}`);
     }
 
     /**
      * Pan camera left
+     * @param {number} [speedOverride] - Optional speed override (1-24)
      */
-    async panLeft() {
-        console.log('PANNING LEFT');
+    async panLeft(speedOverride) {
+        const spd = speedOverride || this.speed.pan;
+        console.log('PANNING LEFT speed=' + spd);
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&left&${this.speed.pan}&${this.speed.pan}`);
+        return this.sendCommand(`ptzcmd&left&${spd}&${spd}`);
     }
 
     /**
      * Tilt camera down
+     * @param {number} [speedOverride] - Optional speed override (1-24)
      */
-    async tiltDown() {
-        console.log('TILTING DOWN');
+    async tiltDown(speedOverride) {
+        const spd = speedOverride || this.speed.tilt;
+        console.log('TILTING DOWN speed=' + spd);
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&down&${this.speed.tilt}&${this.speed.tilt}`);
+        return this.sendCommand(`ptzcmd&down&${spd}&${spd}`);
     }
 
     /**
      * Tilt camera up
+     * @param {number} [speedOverride] - Optional speed override (1-24)
      */
-    async tiltUp() {
-        console.log('TILTING UP');
+    async tiltUp(speedOverride) {
+        const spd = speedOverride || this.speed.tilt;
+        console.log('TILTING UP speed=' + spd);
         this.isMoving = true;
-        return this.sendCommand(`ptzcmd&up&${this.speed.tilt}&${this.speed.tilt}`);
+        return this.sendCommand(`ptzcmd&up&${spd}&${spd}`);
     }
 
     /**
@@ -210,34 +246,70 @@ class PTZController {
         // Calculate offset from target center
         const offsetX = objectX - targetX;
         const offsetY = objectY - targetY;
+        const absOffsetX = Math.abs(offsetX);
+        const absOffsetY = Math.abs(offsetY);
 
-        // Calculate half deadzone (the ± tolerance)
-        const halfDeadzoneX = this.deadzone.horizontal / 2;
-        const halfDeadzoneY = this.deadzone.vertical / 2;
+        // Inner deadzone: camera STOPS (no movement)
+        const halfInnerX = this.deadzone.horizontal / 2;
+        const halfInnerY = this.deadzone.vertical / 2;
 
-        // Determine which direction to move based on deadzone
+        // Outer deadzone: between inner and outer, camera moves at reduced speed
+        const halfOuterX = this.outerDeadzone.horizontal / 2;
+        const halfOuterY = this.outerDeadzone.vertical / 2;
+
+        // Determine speed based on which zone the object is in
+        // Inside inner deadzone → STOP
+        // Between inner and outer → innerSpeedFactor (default 10% speed)
+        // Beyond outer → outerSpeedFactor (default 50% speed)
+        // Note: 'outer' is the braking zone, 'beyond outer' is full speed
+        let panSpd = this.speed.pan;
+        let tiltSpd = this.speed.tilt;
+
+        if (absOffsetX <= halfInnerX && absOffsetY <= halfInnerY) {
+            // Fully inside inner deadzone — stop
+            if (this.isMoving) await this.stop();
+            return;
+        }
+
+        // Calculate pan speed based on horizontal zone
+        if (absOffsetX <= halfInnerX) {
+            panSpd = 0; // No horizontal movement needed
+        } else if (absOffsetX <= halfOuterX) {
+            // In the outer deadzone band — slow speed (90% reduction)
+            panSpd = Math.max(1, Math.round(this.speed.pan * this.innerSpeedFactor));
+        } else {
+            // Beyond outer deadzone — moderate speed (50% reduction)
+            panSpd = Math.max(1, Math.round(this.speed.pan * this.outerSpeedFactor));
+        }
+
+        // Calculate tilt speed based on vertical zone
+        if (absOffsetY <= halfInnerY) {
+            tiltSpd = 0; // No vertical movement needed
+        } else if (absOffsetY <= halfOuterY) {
+            tiltSpd = Math.max(1, Math.round(this.speed.tilt * this.innerSpeedFactor));
+        } else {
+            tiltSpd = Math.max(1, Math.round(this.speed.tilt * this.outerSpeedFactor));
+        }
+
+        // Determine movement direction (prioritize horizontal, then vertical)
         let commandSent = false;
 
-        // Prioritize horizontal movement first, then vertical
-        if (offsetX > halfDeadzoneX) {
-            // Object is too far right, pan right
-            await this.panRight();
+        if (panSpd > 0 && absOffsetX > halfInnerX) {
+            if (offsetX > 0) {
+                await this.panRight(panSpd);
+            } else {
+                await this.panLeft(panSpd);
+            }
             commandSent = true;
-        } else if (offsetX < -halfDeadzoneX) {
-            // Object is too far left, pan left
-            await this.panLeft();
-            commandSent = true;
-        } else if (offsetY > halfDeadzoneY) {
-            // Object is too far down, tilt down
-            await this.tiltDown();
-            commandSent = true;
-        } else if (offsetY < -halfDeadzoneY) {
-            // Object is too far up, tilt up
-            await this.tiltUp();
+        } else if (tiltSpd > 0 && absOffsetY > halfInnerY) {
+            if (offsetY > 0) {
+                await this.tiltDown(tiltSpd);
+            } else {
+                await this.tiltUp(tiltSpd);
+            }
             commandSent = true;
         }
 
-        // If object is within deadzone on both axes, stop the camera
         if (!commandSent && this.isMoving) {
             await this.stop();
         }
