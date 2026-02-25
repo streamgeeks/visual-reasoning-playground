@@ -368,40 +368,10 @@
         .threshold-dot:nth-child(4) { background: #8BC34A; }
         .threshold-dot:nth-child(5) { background: #2A9D8F; }
 
-        }
-
-        /* ── Preset buttons (emoji) ── */
-        .preset-buttons {
-            display: flex; gap: 4px; background: var(--background);
-            border-radius: 6px; overflow: hidden; margin-bottom: 8px;
-        }
-        .preset-buttons button {
-            flex: 1; padding: 10px 4px; border: none; background: transparent;
-            color: var(--text-muted); font-size: 0.8rem; font-weight: 600;
-            cursor: pointer; transition: all 0.2s; text-align: center;
-        }
-        .preset-buttons button.active { background: var(--primary); color: #fff; }
-        .preset-buttons button .preset-emoji { display: block; font-size: 1.1rem; margin-bottom: 2px; }
-        .preset-buttons button .preset-label { font-size: 0.65rem; font-weight: 400; opacity: 0.8; }
-
-        /* ── VLM engine toggle ── */
-        .vlm-toggle {
-            display: flex; gap: 4px; background: var(--background);
-            border-radius: 6px; overflow: hidden; margin-bottom: 12px;
-        }
-        .vlm-toggle button {
-            flex: 1; padding: 8px 6px; border: none; background: transparent;
-            color: var(--text-muted); font-size: 0.75rem; font-weight: 600;
-            cursor: pointer; transition: all 0.2s; text-align: center;
-        }
-        .vlm-toggle button.active { background: var(--primary); color: #fff; }
-        .vlm-toggle button .vlm-sub {
-            display: block; font-size: 0.6rem; font-weight: 400; opacity: 0.7; margin-top: 1px;
-        }
-
-        .vlm-info {
-            font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;
-            padding: 6px; background: var(--background); border-radius: 4px;
+        /* Results panel override for history */
+        .results-panel {
+            padding: 0;
+            background: transparent;
         }
     </style>
 </head>
@@ -482,21 +452,6 @@
                 </div>
 
                 <div id="status" class="status-bar">Ready - Configure preset and start monitoring</div>
-
-
-                <!-- VLM Engine selector -->
-                <div class="control-group">
-                    <label>Vision Model</label>
-                    <div class="vlm-toggle">
-                        <button id="vlmMoondreamBtn" class="active" data-vlm="moondream">
-                            Moondream<span class="vlm-sub">Free · Fast</span>
-                        </button>
-                        <button id="vlmOpenAIBtn" data-vlm="openai">
-                            GPT-4o-mini<span class="vlm-sub">Better accuracy</span>
-                        </button>
-                    </div>
-                    <div id="vlmInfo" class="vlm-info">Using Moondream API (free tier)</div>
-                </div>
 
                 <!-- Preset selection with emoji buttons -->
                 <div class="control-group">
@@ -595,3 +550,40 @@
                     </div>
                 </div>
 
+                <!-- btn-group moved up after rating card -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Alarm overlay -->
+    <div id="alarmOverlay" class="alarm-overlay">
+        <div class="alarm-modal">
+            <div class="alarm-icon">&#9888;</div>
+            <div class="alarm-title">SAFETY ALARM</div>
+            <div id="alarmConcern" class="alarm-concern"></div>
+            <div id="alarmAction" class="alarm-action"></div>
+            <img id="alarmThumb" class="alarm-thumb" src="" alt="Triggering frame">
+            <button id="alarmAckBtn" class="btn btn-danger" style="width: 100%; margin-top: 10px;">Acknowledge</button>
+        </div>
+    </div>
+
+    <!-- Detail overlay (click history item) -->
+    <div id="detailOverlay" class="detail-overlay">
+        <div class="detail-modal">
+            <button id="detailCloseBtn" class="detail-close">&times;</button>
+            <img id="detailImage" class="detail-image" src="" alt="Assessment frame">
+            <div id="detailRating" class="rating-card" style="margin-bottom: 0;"></div>
+        </div>
+    </div>
+
+    <script src="../shared/moondream-client.js"></script>
+    <script src="../shared/api-key-manager.js"></script>
+    <script src="../shared/reasoning-console.js"></script>
+    <script src="../shared/video-source-adapter.js"></script>
+    <script src="../shared/openai-client.js"></script>
+    <script src="../shared/vlm-toggle.js"></script>
+    <script src="app.js"></script>
+    <script src="../shared/ux-utils.js"></script>
+    <script src="../shared/playground-header.js"></script>
+</body>
+</html>
