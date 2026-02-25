@@ -262,6 +262,8 @@ class VLMToggle {
             if (!window.moondreamClient && window.apiKeyManager?.hasMoondreamKey()) {
                 window.moondreamClient = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
             }
+            return window.moondreamClient;
+        }
     }
 
     /**
@@ -284,8 +286,6 @@ class VLMToggle {
             updateClient();
             if (originalOnChange) originalOnChange(engine);
         };
-    }
-XT|    }
     }
 
     /**

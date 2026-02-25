@@ -10,9 +10,10 @@
 
 class APIKeyManager {
     constructor(options = {}) {
+        this.options = {
             requireMoondream: true,
             requireOpenAI: false,
-            showOpenAI: false,  // Always show OpenAI section in modal
+            showOpenAI: false,
             onKeysChanged: null,
             autoShow: true,  // Auto-show modal if required keys missing
             ...options
@@ -480,7 +481,7 @@ class APIKeyManager {
             </div>
         `;
 
-        if (this.options.requireOpenAI || this.options.showOpenAI) {
+        if (this.options.requireOpenAI) {
             statusHTML += `
                 <div class="akm-key-status" onclick="window.apiKeyManager.showModal()">
                     <span class="akm-status-dot ${openaiSet ? 'set' : 'missing'}"></span>
