@@ -190,11 +190,16 @@ Rating scale:
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
+        showOpenAI: true,
         onKeysChanged: (keys) => {
             if (keys.moondream) {
                 client = new MoondreamClient(keys.moondream);
                 window.reasoningConsole.logInfo('Moondream API key configured');
                 updateStatus('Ready - Start monitoring');
+            }
+            if (keys.openai) {
+                window.openaiClient = new OpenAIVisionClient(keys.openai);
+                window.reasoningConsole.logInfo('OpenAI API key configured');
             }
         }
     });
@@ -202,6 +207,27 @@ Rating scale:
     if (window.apiKeyManager.hasMoondreamKey()) {
         client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
         window.reasoningConsole.logInfo('Loaded saved Moondream API key');
+    }
+    if (window.apiKeyManager.hasOpenAIKey && window.apiKeyManager.hasOpenAIKey()) {
+        window.openaiClient = new OpenAIVisionClient(window.apiKeyManager.getOpenAIKey());
+        window.reasoningConsole.logInfo('Loaded saved OpenAI API key');
+    }
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.control-panel h2',
+        toolId: 'ai-safety',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched VLM to ' + engine);
+        }
+    });
+
+    // Helper to get the active VLM client
+    function getActiveClient() {
+        if (window.vlmToggle && window.vlmToggle.currentEngine === 'openai' && window.openaiClient) {
+            return window.openaiClient;
+        }
+        return client; // Moondream
     }
 
     window.reasoningConsole.logInfo('AI Safety Monitor initialized');
@@ -273,7 +299,7 @@ Rating scale:
 
     // ── Safety analysis via Moondream ──
     async function analyzeSafety(imageDataUrl) {
-        if (!client) {
+        if (!getActiveClient()) {
             window.reasoningConsole.logError('No API key configured');
             updateStatus('Please configure your Moondream API key', true);
             window.apiKeyManager.showModal();
@@ -287,7 +313,7 @@ Rating scale:
             window.reasoningConsole.logApiCall('/query', 0);
             updateStatus('Analyzing frame...');
 
-            const result = await client.ask(imageDataUrl, preset.prompt);
+            const result = await getActiveClient().ask(imageDataUrl, preset.prompt);
             const latency = Date.now() - startTime;
             window.reasoningConsole.logApiCall('/query', latency);
 
@@ -355,14 +381,25 @@ Rating scale:
     }
 
     // ── Construction PPE Detection (person-level safe/unsafe) ──
-    const PPE_PROMPT = `Look at this person carefully. Are they wearing construction safety PPE?
-Check for: 1) Hard hat on their head  2) Safety vest / hi-vis vest on their body.
+    const PPE_PROMPT = `You are a strict PPE compliance inspector. MOST people do NOT wear hard hats. Default assumption: NO PPE.
+
+Look at this cropped image of ONE person. Your job is to determine if they are wearing:
+1) A HARD HAT (rigid helmet, typically white/yellow/orange, worn on TOP of the head)
+2) A SAFETY VEST (bright yellow/orange hi-vis vest with reflective strips)
+
+IMPORTANT RULES:
+- A baseball cap, beanie, hood, or hair is NOT a hard hat
+- A regular jacket, shirt, or hoodie is NOT a safety vest
+- If you cannot clearly see a rigid hard hat on their head, they are NOT wearing one
+- If you cannot clearly see a bright hi-vis vest, they are NOT wearing one
+- When in doubt, answer safe=false
+
 Respond with ONLY valid JSON (no markdown, no backticks):
-{"safe": true or false, "wearing": ["items they have"], "missing": ["items they lack"]}
-If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
+{"safe": true/false, "wearing": ["items clearly visible"], "missing": ["items not seen"]}
+safe=true ONLY if BOTH a hard hat AND safety vest are clearly visible.`;
 
     async function analyzeConstructionSafety(imageDataUrl) {
-        if (!client) return null;
+        if (!getActiveClient()) return null;
 
         const startTime = Date.now();
         updateStatus('Detecting people...');
@@ -371,7 +408,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         // Step 1: Detect all people in the frame
         let detections;
         try {
-            const detectResult = await client.detect(imageDataUrl, 'person');
+            const detectResult = await getActiveClient().detect(imageDataUrl, 'person');
             detections = detectResult.objects || [];
             const detectLatency = Date.now() - startTime;
             window.reasoningConsole.logApiCall('/detect', detectLatency);
@@ -391,7 +428,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
             const hatTerms = ['helmet', 'hard hat', 'safety helmet'];
             for (const term of hatTerms) {
                 window.reasoningConsole.logApiCall('/detect (' + term + ')', 0);
-                const hatResult = await client.detect(imageDataUrl, term);
+                const hatResult = await getActiveClient().detect(imageDataUrl, term);
                 const found = (hatResult.objects || []);
                 const hatLatency = Date.now() - hatStart;
 
@@ -449,7 +486,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
                 const crop = cropPersonFromFrame(imageDataUrl, bbox);
                 window.reasoningConsole.logApiCall('/query (PPE)', 0);
                 const ppeStart = Date.now();
-                const result = await client.ask(crop, PPE_PROMPT);
+                const result = await getActiveClient().ask(crop, PPE_PROMPT);
                 const ppeLatency = Date.now() - ppeStart;
                 window.reasoningConsole.logApiCall('/query (PPE)', ppeLatency);
 
@@ -1129,7 +1166,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
     // ── Monitoring loop ──
     async function startMonitoring() {
-        if (!client) {
+        if (!getActiveClient()) {
             updateStatus('Please configure API key', true);
             window.apiKeyManager.showModal();
             return;
@@ -1205,7 +1242,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
 
     // Snap: single frame analysis
     async function snapAnalysis() {
-        if (!client) {
+        if (!getActiveClient()) {
             updateStatus('Please configure API key', true);
             window.apiKeyManager.showModal();
             return;
