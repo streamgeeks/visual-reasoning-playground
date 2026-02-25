@@ -381,16 +381,37 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
             return null;
         }
 
+        // Step 1b: Detect hard hats in the frame
+        let hardHatDetections = [];
+        try {
+            updateStatus('Detecting hard hats...');
+            window.reasoningConsole.logApiCall('/detect (hard hat)', 0);
+            const hatStart = Date.now();
+            const hatResult = await client.detect(imageDataUrl, 'hard hat');
+            hardHatDetections = (hatResult.objects || []).map(h => ({
+                x_min: h.x_min || 0,
+                y_min: h.y_min || 0,
+                x_max: h.x_max || 0,
+                y_max: h.y_max || 0
+            }));
+            const hatLatency = Date.now() - hatStart;
+            window.reasoningConsole.logApiCall('/detect (hard hat)', hatLatency);
+            window.reasoningConsole.logInfo(`Detected ${hardHatDetections.length} hard hat(s) [${hatLatency}ms]`);
+        } catch (e) {
+            window.reasoningConsole.logError('Hard hat detection failed: ' + e.message);
+        }
+
         if (detections.length === 0) {
             // No people — scene is safe
-            drawPersonOverlays([], imageDataUrl);
+            drawPersonOverlays([], imageDataUrl, hardHatDetections);
             return {
                 safetyRating: 5,
                 status: 'all_clear',
                 primaryConcern: 'No personnel detected',
                 recommendedAction: 'Continue monitoring',
                 detectedHazards: [],
-                people: []
+                people: [],
+                hardHats: hardHatDetections
             };
         }
 
@@ -443,7 +464,7 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         }
 
         // Step 3: Draw visual overlays + update summary
-        drawPersonOverlays(people, imageDataUrl);
+        drawPersonOverlays(people, imageDataUrl, hardHatDetections);
         drawCanvasSummaryBadge(people);
         updatePPESummary(people);
 
@@ -490,7 +511,8 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
             primaryConcern: concern,
             recommendedAction: action,
             detectedHazards: hazards,
-            people: people
+            people: people,
+            hardHats: hardHatDetections
         };
     }
 
@@ -536,10 +558,11 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         }
     }
 
-    function drawPersonOverlays(people, imageDataUrl) {
+    function drawPersonOverlays(people, imageDataUrl, hardHats) {
         overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        hardHats = hardHats || [];
 
-        if (people.length === 0) return;
+        if (people.length === 0 && hardHats.length === 0) return;
 
         // Get image dimensions for coordinate scaling
         const img = new Image();
@@ -617,6 +640,31 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
                 overlayCtx.fillText(itemIcon + ' ' + item.name, itemX + 4, y + 17);
                 itemX += pillW + 4;
             });
+        });
+
+        // Draw hard hat detection boxes
+        hardHats.forEach(function(hat) {
+            const hx = hat.x_min * iw * scaleX;
+            const hy = hat.y_min * ih * scaleY;
+            const hw = (hat.x_max - hat.x_min) * iw * scaleX;
+            const hh = (hat.y_max - hat.y_min) * ih * scaleY;
+
+            // Bright cyan box for hard hats
+            overlayCtx.strokeStyle = '#00E5FF';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.setLineDash([]);
+            overlayCtx.strokeRect(hx, hy, hw, hh);
+
+            // Label
+            const hatLabel = '⛑ Hard Hat';
+            overlayCtx.font = 'bold 11px sans-serif';
+            const hatLabelW = overlayCtx.measureText(hatLabel).width + 8;
+            overlayCtx.fillStyle = '#00E5FF';
+            overlayCtx.beginPath();
+            overlayCtx.roundRect(hx, hy - 16, hatLabelW, 16, 3);
+            overlayCtx.fill();
+            overlayCtx.fillStyle = '#000';
+            overlayCtx.fillText(hatLabel, hx + 4, hy - 3);
         });
 
         // Overall border based on safety
