@@ -809,8 +809,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     //  UI UPDATES
     // ══════════════════════════════════════════════════
     function updateStatus(msg, isError) {
-        statusBar.textContent = msg;
-        statusBar.className = 'status-bar' + (isError ? ' error' : '');
+        // Check if message contains a download percentage
+        var pctMatch = msg.match(/(\d+)%/);
+        if (pctMatch && msg.indexOf('Downloading') !== -1) {
+            var pct = parseInt(pctMatch[1]);
+            statusBar.innerHTML = '<div style="margin-bottom:4px;">' + msg + '</div>' +
+                '<div style="background:var(--surface-light);border-radius:4px;height:8px;overflow:hidden;">' +
+                '<div style="background:var(--primary);height:100%;border-radius:4px;width:' + pct + '%;transition:width 0.2s;"></div></div>';
+            statusBar.className = 'status-bar';
+        } else {
+            statusBar.textContent = msg;
+            statusBar.className = 'status-bar' + (isError ? ' error' : '');
+        }
     }
 
     function updateDetectionCard() {

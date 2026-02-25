@@ -48,23 +48,34 @@
             // Configure ONNX Runtime WASM backend
             if (typeof ort !== 'undefined') {
                 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.1/dist/';
-                // Single-threaded for compatibility (multi-threading requires CORS headers)
                 ort.env.wasm.numThreads = 1;
                 ort.env.wasm.simd = true;
             }
 
-            if (onProgress) onProgress('Downloading model (' + (this.modelPath) + ')...');
-            console.log('[ONNX] Creating inference session (WASM backend)...');
-            console.log('[ONNX] Model path:', this.modelPath);
-            console.log('[ONNX] Note: models over ~50MB may fail to load in browser WASM');
+            // Step 1: Download model with progress tracking
+            if (onProgress) onProgress('Downloading model (0%)...');
+            console.log('[ONNX] Downloading model:', this.modelPath);
 
-            // Use WASM only — WebGL does not support GridSample op used by RF-DETR
+            var modelBuffer = await this._downloadWithProgress(this.modelPath, function(pct, loadedMB, totalMB) {
+                if (onProgress) {
+                    if (totalMB > 0) {
+                        onProgress('Downloading model: ' + pct + '% (' + loadedMB + '/' + totalMB + ' MB)');
+                    } else {
+                        onProgress('Downloading model: ' + loadedMB + ' MB loaded...');
+                    }
+                }
+            });
+
+            // Step 2: Create inference session from buffer
+            if (onProgress) onProgress('Initializing model...');
+            console.log('[ONNX] Model downloaded (' + (modelBuffer.byteLength / 1024 / 1024).toFixed(1) + ' MB). Creating session...');
+
             var sessionOpts = {
                 executionProviders: ['wasm'],
                 graphOptimizationLevel: 'all',
             };
 
-            this.session = await ort.InferenceSession.create(this.modelPath, sessionOpts);
+            this.session = await ort.InferenceSession.create(modelBuffer, sessionOpts);
 
             console.log('[ONNX] Model loaded successfully');
             console.log('[ONNX] Inputs:', this.session.inputNames);
@@ -77,11 +88,47 @@
         } catch (e) {
             this.loading = false;
             console.error('[ONNX] Model load FAILED:', e);
-            console.error('[ONNX] Error name:', e.name);
-            console.error('[ONNX] Error message:', e.message);
             if (onProgress) onProgress('Load failed: ' + e.message);
             return false;
         }
+    };
+
+    /**
+     * Download a file with progress tracking via XMLHttpRequest.
+     * Returns an ArrayBuffer.
+     */
+    OnnxModelRunner.prototype._downloadWithProgress = function(url, onProgress) {
+        return new Promise(function(resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.responseType = 'arraybuffer';
+
+            xhr.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    var pct = Math.round(e.loaded / e.total * 100);
+                    var loadedMB = (e.loaded / 1024 / 1024).toFixed(1);
+                    var totalMB = (e.total / 1024 / 1024).toFixed(1);
+                    if (onProgress) onProgress(pct, loadedMB, totalMB);
+                } else {
+                    var loadedMB2 = (e.loaded / 1024 / 1024).toFixed(1);
+                    if (onProgress) onProgress(-1, loadedMB2, 0);
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    resolve(xhr.response);
+                } else {
+                    reject(new Error('Download failed: HTTP ' + xhr.status));
+                }
+            };
+
+            xhr.onerror = function() {
+                reject(new Error('Download failed: network error'));
+            };
+
+            xhr.send();
+        });
     };
 
     /**
