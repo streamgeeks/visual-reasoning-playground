@@ -442,8 +442,10 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
             }
         }
 
-        // Step 3: Draw visual overlays
+        // Step 3: Draw visual overlays + update summary
         drawPersonOverlays(people, imageDataUrl);
+        drawCanvasSummaryBadge(people);
+        updatePPESummary(people);
 
         // Step 4: Derive overall safety rating
         const unsafeCount = people.filter(p => !p.safe).length;
@@ -629,6 +631,83 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
         }
     }
 
+    // ── PPE Summary Panel + On-canvas badge ──
+    function updatePPESummary(people) {
+        const panel = document.getElementById('ppeSummary');
+        if (!panel) return;
+
+        const total = people.length;
+        const hasHelmet = people.filter(p => p.wearing.some(w => /hat|helmet/i.test(w))).length;
+        const hasVest = people.filter(p => p.wearing.some(w => /vest|hi-vis/i.test(w))).length;
+        const noHelmet = total - hasHelmet;
+
+        document.getElementById('ppeTotalPeople').textContent = total;
+        document.getElementById('ppeSafeCount').textContent = hasHelmet;
+        document.getElementById('ppeUnsafeCount').textContent = noHelmet;
+        document.getElementById('ppeVestCount').textContent = hasVest;
+
+        // Per-person detail rows
+        const details = document.getElementById('ppeDetails');
+        if (total === 0) {
+            details.innerHTML = '<div style="text-align:center;opacity:0.6;">No people detected</div>';
+        } else {
+            details.innerHTML = people.map((p, i) => {
+                const icon = p.safe ? '\u2705' : '\u274c';
+                const cls = p.safe ? 'ppe-detail-safe' : 'ppe-detail-unsafe';
+                const wearing = p.wearing.length > 0 ? p.wearing.join(', ') : 'none detected';
+                const missing = p.missing.length > 0 ? p.missing.join(', ') : '';
+                return `<div class="ppe-detail-row ${cls}">
+                    ${icon} <strong>Person ${i + 1}</strong>: ${wearing}${missing ? ' — <span style="color:#E63946;">Missing: ' + missing + '</span>' : ''}
+                </div>`;
+            }).join('');
+        }
+    }
+
+    function drawCanvasSummaryBadge(people) {
+        if (people.length === 0) return;
+
+        const total = people.length;
+        const safe = people.filter(p => p.safe).length;
+        const unsafe = total - safe;
+        const hasHelmet = people.filter(p => p.wearing.some(w => /hat|helmet/i.test(w))).length;
+        const hasVest = people.filter(p => p.wearing.some(w => /vest|hi-vis/i.test(w))).length;
+
+        // Draw summary badge in top-right corner
+        const badgeX = overlayCanvas.width - 220;
+        const badgeY = 10;
+        const badgeW = 210;
+        const badgeH = 80;
+
+        // Background
+        overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        overlayCtx.beginPath();
+        overlayCtx.roundRect(badgeX, badgeY, badgeW, badgeH, 8);
+        overlayCtx.fill();
+
+        // Title
+        overlayCtx.fillStyle = '#fff';
+        overlayCtx.font = 'bold 13px sans-serif';
+        overlayCtx.fillText('PPE Summary', badgeX + 10, badgeY + 18);
+
+        // Stats line 1: People count
+        overlayCtx.font = '12px sans-serif';
+        overlayCtx.fillStyle = '#ccc';
+        overlayCtx.fillText(`\ud83d\udc64 ${total} people detected`, badgeX + 10, badgeY + 36);
+
+        // Stats line 2: Helmets
+        overlayCtx.fillStyle = hasHelmet === total ? '#2A9D8F' : '#E63946';
+        overlayCtx.fillText(`\u26d1 Helmets: ${hasHelmet}/${total}`, badgeX + 10, badgeY + 54);
+
+        // Stats line 3: Vests
+        overlayCtx.fillStyle = hasVest === total ? '#2A9D8F' : '#E76F51';
+        overlayCtx.fillText(`\ud83e\udda6 Vests: ${hasVest}/${total}`, badgeX + 10, badgeY + 72);
+
+        // Safe/unsafe indicator
+        overlayCtx.fillStyle = unsafe === 0 ? '#2A9D8F' : '#E63946';
+        overlayCtx.font = 'bold 12px sans-serif';
+        const statusText = unsafe === 0 ? '\u2713 ALL CLEAR' : `\u26a0 ${unsafe} NON-COMPLIANT`;
+        overlayCtx.fillText(statusText, badgeX + 115, badgeY + 18);
+    }
     // ── UI Update functions ──
     function updateStatus(message, isError = false) {
         statusBar.textContent = message;
@@ -1216,9 +1295,12 @@ If you see a hard hat AND a safety vest, safe=true. Otherwise safe=false.`;
     presetSelect.addEventListener('change', () => {
         updatePresetInfo();
         saveSettings();
-        // Show/hide PPE legend for construction mode
+        // Show/hide PPE legend + summary for construction mode
         const ppeLegend = document.getElementById('ppeLegend');
-        if (ppeLegend) ppeLegend.style.display = presetSelect.value === 'construction' ? '' : 'none';
+        const ppeSummary = document.getElementById('ppeSummary');
+        const isConstruction = presetSelect.value === 'construction';
+        if (ppeLegend) ppeLegend.style.display = isConstruction ? '' : 'none';
+        if (ppeSummary) ppeSummary.style.display = isConstruction ? '' : 'none';
         // Clear overlays when switching presets
         overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         window.reasoningConsole.logInfo(`Preset changed to: ${PRESETS[presetSelect.value].name}`);

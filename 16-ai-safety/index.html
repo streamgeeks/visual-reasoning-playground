@@ -373,6 +373,63 @@
             padding: 0;
             background: transparent;
         }
+
+        /* PPE Detection Summary */
+        .ppe-summary {
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 8px;
+        }
+        .ppe-summary-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .ppe-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 6px;
+        }
+        .ppe-stat {
+            text-align: center;
+            padding: 6px 4px;
+            background: var(--background);
+            border-radius: 6px;
+        }
+        .ppe-stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .ppe-stat-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .ppe-stat.ppe-safe .ppe-stat-value { color: #2A9D8F; }
+        .ppe-stat.ppe-unsafe .ppe-stat-value { color: #E63946; }
+        .ppe-details {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        .ppe-detail-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--surface-light);
+        }
+        .ppe-detail-row:last-child { border-bottom: none; }
+        .ppe-detail-safe { color: #2A9D8F; }
+        .ppe-detail-unsafe { color: #E63946; }
     </style>
 </head>
 <body>
@@ -452,6 +509,30 @@
                 </div>
 
                 <div id="status" class="status-bar">Ready - Configure preset and start monitoring</div>
+
+                <!-- PPE Detection Summary (construction mode only) -->
+                <div id="ppeSummary" class="ppe-summary" style="display:none;">
+                    <div class="ppe-summary-title">PPE Detection</div>
+                    <div class="ppe-summary-grid">
+                        <div class="ppe-stat">
+                            <div class="ppe-stat-value" id="ppeTotalPeople">0</div>
+                            <div class="ppe-stat-label">👤 People</div>
+                        </div>
+                        <div class="ppe-stat ppe-safe">
+                            <div class="ppe-stat-value" id="ppeSafeCount">0</div>
+                            <div class="ppe-stat-label">✅ With Helmet</div>
+                        </div>
+                        <div class="ppe-stat ppe-unsafe">
+                            <div class="ppe-stat-value" id="ppeUnsafeCount">0</div>
+                            <div class="ppe-stat-label">❌ No Helmet</div>
+                        </div>
+                        <div class="ppe-stat">
+                            <div class="ppe-stat-value" id="ppeVestCount">0</div>
+                            <div class="ppe-stat-label">🦦 With Vest</div>
+                        </div>
+                    </div>
+                    <div id="ppeDetails" class="ppe-details"></div>
+                </div>
 
                 <!-- Preset selection with emoji buttons -->
                 <div class="control-group">
