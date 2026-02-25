@@ -84,21 +84,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }
     });
-    
-    // Auto-setup global client for backward compatibility
     window.vlmToggle.autoSetupGlobalClient();
-    window.apiKeyManager = new APIKeyManager({
-        requireMoondream: true,
-        requireOpenAI: false,
-        onKeysChanged: (keys) => {
-            if (keys.moondream) {
-                moondreamClient = new MoondreamClient(keys.moondream);
-                if (window.reasoningConsole) {
-                    window.reasoningConsole.logInfo('Moondream API key configured');
-                }
-            }
-        }
-    });
 
     // Initialize Reasoning Console
     window.reasoningConsole = new ReasoningConsole({ startCollapsed: true });

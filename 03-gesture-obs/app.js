@@ -58,18 +58,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
         }
     });
-    
-    // Auto-setup global client for backward compatibility
     window.vlmToggle.autoSetupGlobalClient();
-        requireMoondream: true,
-        requireOpenAI: false,
-        onKeysChanged: (keys) => {
-            if (keys.moondream) {
-                moondreamClient = new MoondreamClient(keys.moondream);
-                window.reasoningConsole.logInfo('Moondream API key configured');
-            }
-        }
-    });
 
     if (window.apiKeyManager.hasMoondreamKey()) {
         moondreamClient = new MoondreamClient(window.apiKeyManager.getMoondreamKey());

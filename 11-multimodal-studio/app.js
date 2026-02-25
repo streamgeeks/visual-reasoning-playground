@@ -62,20 +62,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
         }
     });
-    
-    // Auto-setup global client for backward compatibility
     window.vlmToggle.autoSetupGlobalClient();
-        requireMoondream: true,
-        requireOpenAI: true,
-        onKeysChanged: (keys) => {
-            if (keys.moondream) {
-                moondreamClient = new MoondreamClient(keys.moondream);
-            }
-            if (keys.openai && audioProcessor) {
-                audioProcessor.setOpenAIKey(keys.openai);
-            }
-        }
-    });
 
     window.reasoningConsole = new ReasoningConsole({ startCollapsed: false });
 

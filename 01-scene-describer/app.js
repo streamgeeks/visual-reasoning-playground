@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     window.apiKeyManager = new APIKeyManager({
+        requireMoondream: true,
         requireOpenAI: false,
         showOpenAI: true,
         onKeysChanged: (keys) => {
@@ -75,8 +76,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    }
-
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
         containerSelector: '.control-panel h2',
@@ -85,12 +84,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
         }
     });
-    
-    // Auto-setup global client for backward compatibility
     window.vlmToggle.autoSetupGlobalClient();
-VS|
 
-JQ|
+    if (window.apiKeyManager.hasMoondreamKey()) {
+        client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
+    }
 
     async function enumerateCameras() {
         try {
@@ -173,12 +171,10 @@ JQ|
     async function describeScene() {
         if (!client) {
             window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your API key', 'error');
+            updateStatus('Please configure your Moondream API key', 'error');
             window.apiKeyManager.showModal();
             return;
         }
-
-JZ|
 
         describeBtn.disabled = true;
         updateStatus('Analyzing scene...');
