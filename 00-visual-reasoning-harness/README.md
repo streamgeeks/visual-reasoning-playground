@@ -403,7 +403,7 @@ The ProAV industry should own its AI future—not rent it from platform vendors.
 ## Resources
 
 - [Visual Reasoning Playground](https://github.com/StreamGeeks/visual-reasoning-playground)
-- [Moondream API](https://console.moondream.ai)
+- [Moondream API](https://moondream.ai)
 - [Book: Visual Reasoning AI for Broadcast and ProAV](https://visualreasoning.ai/book)
 - [PTZOptics Developer Resources](https://ptzoptics.com/api)
 

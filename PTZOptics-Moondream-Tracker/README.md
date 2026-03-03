@@ -26,7 +26,7 @@ This application uses:
 
 ### Prerequisites
 
-1. **Moondream API Key**: Get your API key from [console.moondream.ai](https://console.moondream.ai)
+1. **Moondream API Key**: Get your API key from [moondream.ai](https://moondream.ai)
 2. **PTZ Camera**: A PTZ camera with HTTP API support (e.g., `/cgi-bin/ptzctrl.cgi`)
 3. **Web Browser**: Modern browser with WebRTC support (Chrome, Edge, Firefox)
 4. **Web Server**: Serve the files via HTTP/HTTPS (required for WebRTC camera access)
@@ -52,7 +52,7 @@ This application uses:
 ## Usage
 
 1. **Enter Moondream API Key**: 
-   - Get your key from [console.moondream.ai](https://console.moondream.ai)
+   - Get your key from [moondream.ai](https://moondream.ai)
    - Enter it in the "Moondream API Key" field
    - It will be saved in your browser for future sessions
 

@@ -28,7 +28,7 @@ python server.py
 
 ## Requirements
 
-1. **Moondream API Key** - Get one at [console.moondream.ai](https://console.moondream.ai)
+1. **Moondream API Key** - Get one at [moondream.ai](https://moondream.ai)
 2. **PTZOptics Camera** - Any model with HTTP API support
 3. **Webcam or Video Source** - For displaying camera feed
 

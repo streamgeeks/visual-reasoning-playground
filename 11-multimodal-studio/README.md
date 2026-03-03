@@ -18,7 +18,7 @@ The Multimodal Studio Assistant combines voice commands with visual tracking to 
 
 ## Requirements
 
-1. **Moondream API Key** - [console.moondream.ai](https://console.moondream.ai)
+1. **Moondream API Key** - [moondream.ai](https://moondream.ai)
 2. **OpenAI API Key** - [platform.openai.com](https://platform.openai.com/api-keys) (for Whisper)
 3. **PTZOptics Camera** - Any model with HTTP API
 4. **OBS Studio** - With WebSocket server enabled (Tools → WebSocket Server Settings)

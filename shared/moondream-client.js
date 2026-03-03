@@ -48,7 +48,7 @@ class MoondreamClient {
      */
     async _request(endpoint, body) {
         if (!this.apiKey) {
-            throw new Error('Moondream API key not set. Get one at console.moondream.ai');
+            throw new Error('Moondream API key not set. Get one at moondream.ai');
         }
 
         const controller = new AbortController();

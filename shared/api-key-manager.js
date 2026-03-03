@@ -522,7 +522,7 @@ class APIKeyManager {
             <button class="akm-manage-btn" onclick="window.apiKeyManager.showModal()">
                 🔑 Manage API Keys
             </button>
-            <a href="https://console.moondream.ai" target="_blank" class="akm-get-key-link">
+            <a href="https://moondream.ai" target="_blank" class="akm-get-key-link">
                 Get Free Moondream Key →
             </a>
         `;
@@ -545,7 +545,7 @@ class APIKeyManager {
                 <div class="akm-modal-body">
                     <div class="akm-info-box">
                         <strong>ℹ️ Quick Start:</strong> Get your <strong>free</strong> Moondream API key at
-                        <a href="https://console.moondream.ai" target="_blank" style="color: var(--primary); font-weight: 600;">console.moondream.ai</a>,
+                        <a href="https://moondream.ai" target="_blank" style="color: var(--primary); font-weight: 600;">moondream.ai</a>,
                         paste it below, and click Save.
                         <br><br>
                         <span style="font-size: 0.8rem; opacity: 0.8;">Your keys are stored locally in your browser and never sent to our servers.
@@ -574,8 +574,8 @@ class APIKeyManager {
                                 Test
                             </button>
                         </div>
-                        <a href="https://console.moondream.ai" target="_blank" class="akm-key-link" style="display:inline-block; margin-top:8px; padding:6px 12px; background:var(--primary); color:#fff; border-radius:4px; text-decoration:none; font-weight:600; font-size:0.85rem;">
-                            🚀 Get your FREE key at console.moondream.ai
+                        <a href="https://moondream.ai" target="_blank" class="akm-key-link" style="display:inline-block; margin-top:8px; padding:6px 12px; background:var(--primary); color:#fff; border-radius:4px; text-decoration:none; font-weight:600; font-size:0.85rem;">
+                            🚀 Get your FREE key at moondream.ai
                         </a>
                         <div id="akm-moondream-validation" class="akm-validation-msg"></div>
                     </div>

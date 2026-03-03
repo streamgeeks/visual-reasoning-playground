@@ -61,7 +61,7 @@ Speech-to-text automation using OpenAI's Whisper model running entirely in-brows
 ## Installation
 
 ### Step 1: Get Your API Key
-1. Go to [console.moondream.ai](https://console.moondream.ai)
+1. Go to [moondream.ai](https://moondream.ai)
 2. Sign up (free tier available)
 3. Copy your API key
 

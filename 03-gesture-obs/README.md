@@ -14,7 +14,7 @@ Control OBS Studio scene switching using hand gestures detected by Moondream.
 
 ## Requirements
 
-1. **Moondream API Key** - Get one free at [console.moondream.ai](https://console.moondream.ai)
+1. **Moondream API Key** - Get one free at [moondream.ai](https://moondream.ai)
 2. **OBS Studio** with WebSocket Server enabled:
    - Open OBS → Tools → WebSocket Server Settings
    - Enable WebSocket Server

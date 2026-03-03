@@ -459,7 +459,7 @@
                             <div class="vrp-gs-step-number">1</div>
                             <div class="vrp-gs-step-content">
                                 <h3>Get Your Free API Key</h3>
-                                <p>Sign up at <a href="https://console.moondream.ai" target="_blank">console.moondream.ai</a> to get your Moondream API key. It's free to start!</p>
+                                <p>Sign up at <a href="https://moondream.ai" target="_blank">moondream.ai</a> to get your Moondream API key. It's free to start!</p>
                             </div>
                         </div>
                         <div class="vrp-gs-step">

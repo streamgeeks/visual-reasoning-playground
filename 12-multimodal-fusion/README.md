@@ -6,7 +6,7 @@ Combines audio (speech recognition) and video (Moondream) understanding to trigg
 
 ## Quick Start
 
-1. Get a Moondream API key from [console.moondream.ai](https://console.moondream.ai)
+1. Get a Moondream API key from [moondream.ai](https://moondream.ai)
 2. Open `index.html` in a modern browser (Chrome recommended for speech recognition)
 3. Allow camera and microphone access
 4. Enter your API key

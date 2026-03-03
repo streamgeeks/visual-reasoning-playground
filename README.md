@@ -414,7 +414,7 @@ Complete AI control panel as an OBS Browser Dock.
 
 ### Option A: Try Online Instantly (Recommended)
 
-1. **Get Your API Key** - Sign up at [console.moondream.ai](https://console.moondream.ai) (free tier available)
+1. **Get Your API Key** - Sign up at [moondream.ai](https://moondream.ai) (free tier available)
 2. **Open Any Tool** - Visit the [Visual Reasoning Playground](https://streamgeeks.github.io/visual-reasoning-playground/)
 3. **Enter Your API Key** - Paste it once, and you're ready to go!
 
@@ -557,7 +557,7 @@ Moondream charges per API call. Control costs with the rate slider in each tool:
 ## Requirements
 
 **All Tools:**
-- [Moondream API Key](https://console.moondream.ai) (free tier available)
+- [Moondream API Key](https://moondream.ai) (free tier available)
 - Modern browser (Chrome recommended)
 - Local web server
 
