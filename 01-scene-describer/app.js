@@ -25,6 +25,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     let detections = [];
     let detectionResults = {};
     
+    // VLM-aware client helper: routes through toggle when available
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     const detectionCanvas = document.getElementById('detectionCanvas');
     const detectionCtx = detectionCanvas.getContext('2d');
     const detectionList = document.getElementById('detectionList');
@@ -78,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'scene-describer',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -169,9 +174,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function describeScene() {
-        if (!client) {
+        const activeClient = getVLMClient();
+        if (!activeClient) {
             window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your Moondream API key', 'error');
+            updateStatus('Please configure an API key', 'error');
             window.apiKeyManager.showModal();
             return;
         }
@@ -187,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             window.reasoningConsole.logApiCall('/describe', 0);
             
-            const result = await client.describeVideo(video, { maxTokens });
+            const result = await activeClient.describeVideo(video, { maxTokens });
             const elapsed = Date.now() - startTime;
 
             window.reasoningConsole.logSceneDescription(result.description, elapsed);
@@ -210,6 +216,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
 
             updateStatus(`Described in ${elapsed}ms`, 'success');
+            VLMResultBadge.showCurrent(elapsed);
 
         } catch (error) {
             window.reasoningConsole.logError(error.message);
@@ -233,9 +240,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
 
-        if (!client) {
+        const activeClient = getVLMClient();
+        if (!activeClient) {
             window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your Moondream API key', 'error');
+            updateStatus('Please configure an API key', 'error');
             window.apiKeyManager.showModal();
             return;
         }
@@ -250,7 +258,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             window.reasoningConsole.logApiCall('/ask', 0);
             
-            const result = await client.askVideo(video, question);
+            const result = await activeClient.askVideo(video, question);
             const elapsed = Date.now() - startTime;
 
             window.reasoningConsole.logDecision('Answer received', `${elapsed}ms`);
@@ -282,6 +290,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
 
             updateStatus(`Answered in ${elapsed}ms`, 'success');
+            VLMResultBadge.showCurrent(elapsed);
 
         } catch (error) {
             window.reasoningConsole.logError(error.message);
@@ -492,9 +501,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function runDetection() {
-        if (!client) {
+        const activeClient = getVLMClient();
+        if (!activeClient) {
             window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your Moondream API key', 'error');
+            updateStatus('Please configure an API key', 'error');
             window.apiKeyManager.showModal();
             return;
         }
@@ -513,7 +523,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             const promises = activeDetections.map(async (detection) => {
                 try {
-                    const result = await client.detectInVideo(video, detection.target);
+                    const result = await activeClient.detectInVideo(video, detection.target);
                     detectionResults[detection.id] = result;
                     window.reasoningConsole.logInfo(`Detected ${result.objects.length} "${detection.target}"`);
                     return { id: detection.id, success: true, count: result.objects.length };
@@ -533,6 +543,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             updateStatus(`Detected ${totalObjects} object(s) across ${successCount} target(s) in ${elapsed}ms`, 'success');
             window.reasoningConsole.logDecision('Detection complete', `${totalObjects} objects found in ${elapsed}ms`);
+            VLMResultBadge.showCurrent(elapsed);
             
             updateJsonOutput({
                 type: 'object_detection',
