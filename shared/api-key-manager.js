@@ -550,6 +550,7 @@ class APIKeyManager {
                         <br><br>
                         <span style="font-size: 0.8rem; opacity: 0.8;">Your keys are stored locally in your browser and never sent to our servers.
                         They're only used to communicate directly with the APIs.</span>
+                    </div>
 
                     <div class="akm-key-section">
                         <div class="akm-key-header">
