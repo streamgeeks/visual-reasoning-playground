@@ -88,13 +88,59 @@ $(function () {
         zoomSpeed: parseInt(localStorage.getItem('zoomSpeed')) || 3,
         useAuth: localStorage.getItem('ptz_use_auth') === 'true',
         authUsername: localStorage.getItem('ptz_auth_username') || '',
-        authPassword: localStorage.getItem('ptz_auth_password') || ''
+        authPassword: localStorage.getItem('ptz_auth_password') || '',
+        // Inference speed optimization settings
+        maxDimension: parseInt(localStorage.getItem('ptz_maxDimension')) || 640,
+        jpegQuality: parseFloat(localStorage.getItem('ptz_jpegQuality')) || 0.6,
+        adaptiveQuality: localStorage.getItem('ptz_adaptiveQuality') !== 'false' // default true
     };
     
     let availableCameras = [];
 
     let prevTime;
     let pastFrameTimes = [];
+    
+    // Adaptive quality tracking
+    let consecutiveDetections = 0;
+    let lastDetectionTime = 0;
+
+    /**
+     * Create detector with current optimization settings
+     */
+    function createDetector(apiKey) {
+        return new MoondreamDetector(apiKey, {
+            maxDimension: settings.maxDimension,
+            jpegQuality: settings.jpegQuality,
+            maxPendingRequests: 2
+        });
+    }
+
+    /**
+     * Get adaptive quality based on tracking state
+     * When tracking is stable (consecutive detections), use lower quality
+     */
+    function getAdaptiveQuality() {
+        if (!settings.adaptiveQuality) {
+            return settings.jpegQuality;
+        }
+        // If we have 5+ consecutive detections, drop quality further
+        if (consecutiveDetections >= 5) {
+            return Math.max(0.4, settings.jpegQuality - 0.1);
+        }
+        return settings.jpegQuality;
+    }
+
+    /**
+     * Update detector quality based on adaptive mode
+     */
+    function updateDetectorQuality() {
+        if (detector) {
+            detector.setPerformanceOptions({
+                jpegQuality: getAdaptiveQuality(),
+                maxDimension: settings.maxDimension
+            });
+        }
+    }
 
     async function enumerateCameras() {
         try {
@@ -136,7 +182,7 @@ $(function () {
             onKeysChanged: (keys) => {
                 if (keys.moondream) {
                     settings.moondreamApiKey = keys.moondream;
-                    detector = new MoondreamDetector(keys.moondream);
+                    detector = createDetector(keys.moondream);
                     window.reasoningConsole.logInfo('Moondream API key configured');
                 }
             }
@@ -146,12 +192,11 @@ $(function () {
 
         if (window.apiKeyManager.hasMoondreamKey()) {
             settings.moondreamApiKey = window.apiKeyManager.getMoondreamKey();
-            detector = new MoondreamDetector(settings.moondreamApiKey);
+            detector = createDetector(settings.moondreamApiKey);
             window.reasoningConsole.logInfo('Loaded saved Moondream API key');
         } else {
-            detector = new MoondreamDetector(settings.moondreamApiKey);
+            detector = createDetector(settings.moondreamApiKey);
         }
-        
         $('#cameraIP').val(settings.cameraIP);
         $('#targetObject').val(settings.targetObject);
         $('#operationStyle').val(settings.operationStyle);
@@ -187,6 +232,13 @@ $(function () {
         $('#maxHeadroomValue').text(settings.maxHeadroom);
         $('#zoomSpeed').val(settings.zoomSpeed);
         $('#zoomSpeedValue').text(settings.zoomSpeed);
+        
+        // Inference speed optimization settings
+        $('#adaptiveQuality').prop('checked', settings.adaptiveQuality);
+        $('#maxDimension').val(settings.maxDimension);
+        $('#maxDimensionValue').text(settings.maxDimension);
+        $('#jpegQuality').val(settings.jpegQuality);
+        $('#jpegQualityValue').text(settings.jpegQuality.toFixed(1));
         
         ptzController = new PTZController(settings.cameraIP, {
             useAuth: settings.useAuth,
@@ -397,6 +449,30 @@ $(function () {
             $('#zoomSpeedValue').text(val);
             localStorage.setItem('zoomSpeed', val.toString());
             ptzController.setSpeed({ zoom: val });
+        });
+        
+        // Inference speed optimization settings
+        $('#adaptiveQuality').on('change', function() {
+            settings.adaptiveQuality = $(this).is(':checked');
+            localStorage.setItem('ptz_adaptiveQuality', settings.adaptiveQuality.toString());
+            updateDetectorQuality();
+            window.reasoningConsole.logInfo(`Adaptive quality ${settings.adaptiveQuality ? 'enabled' : 'disabled'}`);
+        });
+        
+        $('#maxDimension').on('input', function() {
+            const val = parseInt($(this).val());
+            settings.maxDimension = val;
+            $('#maxDimensionValue').text(val);
+            localStorage.setItem('ptz_maxDimension', val.toString());
+            updateDetectorQuality();
+        });
+        
+        $('#jpegQuality').on('input', function() {
+            const val = parseFloat($(this).val());
+            settings.jpegQuality = val;
+            $('#jpegQualityValue').text(val.toFixed(1));
+            localStorage.setItem('ptz_jpegQuality', val.toString());
+            updateDetectorQuality();
         });
         
         $('#toggleAdvanced').on('click', function() {
@@ -647,7 +723,15 @@ $(function () {
     async function detectionLoop() {
         if (!isTracking) return;
         
+        // Skip if previous request still in flight (pipelining)
+        if (detector && !detector.canPipeline()) {
+            return;
+        }
+        
         try {
+            // Update adaptive quality based on tracking state
+            updateDetectorQuality();
+            
             const startTime = Date.now();
             const detections = await detector.detectInVideo(video, settings.targetObject);
             const detectionTime = Date.now() - startTime;
@@ -657,6 +741,13 @@ $(function () {
             updateFPS(detectionTime);
             
             currentDetection = detections.length > 0 ? detections[0] : null;
+            
+            // Adaptive quality tracking
+            if (currentDetection) {
+                consecutiveDetections++;
+            } else {
+                consecutiveDetections = 0;
+            }
             
             renderDetection(currentDetection);
             
@@ -682,6 +773,7 @@ $(function () {
             console.error('Detection loop error:', error);
             updateStatus('Error: ' + error.message, true);
             window.reasoningConsole.logError('Detection error: ' + error.message);
+            consecutiveDetections = 0; // Reset on error
         }
     }
 

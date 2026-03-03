@@ -1,36 +1,90 @@
 /**
  * Moondream API Integration Module
  * Handles communication with Moondream Cloud API for object detection
+ * 
+ * Optimized for speed:
+ * - Reuses canvas to avoid GC pressure
+ * - Downsamples images to reduce payload size
+ * - Configurable JPEG quality
+ * - Request pipelining support
  */
 
 class MoondreamDetector {
-    constructor(apiKey) {
+    constructor(apiKey, options = {}) {
         this.apiKey = apiKey;
         this.apiEndpoint = 'https://api.moondream.ai/v1/detect';
+        
+        // Performance optimization settings
+        this.maxDimension = options.maxDimension || 640;  // Downsample to max 640px
+        this.jpegQuality = options.jpegQuality || 0.6;     // Lower quality for detection
+        
+        // Reusable canvas for frame capture (avoids GC pressure)
+        this.captureCanvas = null;
+        this.captureCtx = null;
+        
+        // Request tracking for pipelining
+        this.pendingRequests = 0;
+        this.maxPendingRequests = options.maxPendingRequests || 2;
     }
 
     /**
-     * Update the API key
+     * Update API key
      */
     setApiKey(apiKey) {
         this.apiKey = apiKey;
     }
+    
+    /**
+     * Update performance settings
+     */
+    setPerformanceOptions(options) {
+        if (options.maxDimension !== undefined) this.maxDimension = options.maxDimension;
+        if (options.jpegQuality !== undefined) this.jpegQuality = options.jpegQuality;
+        if (options.maxPendingRequests !== undefined) this.maxPendingRequests = options.maxPendingRequests;
+    }
+
+    /**
+     * Get or create the reusable capture canvas
+     */
+    _getCaptureCanvas(width, height) {
+        if (!this.captureCanvas || this.captureCanvas.width !== width || this.captureCanvas.height !== height) {
+            this.captureCanvas = document.createElement('canvas');
+            this.captureCanvas.width = width;
+            this.captureCanvas.height = height;
+            this.captureCtx = this.captureCanvas.getContext('2d', { alpha: false });
+        }
+        return this.captureCanvas;
+    }
 
     /**
      * Capture a frame from the video element and convert to base64
+     * Optimized: reuses canvas, downsamples, configurable quality
      * @param {HTMLVideoElement} video - The video element
      * @returns {string} Base64 encoded JPEG image with data URL prefix
      */
     captureFrame(video) {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
         
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Calculate downsampled dimensions (maintain aspect ratio)
+        let targetWidth = sourceWidth;
+        let targetHeight = sourceHeight;
         
-        // Convert to base64 JPEG (reduce quality to 0.8 for faster API calls)
-        return canvas.toDataURL('image/jpeg', 0.8);
+        if (this.maxDimension > 0 && (sourceWidth > this.maxDimension || sourceHeight > this.maxDimension)) {
+            const scale = this.maxDimension / Math.max(sourceWidth, sourceHeight);
+            targetWidth = Math.round(sourceWidth * scale);
+            targetHeight = Math.round(sourceHeight * scale);
+        }
+        
+        // Get reusable canvas at target size
+        const canvas = this._getCaptureCanvas(targetWidth, targetHeight);
+        const ctx = this.captureCtx;
+        
+        // Draw video frame (browser handles scaling)
+        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+        
+        // Convert to base64 JPEG with configurable quality
+        return canvas.toDataURL('image/jpeg', this.jpegQuality);
     }
 
     /**
@@ -47,6 +101,9 @@ class MoondreamDetector {
         if (!objectDescription || objectDescription.trim() === '') {
             throw new Error('Object description cannot be empty');
         }
+
+        // Track pending requests for pipelining
+        this.pendingRequests++;
 
         try {
             const response = await fetch(this.apiEndpoint, {
@@ -74,7 +131,16 @@ class MoondreamDetector {
         } catch (error) {
             console.error('Moondream detection error:', error);
             throw error;
+        } finally {
+            this.pendingRequests--;
         }
+    }
+
+    /**
+     * Check if we can pipeline another request
+     */
+    canPipeline() {
+        return this.pendingRequests < this.maxPendingRequests;
     }
 
     /**

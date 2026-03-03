@@ -181,7 +181,31 @@
                     If headroom exceeds max, zooms in. If below min, zooms out. Sweet spot = no zoom change.
                 </small>
                 
-            </div>
+                <h3 class="section-heading">⚡ Inference Speed</h3>
+                <div class="control-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="adaptiveQuality" checked />
+                        <span>Adaptive Quality (faster when tracking stable)</span>
+                    </label>
+                    <small>Reduces image quality after 5 consecutive detections</small>
+                </div>
+                <div class="settings-row">
+                    <div class="control-group half">
+                        <label for="maxDimension">Max Image Size: <span id="maxDimensionValue">640</span>px</label>
+                        <input type="range" id="maxDimension" class="slider settings-input" min="320" max="1280" step="64" value="640" />
+                        <small>Smaller = faster API</small>
+                    </div>
+                    <div class="control-group half">
+                        <label for="jpegQuality">JPEG Quality: <span id="jpegQualityValue">0.6</span></label>
+                        <input type="range" id="jpegQuality" class="slider settings-input" min="0.3" max="0.9" step="0.1" value="0.6" />
+                        <small>Lower = smaller payload</small>
+                    </div>
+                </div>
+                <small class="help-text">
+                    <strong>Optimizations:</strong> Images are downsampled before sending to API. 
+                    640px + 0.6 quality provides good detection with ~3x smaller payloads than full resolution.
+                </small>
+                
         </div>
         
         <div class="control-buttons">
