@@ -46,6 +46,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let mediapipeDetector = null;
     let ptzController = null;
     let isTracking = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
     let trackingIntervalId = null;
     let currentMode = 'mediapipe'; // 'mediapipe' or 'moondream'
     let mediapipeType = 'face'; // 'face' or 'pose'
@@ -76,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'tracking-comparison',
         onChange: (engine) => {
             if (window.reasoningConsole) {
@@ -390,9 +396,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             try {
                 const startTime = Date.now();
-                const imageData = moondreamClient.captureFrame(video);
-                const result = await moondreamClient.detect(imageData, target);
+                const imageData = getVLMClient().captureFrame(video);
+                const result = await getVLMClient().detect(imageData, target);
                 const latency = Date.now() - startTime;
+                VLMResultBadge.showCurrent(latency);
 
                 detectCount++;
                 detectCountSpan.textContent = detectCount;

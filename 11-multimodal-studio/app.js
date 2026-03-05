@@ -32,6 +32,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let audioProcessor = null;
     let intentParser = null;
     let commandHandler = null;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
     
     let isRunning = false;
     let trackingLoopId = null;
@@ -56,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'multimodal-studio',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -319,8 +325,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function startAssistant() {
-        if (!moondreamClient) {
-            updateStatus('Configure Moondream API key', true);
+        if (!getVLMClient()) {
+            updateStatus('Configure an API key first', true);
             window.apiKeyManager.showModal();
             return;
         }
@@ -375,8 +381,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         const target = trackingTargetInput.value.trim() || 'person';
 
         try {
-            const imageData = moondreamClient.captureFrame(video);
-            const result = await moondreamClient.detect(imageData, target);
+            const imageData = getVLMClient().captureFrame(video);
+            const result = await getVLMClient().detect(imageData, target);
 
             clearOverlay();
 

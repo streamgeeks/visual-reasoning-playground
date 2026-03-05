@@ -20,6 +20,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let totalResponseTime = 0;
     let currentStream = null;
 
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
+
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
@@ -34,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'scene-analyzer',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -167,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const startTime = Date.now();
 
         try {
-            const result = await client.ask(currentSnapshot, question);
+            const result = await getVLMClient().ask(currentSnapshot, question);
             const elapsed = Date.now() - startTime;
 
             window.reasoningConsole.logApiCall('/ask', elapsed);
@@ -179,6 +185,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             addMessage('assistant', result.answer);
             updateStatus(`Answered in ${elapsed}ms`);
+            VLMResultBadge.showCurrent(elapsed);
             window.reasoningConsole.logDecision('Answer generated', `Response time: ${elapsed}ms`);
 
         } catch (error) {

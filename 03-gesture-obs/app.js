@@ -30,6 +30,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let detectionLoopId = null;
     let isDetecting = false;
 
+    // VLM-aware client helper: routes through toggle when available
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
+
     let lastActionTime = 0;
     let thumbsUpDetections = 0;
     let thumbsDownDetections = 0;
@@ -52,7 +58,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'gesture-obs',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -223,12 +229,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function detectGesture(gestureDescription) {
-        if (!moondreamClient) return { detected: false, confidence: 0 };
+        if (!getVLMClient()) return { detected: false, confidence: 0 };
 
         const prompt = `Look at this image carefully. Is there a ${gestureDescription} gesture clearly visible? Answer with only YES or NO.`;
 
         try {
-            const result = await moondreamClient.askVideo(video, prompt);
+            const result = await getVLMClient().askVideo(video, prompt);
             const answer = result.answer.toUpperCase().trim();
             const detected = answer.includes('YES');
             
@@ -365,8 +371,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function startDetection() {
-        if (!moondreamClient) {
-            window.reasoningConsole.logError('Please configure Moondream API key first');
+        if (!getVLMClient()) {
+            window.reasoningConsole.logError('Please configure an API key first');
             window.apiKeyManager.showModal();
             return;
         }

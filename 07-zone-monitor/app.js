@@ -20,6 +20,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let client = null;
     let monitorLoop = null;
     let isRunning = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     let isDrawing = false;
     let drawStart = null;
     let zones = [];
@@ -40,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'zone-monitor',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -301,8 +307,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         for (const zone of zones) {
             try {
                 const startTime = Date.now();
-                const result = await client.detectInVideo(video, zone.target);
+                const result = await getVLMClient().detectInVideo(video, zone.target);
                 const latency = Date.now() - startTime;
+                VLMResultBadge.showCurrent(latency);
                 
                 window.reasoningConsole.logApiCall('/detect', latency);
                 

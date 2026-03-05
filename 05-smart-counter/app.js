@@ -27,6 +27,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let client = null;
     let countingLoop = null;
     let isRunning = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     
     let currentCount = 0;
     let totalEntries = 0;
@@ -50,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'smart-counter',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -190,8 +196,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         const startTime = Date.now();
 
         try {
-            const result = await client.detectInVideo(video, targetInput.value);
+            const result = await getVLMClient().detectInVideo(video, targetInput.value);
             const latency = Date.now() - startTime;
+            VLMResultBadge.showCurrent(latency);
             const linePos = parseInt(linePositionSlider.value) / 100;
             const isLeftToRight = directionSelect.value === 'left-to-right';
 

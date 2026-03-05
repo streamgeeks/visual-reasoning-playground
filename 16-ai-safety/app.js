@@ -215,7 +215,7 @@ Rating scale:
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'ai-safety',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched VLM to ' + engine);
@@ -315,6 +315,7 @@ Rating scale:
 
             const result = await getActiveClient().ask(imageDataUrl, preset.prompt);
             const latency = Date.now() - startTime;
+            VLMResultBadge.showCurrent(latency);
             window.reasoningConsole.logApiCall('/query', latency);
 
             // Parse the JSON response from the model
@@ -465,6 +466,7 @@ Rating scale:
         const unsafeCount = people.filter(p => !p.safe).length;
         const totalPeople = people.length;
         const totalLatency = Date.now() - startTime;
+        VLMResultBadge.showCurrent(totalLatency);
 
         let rating, status, concern, action;
         if (totalPeople === 0) {

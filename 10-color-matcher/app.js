@@ -22,6 +22,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let colorController = null;
     let currentRecommendations = null;
 
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
+
     const cameraIPInput = document.getElementById('cameraIP');
     const testConnectionBtn = document.getElementById('testConnectionBtn');
     const connectionStatus = document.getElementById('connectionStatus');
@@ -51,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'color-matcher',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -189,13 +195,13 @@ Return ONLY valid JSON in this exact format:
         const startTime = Date.now();
 
         try {
-            const refResult = await client.ask(referenceImage, ANALYSIS_PROMPT);
+            const refResult = await getVLMClient().ask(referenceImage, ANALYSIS_PROMPT);
             window.reasoningConsole.logApiCall('/ask (reference)', Date.now() - startTime);
             const refAnalysis = parseJSON(refResult.answer);
             
             updateStatus('Analyzing current frame...');
             const currentStart = Date.now();
-            const currentResult = await client.ask(currentImage, ANALYSIS_PROMPT);
+            const currentResult = await getVLMClient().ask(currentImage, ANALYSIS_PROMPT);
             window.reasoningConsole.logApiCall('/ask (current)', Date.now() - currentStart);
             const currentAnalysis = parseJSON(currentResult.answer);
 
@@ -204,11 +210,12 @@ Return ONLY valid JSON in this exact format:
             const prompt = COMPARISON_PROMPT
                 .replace('{REF}', JSON.stringify(refAnalysis || refResult.answer))
                 .replace('{CURRENT}', JSON.stringify(currentAnalysis || currentResult.answer));
-            const compareResult = await client.ask(referenceImage, prompt);
+            const compareResult = await getVLMClient().ask(referenceImage, prompt);
             window.reasoningConsole.logApiCall('/ask (comparison)', Date.now() - compareStart);
             const recommendations = parseJSON(compareResult.answer);
 
             const elapsed = Date.now() - startTime;
+            VLMResultBadge.showCurrent(elapsed);
             analysisTimeSpan.textContent = (elapsed / 1000).toFixed(1) + 's';
 
             displayRecommendations(recommendations, refAnalysis, currentAnalysis, compareResult.answer);

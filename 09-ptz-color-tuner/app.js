@@ -36,6 +36,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let currentRecommendation = null;
     let videoAdapter = null;
 
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
+
     window.apiKeyManager = new APIKeyManager({
         requireMoondream: true,
         requireOpenAI: false,
@@ -50,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'ptz-color-tuner',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -210,8 +216,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function analyzeColors() {
-        if (!client) {
-            updateStatus('Configure Moondream API key first', true);
+        const activeClient = getVLMClient();
+        if (!activeClient) {
+            updateStatus('Configure an API key first', true);
             window.apiKeyManager.showModal();
             return;
         }
@@ -221,7 +228,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.reasoningConsole.logAction('Color analysis started');
 
         try {
-            const imageData = client.captureFrame(video);
+            const imageData = activeClient.captureFrame(video);
             beforeSnapshot.src = imageData;
 
             const startTime = Date.now();
@@ -237,8 +244,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   "recommendation": brief suggestion for improvement
 }`;
 
-            const result = await client.ask(imageData, prompt);
+            const result = await activeClient.ask(imageData, prompt);
             const elapsed = Date.now() - startTime;
+            VLMResultBadge.showCurrent(elapsed);
             window.reasoningConsole.logApiCall('/query', elapsed);
 
             let analysis;

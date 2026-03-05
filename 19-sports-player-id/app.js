@@ -44,6 +44,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let engine = 'onnx-local'; // 'onnx-local' | 'roboflow-cloud' | 'moondream'
     let moondreamClient = null;
     let running = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
     let analysisTimeout = null;
     let durationInterval = null;
     let sessionStart = null;
@@ -149,6 +155,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (window.apiKeyManager.hasMoondreamKey()) {
         moondreamClient = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
     }
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.app-header h1',
+        toolId: 'sports-player-id',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    window.vlmToggle.autoSetupGlobalClient();
     window.reasoningConsole.logInfo('Sports Player Identifier initialized');
 
     // ══════════════════════════════════════════════════
@@ -243,8 +259,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         var startTime = Date.now();
         window.reasoningConsole.logApiCall('/moondream/detect', 0);
-        var result = await moondreamClient.detect(imageBase64, 'person');
+        var result = await getVLMClient().detect(imageBase64, 'person');
         var latency = Date.now() - startTime;
+        VLMResultBadge.showCurrent(latency);
         window.reasoningConsole.logApiCall('/moondream/detect', latency);
 
         // Convert Moondream detections (normalized 0-1) to pixel coordinates
@@ -281,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         var crop = c.toDataURL('image/jpeg', 0.9);
 
         try {
-            var result = await moondreamClient.ask(crop, 'What jersey number is visible on this player? Reply with ONLY the number, or "unknown" if not visible.');
+            var result = await getVLMClient().ask(crop, 'What jersey number is visible on this player? Reply with ONLY the number, or "unknown" if not visible.');
             var answer = (result.answer || '').trim();
             // Extract just the number
             var match = answer.match(/\d+/);

@@ -34,6 +34,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     let client = null;
     let isRunning = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     let analysisInterval = null;
     let recognition = null;
     let audioContext = null;
@@ -69,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'multimodal-fusion',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -295,14 +301,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         const startTime = Date.now();
         
         try {
-            const frame = client.captureFrame(video);
+            const frame = getVLMClient().captureFrame(video);
             
+            const activeClient = getVLMClient();
             const [sceneResult, peopleResult] = await Promise.all([
-                client.describe(frame, { maxTokens: 100 }),
-                client.ask(frame, 'How many people are visible? Answer with just a number, or 0 if none.')
+                activeClient.describe(frame, { maxTokens: 100 }),
+                activeClient.ask(frame, 'How many people are visible? Answer with just a number, or 0 if none.')
             ]);
             
             const latency = Date.now() - startTime;
+            VLMResultBadge.showCurrent(latency);
             window.reasoningConsole.logApiCall('/describe + /ask', latency);
             
             state.video.scene = sceneResult.description;

@@ -64,6 +64,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ── State ──
     let client = null;
     let currentStream = null;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     let selectedSpace = 'courtroom';
     let modalSelectedSpace = 'courtroom';
     let mode = 'camera';
@@ -247,6 +253,16 @@ Respond with ONLY valid JSON (no markdown, no backticks):
         }
     });
 
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.app-header h1',
+        toolId: 'public-spaces-logging',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    window.vlmToggle.autoSetupGlobalClient();
+
     if (window.apiKeyManager.hasMoondreamKey()) {
         client = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
         window.reasoningConsole.logInfo('Loaded saved Moondream API key');
@@ -333,8 +349,9 @@ Respond with ONLY valid JSON (no markdown, no backticks):
 
         try {
             window.reasoningConsole.logApiCall('/query', 0);
-            const result = await client.ask(imageDataUrl, space.prompt);
+            const result = await getVLMClient().ask(imageDataUrl, space.prompt);
             const latency = Date.now() - startTime;
+            VLMResultBadge.showCurrent(latency);
             window.reasoningConsole.logApiCall('/query', latency);
 
             const parsed = parseEventResponse(result.answer);

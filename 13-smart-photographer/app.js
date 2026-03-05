@@ -28,6 +28,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let client = null;
     let watchLoop = null;
     let isWatching = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     let lastCaptureTime = 0;
     let photos = [];
     let totalDetections = 0;
@@ -49,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'smart-photographer',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -228,7 +234,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         captureStatus.textContent = 'Scanning...';
         
         try {
-            const result = await client.detectInVideo(video, targetInput.value);
+            const result = await getVLMClient().detectInVideo(video, targetInput.value);
             totalDetections++;
             detectionsCountSpan.textContent = totalDetections;
             
@@ -279,8 +285,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function startWatching() {
-        if (!client) {
-            updateStatus('Please configure API key', true);
+        if (!getVLMClient()) {
+            updateStatus('Please configure an API key', true);
             window.apiKeyManager.showModal();
             return;
         }

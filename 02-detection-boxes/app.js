@@ -26,6 +26,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let isRunning = false;
     let detectionResults = {};
 
+    // VLM-aware client helper: routes through toggle when available
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
+
     const DEFAULT_COLORS = ['#93CCEA', '#2A9D8F', '#E9C46A', '#E76F51', '#9B5DE5', '#F72585'];
     
     const DEFAULT_OBJECTS = [
@@ -55,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'detection-boxes',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -229,9 +235,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function detectAll() {
-        if (!client) {
+        const activeClient = getVLMClient();
+        if (!activeClient) {
             window.reasoningConsole.logError('No API key configured');
-            updateStatus('Please configure your API key', true);
+            updateStatus('Please configure an API key', true);
             window.apiKeyManager.showModal();
             return;
         }
@@ -252,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             const promises = enabledObjects.map(async (obj) => {
                 try {
-                    const result = await client.detectInVideo(video, obj.name);
+                    const result = await activeClient.detectInVideo(video, obj.name);
                     detectionResults[obj.name] = {
                         objects: result.objects,
                         color: obj.color
@@ -288,6 +295,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 updateStatus(`No objects found (${elapsed}ms)`);
             }
             
+            VLMResultBadge.showCurrent(elapsed);
         } catch (error) {
             window.reasoningConsole.logError(error.message);
             updateStatus('Error: ' + error.message, true);

@@ -34,6 +34,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let client = null;
     let ptzController = null;
     let isAutoFraming = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     let frameLoopId = null;
     let detectCount = 0;
     let moveCount = 0;
@@ -63,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.control-panel h2',
+        containerSelector: '.app-header h1',
         toolId: 'framing-assistant',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -288,8 +294,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     async function startAutoFraming() {
         // Validate requirements
-        if (!client) {
-            updateStatus('Configure Moondream API key first', true);
+        const activeClient = getVLMClient();
+        if (!activeClient) {
+            updateStatus('Configure an API key first', true);
             window.apiKeyManager.showModal();
             return;
         }
@@ -349,9 +356,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         try {
             // Capture frame and detect
             const startTime = Date.now();
-            const imageData = client.captureFrame(video);
-            const result = await client.detect(imageData, target);
+            const imageData = getVLMClient().captureFrame(video);
+            const result = await getVLMClient().detect(imageData, target);
             const elapsed = Date.now() - startTime;
+            VLMResultBadge.showCurrent(elapsed);
 
             detectCount++;
             detectCountSpan.textContent = detectCount;

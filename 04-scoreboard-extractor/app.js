@@ -22,6 +22,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     let currentStream = null;
     let extractionLoopId = null;
     let isExtracting = false;
+
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return client;
+    }
     
     let stats = {
         extractions: 0,
@@ -48,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Initialize VLM Toggle
     window.vlmToggle = new VLMToggle({
-        containerSelector: '.side-panel h3',
+        containerSelector: '.app-header h1',
         toolId: 'scoreboard-extractor',
         onChange: (engine) => {
             window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
@@ -164,7 +170,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     async function extractScoreboard() {
-        if (!client) {
+        const activeClient = getVLMClient();
+        if (!activeClient) {
             window.reasoningConsole.logError('No API key configured');
             window.apiKeyManager.showModal();
             return null;
@@ -186,8 +193,9 @@ Return ONLY valid JSON with no other text:
             window.reasoningConsole.logApiCall('/query', 0);
             updateStatus('Extracting...', true);
 
-            const result = await client.askVideo(video, prompt);
+            const result = await activeClient.askVideo(video, prompt);
             const elapsed = Date.now() - startTime;
+            VLMResultBadge.showCurrent(elapsed);
 
             window.reasoningConsole.logInfo(`Response: ${result.answer}`);
 
@@ -237,8 +245,8 @@ Return ONLY valid JSON with no other text:
     }
 
     function startExtraction() {
-        if (!client) {
-            window.reasoningConsole.logError('Please configure Moondream API key first');
+        if (!getVLMClient()) {
+            window.reasoningConsole.logError('Please configure an API key first');
             window.apiKeyManager.showModal();
             return;
         }

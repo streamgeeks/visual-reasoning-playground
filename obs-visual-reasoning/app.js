@@ -116,6 +116,12 @@ const autoSwitchToggle = document.getElementById('autoSwitchToggle');
     let voiceControl = null;
     let currentStream = null;
 
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
+
     function loadSettings() {
         const apiKey = localStorage.getItem('vr_moondream_key') || '';
         const obsUrl = localStorage.getItem('vr_obs_url') || 'localhost:4455';

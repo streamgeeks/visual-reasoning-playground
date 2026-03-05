@@ -88,6 +88,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     let moondreamClient = null;
 
+    // VLM-aware client helper
+    function getVLMClient() {
+        if (window.vlmToggle) return window.vlmToggle.getClient();
+        return moondreamClient;
+    }
+
     // ══════════════════════════════════════════════════════
     //  SHARED MODULE INIT
     // ══════════════════════════════════════════════════════
@@ -108,6 +114,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         moondreamClient = new MoondreamClient(window.apiKeyManager.getMoondreamKey());
         window.reasoningConsole.logInfo('Loaded saved Moondream API key');
     }
+
+    // Initialize VLM Toggle
+    window.vlmToggle = new VLMToggle({
+        containerSelector: '.app-header h1',
+        toolId: 'voice-to-ptz',
+        onChange: (engine) => {
+            window.reasoningConsole.logInfo('Switched to ' + engine + ' VLM');
+        }
+    });
+    window.vlmToggle.autoSetupGlobalClient();
 
     window.reasoningConsole.logInfo('Voice to PTZ initialized');
 
@@ -278,8 +294,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         const prompt = VLM_SCAN_PROMPT.replace('{MAX}', maxObjects);
         const startTime = Date.now();
         window.reasoningConsole.logApiCall('/query', 0);
-        const result = await moondreamClient.ask(b64, prompt);
+        const result = await getVLMClient().ask(b64, prompt);
         const latency = Date.now() - startTime;
+        VLMResultBadge.showCurrent(latency);
         window.reasoningConsole.logApiCall('/query', latency);
         return parseVLMResponse(result.answer);
     }
@@ -314,10 +331,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     async function detectObjectInFrame(imageBlob, objectName) {
         // Use Moondream detect endpoint to find a specific object for PID loop
-        if (!moondreamClient) return null;
+        if (!getVLMClient()) return null;
         try {
             const b64 = await blobToBase64(imageBlob);
-            const result = await moondreamClient.detect(b64, objectName);
+            const result = await getVLMClient().detect(b64, objectName);
             if (result.objects && result.objects.length > 0) {
                 const obj = result.objects[0];
                 return {
