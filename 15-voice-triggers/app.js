@@ -427,25 +427,21 @@ class VoiceTriggersApp {
     initVideoAdapter() {
         const videoElement = document.getElementById('video');
         const cameraSelect = document.getElementById('cameraSelect');
+        const refreshBtn = document.getElementById('refreshCamerasBtn');
         
-        if (typeof VideoSourceAdapter !== 'undefined') {
-            this.videoAdapter = new VideoSourceAdapter(videoElement, {
-                onSourceChange: (type, name) => {
-                    this.reasoningConsole.logInfo(`Video source: ${name}`);
+        if (window.VideoSourceAdapter) {
+            VideoSourceAdapter.init({
+                videoElement: videoElement,
+                toolId: 'voice-triggers',
+                insertInto: '.camera-controls',
+                onSourceChange: (source) => {
+                    cameraSelect.disabled = source === 'sample';
+                    if (refreshBtn) refreshBtn.disabled = source === 'sample';
+                    this.reasoningConsole.logInfo(`Switched to ${source === 'camera' ? 'live camera' : 'sample video'}`);
                 }
             });
-            
-            this.videoAdapter.populateCameraSelect(cameraSelect);
-            
-            cameraSelect.addEventListener('change', async () => {
-                const deviceId = cameraSelect.value;
-                if (deviceId) {
-                    await this.videoAdapter.switchToCamera(deviceId);
-                }
-            });
-            
-            document.getElementById('refreshCamerasBtn').addEventListener('click', async () => {
-                await this.videoAdapter.populateCameraSelect(cameraSelect);
+            VideoSourceAdapter.switchToSample().catch(() => {
+                this.reasoningConsole.logInfo('No sample video available, using camera');
             });
         }
     }

@@ -25,7 +25,8 @@
         'multimodal-fusion': '../assets/sample-videos/scene-describer-demo.mp4',
         'PTZOptics-Moondream-Tracker': '../assets/sample-videos/ptz-controller-demo.mp4',
         'smart-photographer': '../assets/sample-videos/smart-photographer-demo.mp4',
-        'sports-player-id': '../assets/sample-videos/basketball-game-demo.mp4'
+        'sports-player-id': '../assets/sample-videos/basketball-game-demo.mp4',
+        'voice-triggers': '../assets/sample-videos/voice-triggers-demo.mp4',
     };
 
     const ADAPTER_STYLES = `
