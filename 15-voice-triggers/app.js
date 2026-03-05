@@ -31,6 +31,10 @@ class VoiceControl {
         this.transcriptHistory = [];
         this.maxHistory = 50;
         
+        // Audio source: 'video' or 'microphone'
+        this.audioSource = options.audioSource || 'video';
+        this.videoElement = options.videoElement || null;
+        
         this._loadRules();
     }
 
@@ -107,6 +111,8 @@ class VoiceControl {
 
     async startAudioCapture() {
         try {
+            // Mute video when using microphone to avoid echo
+            if (this.videoElement) this.videoElement.muted = true;
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     channelCount: 1,
@@ -168,6 +174,61 @@ class VoiceControl {
             this.mediaStream = null;
         }
         this.audioChunks = [];
+    }
+
+    async startVideoAudioCapture(videoElement) {
+        try {
+            // Unmute video so MediaElementSource receives audio
+            videoElement.muted = false;
+            videoElement.volume = 0.3;
+            
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: this.sampleRate
+            });
+            
+            // MediaElementSource can only be created once per element
+            if (!videoElement._mediaElementSource) {
+                videoElement._mediaElementSource = this.audioContext.createMediaElementSource(videoElement);
+            }
+            const source = videoElement._mediaElementSource;
+            
+            // Must connect to destination so user can still hear the video
+            source.connect(this.audioContext.destination);
+            
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 256;
+            source.connect(this.analyser);
+            
+            this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+            source.connect(this.processor);
+            this.processor.connect(this.audioContext.destination);
+            
+            this.audioChunks = [];
+            
+            this.processor.onaudioprocess = (event) => {
+                if (!this.isRunning) return;
+                const inputData = event.inputBuffer.getChannelData(0);
+                this.audioChunks.push(new Float32Array(inputData));
+            };
+            
+            this._monitorAudioLevel();
+            
+            console.log('[VoiceControl] Video audio capture started');
+            return true;
+        } catch (error) {
+            console.error('[VoiceControl] Video audio capture failed:', error);
+            this.onStatusUpdate('Video audio capture failed: ' + error.message);
+            return false;
+        }
+    }
+
+    setAudioSource(source, videoElement) {
+        this.audioSource = source;
+        if (videoElement) this.videoElement = videoElement;
+        if (this.isRunning) {
+            this.stop();
+            this.start();
+        }
     }
 
     _monitorAudioLevel() {
@@ -340,9 +401,13 @@ class VoiceControl {
             if (!loaded) return false;
         }
         
-        const capturing = await this.startAudioCapture();
+        let capturing;
+        if (this.audioSource === 'video' && this.videoElement) {
+            capturing = await this.startVideoAudioCapture(this.videoElement);
+        } else {
+            capturing = await this.startAudioCapture();
+        }
         if (!capturing) return false;
-        
         this.isRunning = true;
         
         this.processingInterval = setInterval(() => {
@@ -415,6 +480,8 @@ class VoiceTriggersApp {
         this.voiceControl = new VoiceControl({
             chunkDuration: parseInt(document.getElementById('chunkDuration').value) * 1000,
             cooldown: parseInt(document.getElementById('cooldown').value) * 1000,
+            audioSource: 'video',
+            videoElement: document.getElementById('video'),
             
             onTranscript: (text, entry) => this.handleTranscript(text, entry),
             onRuleTriggered: (info) => this.handleRuleTrigger(info),
@@ -438,6 +505,16 @@ class VoiceTriggersApp {
                     cameraSelect.disabled = source === 'sample';
                     if (refreshBtn) refreshBtn.disabled = source === 'sample';
                     this.reasoningConsole.logInfo(`Switched to ${source === 'camera' ? 'live camera' : 'sample video'}`);
+                    
+                    // Auto-switch audio source based on video source
+                    const audioSourceSelect = document.getElementById('audioSourceSelect');
+                    if (source === 'sample') {
+                        if (audioSourceSelect) audioSourceSelect.value = 'video';
+                        this.voiceControl.setAudioSource('video', videoElement);
+                    } else {
+                        if (audioSourceSelect) audioSourceSelect.value = 'microphone';
+                        this.voiceControl.setAudioSource('microphone', videoElement);
+                    }
                 }
             });
             VideoSourceAdapter.switchToSample().catch(() => {
@@ -448,6 +525,23 @@ class VoiceTriggersApp {
 
     initEventListeners() {
         document.getElementById('startBtn').addEventListener('click', () => this.toggleVoice());
+        
+        // Audio source toggle
+        const audioSourceSelect = document.getElementById('audioSourceSelect');
+        if (audioSourceSelect) {
+            audioSourceSelect.addEventListener('change', (e) => {
+                const source = e.target.value;
+                const video = document.getElementById('video');
+                if (source === 'video') {
+                    video.muted = false;
+                    video.volume = 0.3;
+                } else {
+                    video.muted = true;
+                }
+                this.voiceControl.setAudioSource(source, video);
+                this.reasoningConsole.logInfo(`Audio source: ${source === 'video' ? 'Video Audio' : 'Microphone'}`);
+            });
+        }
         
         document.getElementById('chunkDuration').addEventListener('input', (e) => {
             const value = e.target.value;
